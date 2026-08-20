@@ -4,8 +4,7 @@ import { jobs } from "./data";
 
 export const metadata: Metadata = {
   title: "JA 星光计划｜连接青年与未来",
-  description: "JA 中国青年发展平台——实习、活动、成长内容与可信经历。",
-  other: { "codex-preview": "development" },
+  description: "连接长沙青年与长沙企业的实习、活动和成长平台。",
 };
 
 export default function Home() {
@@ -21,8 +20,8 @@ export default function Home() {
         <div className="hero-copy">
           <p className="eyebrow">JA STARLIGHT PROGRAM</p>
           <h1>让每一次探索，<br/><em>都成为未来的光。</em></h1>
-          <p className="lead">连接青年、企业与真实世界的成长机会。发现适合你的实习与活动，把每段实践沉淀为可信的成长经历。</p>
-          <form className="search" action="/opportunities"><label><span>寻找机会</span><input name="q" placeholder="职位、行业或城市" /></label><button type="submit">开始探索 →</button></form>
+          <p className="lead">连接长沙青年、长沙企业与真实世界的成长机会。按岗位类别发现适合你的本地实习与活动，把每段实践沉淀为可信的成长经历。</p>
+          <form className="search" action="/opportunities"><label><span>寻找机会</span><input name="q" placeholder="岗位类别、企业或技能" /></label><button type="submit">开始探索 →</button></form>
           <div className="trust"><b>12,600+</b> 青年参与 <i/> <b>180+</b> 合作企业 <i/> <b>92%</b> 推荐率</div>
         </div>
         <div className="hero-art" aria-label="青年成长路径插画">
@@ -34,8 +33,8 @@ export default function Home() {
       </section>
 
       <section className="section shell" id="jobs">
-        <div className="section-head"><div><p className="eyebrow">精选机会</p><h2>值得投入的第一步</h2></div><a href="/opportunities">查看全部机会 →</a></div>
-        <div className="job-grid">{jobs.slice(0,3).map((job)=><article className="job-card home-job" key={job.id}><div className="home-job-logo" style={{backgroundImage:job.logoUrl?`url(${job.logoUrl})`:undefined}}>{job.logoUrl?"":job.logo}</div><span className="tag">{job.status}</span><h3>{job.company}</h3><h4>{job.title}</h4><small>{job.city} · {job.mode} · {job.duration}</small><a href={`/opportunities/${job.id}`}>查看职责与投递邮箱 <b>↗</b></a></article>)}</div>
+        <div className="section-head"><div><p className="eyebrow">长沙精选机会</p><h2>值得投入的第一步</h2></div><a href="/opportunities">按岗位类别查看 →</a></div>
+        <div className="job-grid">{jobs.slice(0,3).map((job)=><article className="job-card home-job" key={job.id}><div className="home-job-logo" style={{backgroundImage:job.logoUrl?`url(${job.logoUrl})`:undefined}}>{job.logoUrl?"":job.logo}</div><span className="tag">{job.jobCategory}</span><h3>{job.company}</h3><h4>{job.title}</h4><small>长沙 · {job.mode} · {job.duration}</small><a href={`/opportunities/${job.id}`}>查看职责与投递邮箱 <b>↗</b></a></article>)}</div>
       </section>
 
       <section className="path" id="events"><div className="shell path-inner"><div><p className="eyebrow light">你的成长路径</p><h2>不只找到机会，<br/>更看见自己的进步。</h2></div><ol><li><span>01</span><b>发现</b><p>匹配真实的实习与活动</p></li><li><span>02</span><b>参与</b><p>完成有质量的实践体验</p></li><li><span>03</span><b>沉淀</b><p>获得 JA 认证的成长经历</p></li></ol></div></section>

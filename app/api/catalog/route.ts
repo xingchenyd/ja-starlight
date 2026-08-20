@@ -12,6 +12,6 @@ export async function GET(){
   const rows=await env.DB.prepare("SELECT id,kind,payload,updated_at AS updatedAt FROM workspace_records WHERE kind IN ('job','activity','content') ORDER BY updated_at DESC LIMIT 200").all();
   const records=rows.results
     .map(row=>({...row,payload:JSON.parse(String(row.payload))}))
-    .filter(row=>(row.payload as {reviewStatus?:string}).reviewStatus==="approved");
+    .filter(row=>{const payload=row.payload as {reviewStatus?:string;city?:string;place?:string};if(payload.reviewStatus!=="approved")return false;if(row.kind==="job")return payload.city==="长沙";if(row.kind==="activity")return String(payload.place||"").includes("长沙");return true});
   return Response.json({records},{headers:{"cache-control":"public, max-age=60"}});
 }
