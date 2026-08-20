@@ -1,0 +1,23 @@
+import { sql } from "drizzle-orm";
+import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+
+export const users = sqliteTable("users", {
+  id: text("id").primaryKey(), email: text("email").notNull(), name: text("name").notNull(),
+  role: text("role", { enum: ["student", "enterprise", "admin"] }).notNull().default("student"),
+  status: text("status").notNull().default("active"), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+export const applications = sqliteTable("applications", {
+  id: integer("id").primaryKey({ autoIncrement: true }), userId: text("user_id").notNull(),
+  jobId: text("job_id").notNull(), status: text("status").notNull().default("submitted"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [uniqueIndex("idx_applications_user_job").on(table.userId, table.jobId), index("idx_applications_user_created").on(table.userId, table.createdAt)]);
+export const registrations = sqliteTable("registrations", {
+  id: integer("id").primaryKey({ autoIncrement: true }), userId: text("user_id").notNull(),
+  activityId: text("activity_id").notNull(), status: text("status").notNull().default("registered"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [uniqueIndex("idx_registrations_user_activity").on(table.userId, table.activityId), index("idx_registrations_user_created").on(table.userId, table.createdAt)]);
+export const auditLogs = sqliteTable("audit_logs", {
+  id: integer("id").primaryKey({ autoIncrement: true }), actorId: text("actor_id").notNull(),
+  action: text("action").notNull(), targetType: text("target_type").notNull(), targetId: text("target_id").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("idx_audit_created").on(table.createdAt), index("idx_audit_actor").on(table.actorId, table.createdAt)]);
