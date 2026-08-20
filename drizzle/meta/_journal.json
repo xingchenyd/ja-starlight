@@ -15,6 +15,13 @@
       "when": 1787222995798,
       "tag": "0001_abandoned_bloodstrike",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787236686483,
+      "tag": "0002_small_matthew_murdock",
+      "breakpoints": true
     }
   ]
 }

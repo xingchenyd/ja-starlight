@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-html-link-for-pages */
 import type { Metadata } from "next";
+import { jobs } from "./data";
 
 export const metadata: Metadata = {
   title: "JA 星光计划｜连接青年与未来",
@@ -7,19 +8,13 @@ export const metadata: Metadata = {
   other: { "codex-preview": "development" },
 };
 
-const jobs = [
-  ["产品运营实习生", "英特尔中国", "北京 · 3天/周"],
-  ["可持续发展项目助理", "施耐德电气", "上海 · 4天/周"],
-  ["数据分析实习生", "戴尔科技", "远程 · 3个月"],
-];
-
 export default function Home() {
   return (
     <main>
       <nav className="nav shell">
         <a className="brand" href="#top" aria-label="JA 星光计划首页"><span>JA</span><b>星光计划</b></a>
         <div className="navlinks"><a href="#jobs">实习机会</a><a href="#events">成长活动</a><a href="#content">成长内容</a></div>
-        <div className="actions"><a className="text-link" href="/workspace?role=enterprise">企业入口</a><a className="button small" href="/workspace?role=student">进入平台</a></div>
+        <div className="actions"><a className="text-link" href="/workspace?role=enterprise">企业发布入口</a><a className="button small" href="/workspace?role=student">学生进入</a></div>
       </nav>
 
       <section className="hero shell" id="top">
@@ -32,7 +27,7 @@ export default function Home() {
         </div>
         <div className="hero-art" aria-label="青年成长路径插画">
           <div className="sun"/><div className="orbit orbit-a"/><div className="orbit orbit-b"/>
-          <div className="photo-card"><div className="portrait">✦</div><p>从校园到职场</p><b>看见更大的世界</b></div>
+          <div className="photo-card"><div className="portrait photo-real"/><p>从校园到职场</p><b>看见更大的世界</b></div>
           <span className="bird bird-a">⌁</span><span className="bird bird-b">⌁</span>
           <div className="float-note"><span>本周新增</span><b>26 个机会</b></div>
         </div>
@@ -40,7 +35,7 @@ export default function Home() {
 
       <section className="section shell" id="jobs">
         <div className="section-head"><div><p className="eyebrow">精选机会</p><h2>值得投入的第一步</h2></div><a href="/opportunities">查看全部机会 →</a></div>
-        <div className="job-grid">{jobs.map((job, i)=><article className="job-card" key={job[0]}><div className={`logo logo-${i}`}>{job[1].slice(0,1)}</div><span className="tag">正在招募</span><h3>{job[0]}</h3><p>{job[1]}</p><small>{job[2]}</small><a href={`/opportunities/${i+1}`}>查看详情 <b>↗</b></a></article>)}</div>
+        <div className="job-grid">{jobs.slice(0,3).map((job)=><article className="job-card home-job" key={job.id}><div className="home-job-logo" style={{backgroundImage:job.logoUrl?`url(${job.logoUrl})`:undefined}}>{job.logoUrl?"":job.logo}</div><span className="tag">{job.status}</span><h3>{job.company}</h3><h4>{job.title}</h4><small>{job.city} · {job.mode} · {job.duration}</small><a href={`/opportunities/${job.id}`}>查看职责与投递邮箱 <b>↗</b></a></article>)}</div>
       </section>
 
       <section className="path" id="events"><div className="shell path-inner"><div><p className="eyebrow light">你的成长路径</p><h2>不只找到机会，<br/>更看见自己的进步。</h2></div><ol><li><span>01</span><b>发现</b><p>匹配真实的实习与活动</p></li><li><span>02</span><b>参与</b><p>完成有质量的实践体验</p></li><li><span>03</span><b>沉淀</b><p>获得 JA 认证的成长经历</p></li></ol></div></section>

@@ -21,3 +21,11 @@ export const auditLogs = sqliteTable("audit_logs", {
   action: text("action").notNull(), targetType: text("target_type").notNull(), targetId: text("target_id").notNull(),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [index("idx_audit_created").on(table.createdAt), index("idx_audit_actor").on(table.actorId, table.createdAt)]);
+
+export const workspaceRecords = sqliteTable("workspace_records", {
+  id: text("id").primaryKey(),
+  ownerId: text("owner_id").notNull(),
+  kind: text("kind").notNull(),
+  payload: text("payload").notNull(),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("idx_workspace_owner_kind").on(table.ownerId, table.kind, table.updatedAt)]);
