@@ -6,6 +6,10 @@
   "outputDirectory": "public",
   "rewrites": [
     {
+      "source": "/",
+      "destination": "https://ja-starlight-2026.zhm5wf2rb4.chatgpt.site/"
+    },
+    {
       "source": "/:path*",
       "destination": "https://ja-starlight-2026.zhm5wf2rb4.chatgpt.site/:path*"
     }
