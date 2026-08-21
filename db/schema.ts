@@ -37,7 +37,9 @@ export const activityRegistrations = sqliteTable("activity_registrations", {
   studentOwnerId: text("student_owner_id").notNull(),
   publisherOwnerId: text("publisher_owner_id").notNull(),
   answers: text("answers").notNull(),
-  status: text("status").notNull().default("registered"),
+  status: text("status").notNull().default("pending"),
+  reviewNote: text("review_note").notNull().default(""),
+  reviewedAt: text("reviewed_at"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [
   uniqueIndex("idx_activity_registration_student_activity").on(table.studentOwnerId, table.activityId),
