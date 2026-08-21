@@ -22,6 +22,13 @@
       "when": 1787236686483,
       "tag": "0002_small_matthew_murdock",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1787280893946,
+      "tag": "0003_illegal_sinister_six",
+      "breakpoints": true
     }
   ]
 }

@@ -4,7 +4,8 @@ export type Job = {
   status:string; logo:string; logoUrl?:string; color:string; summary:string; contactEmail:string;
   responsibilities:string[]; requirements:string[]; benefits:string[]; publishedAt:string;
 };
-export type Activity = {id:string;title:string;date:string;place:string;category:string;capacity:number;registered:number;status:string;cover:string;coverType?:"image"|"video";videoUrl?:string;summary:string};
+export type RegistrationField = {id:string;label:string;type:"text"|"tel"|"email"|"textarea";required:boolean};
+export type Activity = {id:string;title:string;date:string;place:string;category:string;capacity:number;registered:number;status:string;cover:string;coverType?:"image"|"video";videoUrl?:string;summary:string;registrationFields?:RegistrationField[]};
 export type ContentItem = {id:string;title:string;category:string;duration:string;level:string;summary:string;cover:string;coverType?:"image"|"video";mediaType:"article"|"video"};
 
 export const jobs:Job[]=[
@@ -17,9 +18,9 @@ export const jobs:Job[]=[
 ];
 
 export const activities:Activity[]=[
- {id:"act-01",title:"长沙未来职场开放日 · 智能制造专场",date:"2026.09.12",place:"长沙 · 经开区",category:"企业参访",capacity:80,registered:63,status:"报名中",cover:"/media/youth-collaboration.jpg",summary:"走进长沙智能制造企业，与产品、数据和研发团队面对面，完成一场职业观察任务。"},
- {id:"act-02",title:"从校园到职场：第一份简历工作坊",date:"2026.09.19",place:"长沙 · 岳麓区",category:"能力工作坊",capacity:120,registered:86,status:"报名中",cover:"/media/focused-learning.jpg",summary:"在长沙企业导师带领下，把校园经历转化为清晰、可信、可投递的简历表达。"},
- {id:"act-03",title:"长沙青年可持续创新挑战赛",date:"2026.10.08",place:"长沙 · 湘江新区",category:"创新挑战",capacity:120,registered:88,status:"报名中",cover:"/og-ja-starlight.png",summary:"围绕长沙真实可持续议题组队探索，在本地企业导师支持下完成从问题到方案的创新实践。"}
+ {id:"act-01",title:"长沙未来职场开放日 · 智能制造专场",date:"2026.09.12",place:"长沙 · 经开区",category:"企业参访",capacity:80,registered:63,status:"报名中",cover:"/media/ja-career-fair.jpg",summary:"走进长沙智能制造企业，与产品、数据和研发团队面对面，完成一场职业观察任务。",registrationFields:[{id:"name",label:"姓名",type:"text",required:true},{id:"phone",label:"联系电话",type:"tel",required:true},{id:"school",label:"学校与专业",type:"text",required:true},{id:"expectation",label:"你希望在活动中收获什么？",type:"textarea",required:true}]},
+ {id:"act-02",title:"从校园到职场：第一份简历工作坊",date:"2026.09.19",place:"长沙 · 岳麓区",category:"能力工作坊",capacity:120,registered:86,status:"报名中",cover:"/media/ja-student-company.jpg",summary:"在长沙企业导师带领下，把校园经历转化为清晰、可信、可投递的简历表达。",registrationFields:[{id:"name",label:"姓名",type:"text",required:true},{id:"phone",label:"联系电话",type:"tel",required:true},{id:"email",label:"常用邮箱",type:"email",required:true},{id:"school",label:"学校、专业与年级",type:"text",required:true}]},
+ {id:"act-03",title:"长沙青年可持续创新挑战赛",date:"2026.10.08",place:"长沙 · 湘江新区",category:"创新挑战",capacity:120,registered:88,status:"报名中",cover:"/media/ja-competition.jpg",summary:"围绕长沙真实可持续议题组队探索，在本地企业导师支持下完成从问题到方案的创新实践。",registrationFields:[{id:"name",label:"姓名",type:"text",required:true},{id:"phone",label:"联系电话",type:"tel",required:true},{id:"school",label:"学校与专业",type:"text",required:true},{id:"experience",label:"相关经历或想解决的问题",type:"textarea",required:false}]}
 ];
 
 export const contents:ContentItem[]=[

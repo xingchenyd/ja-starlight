@@ -29,3 +29,18 @@ export const workspaceRecords = sqliteTable("workspace_records", {
   payload: text("payload").notNull(),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [index("idx_workspace_owner_kind").on(table.ownerId, table.kind, table.updatedAt)]);
+
+export const activityRegistrations = sqliteTable("activity_registrations", {
+  id: text("id").primaryKey(),
+  activityId: text("activity_id").notNull(),
+  activityTitle: text("activity_title").notNull(),
+  studentOwnerId: text("student_owner_id").notNull(),
+  publisherOwnerId: text("publisher_owner_id").notNull(),
+  answers: text("answers").notNull(),
+  status: text("status").notNull().default("registered"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("idx_activity_registration_student_activity").on(table.studentOwnerId, table.activityId),
+  index("idx_activity_registration_publisher").on(table.publisherOwnerId, table.createdAt),
+  index("idx_activity_registration_activity").on(table.activityId, table.createdAt),
+]);

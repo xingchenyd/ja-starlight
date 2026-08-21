@@ -1,6 +1,7 @@
-/* eslint-disable @next/next/no-html-link-for-pages */
+/* eslint-disable @next/next/no-html-link-for-pages, @next/next/no-img-element */
 import type { Metadata } from "next";
 import { jobs } from "./data";
+import HomeCarousel from "./HomeCarousel";
 
 export const metadata: Metadata = {
   title: "JA 星光计划｜连接青年与未来",
@@ -11,7 +12,7 @@ export default function Home() {
   return (
     <main>
       <nav className="nav shell">
-        <a className="brand" href="#top" aria-label="JA 星光计划首页"><span>JA</span><b>星光计划</b></a>
+        <a className="brand brand-official" href="#top" aria-label="JA 星光计划首页"><img src="/media/ja-china-logo.jpg" alt="JA China"/><b>星光计划</b></a>
         <div className="navlinks"><a href="#jobs">实习机会</a><a href="#events">成长活动</a><a href="#content">成长内容</a></div>
         <div className="actions"><a className="text-link" href="/workspace?role=enterprise">企业发布入口</a><a className="button small" href="/workspace?role=student">学生进入</a></div>
       </nav>
@@ -32,6 +33,8 @@ export default function Home() {
         </div>
       </section>
 
+      <HomeCarousel/>
+
       <section className="section shell" id="jobs">
         <div className="section-head"><div><p className="eyebrow">长沙精选机会</p><h2>值得投入的第一步</h2></div><a href="/opportunities">按岗位类别查看 →</a></div>
         <div className="job-grid">{jobs.slice(0,3).map((job)=><article className="job-card home-job" key={job.id}><div className="home-job-logo" style={{backgroundImage:job.logoUrl?`url(${job.logoUrl})`:undefined}}>{job.logoUrl?"":job.logo}</div><span className="tag">{job.jobCategory}</span><h3>{job.company}</h3><h4>{job.title}</h4><small>长沙 · {job.mode} · {job.duration}</small><a href={`/opportunities/${job.id}`}>查看职责与投递邮箱 <b>↗</b></a></article>)}</div>
@@ -40,7 +43,7 @@ export default function Home() {
       <section className="path" id="events"><div className="shell path-inner"><div><p className="eyebrow light">你的成长路径</p><h2>不只找到机会，<br/>更看见自己的进步。</h2></div><ol><li><span>01</span><b>发现</b><p>匹配真实的实习与活动</p></li><li><span>02</span><b>参与</b><p>完成有质量的实践体验</p></li><li><span>03</span><b>沉淀</b><p>获得 JA 认证的成长经历</p></li></ol></div></section>
 
       <section className="section shell content-strip" id="content"><p className="eyebrow">成长内容</p><h2>在出发之前，做好准备。</h2><div className="topic-row"><a href="/content">简历与面试 <span>08</span></a><a href="/content">职业探索 <span>12</span></a><a href="/content">职场通识 <span>16</span></a></div></section>
-      <footer><div className="shell"><div className="brand inverse"><span>JA</span><b>星光计划</b></div><p>让青年拥有成就全球经济的技能与思维。</p><small>© 2026 JA China. All rights reserved.</small></div></footer>
+      <footer><div className="shell"><div className="brand inverse brand-official"><img src="/media/ja-china-logo.jpg" alt="JA China"/><b>星光计划</b></div><p>让青年拥有成就全球经济的技能与思维。</p><small>© 2026 JA China. All rights reserved.</small></div></footer>
     </main>
   );
 }
