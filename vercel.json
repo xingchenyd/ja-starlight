@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": null,
+  "installCommand": "",
+  "outputDirectory": "public",
+  "rewrites": [
+    {
+      "source": "/:path*",
+      "destination": "https://ja-starlight-2026.zhm5wf2rb4.chatgpt.site/:path*"
+    }
+  ]
+}
