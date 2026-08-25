@@ -8,7 +8,7 @@ const sql=[
 ];
 async function setup(){await env.DB.batch(sql.map(s=>env.DB.prepare(s)))}
 async function actor(request:Request){const h=await headers();const real=h.get("oai-authenticated-user-id");const demo=request.headers.get("x-starlight-demo-id");return real??(demo&&/^[a-zA-Z0-9-]{8,80}$/.test(demo)?`demo:${demo}`:null)}
-function clean(value:unknown){const text=JSON.stringify(value);if(text.length>24000)throw new Error("内容过长");return text}
+function clean(value:unknown){const text=JSON.stringify(value);if(text.length>80000)throw new Error("内容过长");return text}
 
 export async function GET(request:Request){await setup();const id=await actor(request);if(!id)return Response.json({records:[]});const kind=new URL(request.url).searchParams.get("kind");const query=kind?env.DB.prepare("SELECT id,kind,payload,updated_at AS updatedAt FROM workspace_records WHERE owner_id=? AND kind=? ORDER BY updated_at DESC").bind(id,kind):env.DB.prepare("SELECT id,kind,payload,updated_at AS updatedAt FROM workspace_records WHERE owner_id=? ORDER BY updated_at DESC").bind(id);const rows=await query.all();return Response.json({records:rows.results.map(r=>({...r,payload:JSON.parse(String(r.payload))}))})}
 

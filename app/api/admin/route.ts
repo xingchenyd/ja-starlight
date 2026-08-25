@@ -14,7 +14,7 @@ export async function PUT(request:Request){
  if(!String(body.payload.title||"").trim()||!String(body.payload.summary||"").trim())return Response.json({error:"请填写标题与简介"},{status:400});
  const id=crypto.randomUUID();const now=new Date().toISOString();
  const payload={...body.payload,id,region:"湖南",place:body.kind==="activity"?String(body.payload.place||"湖南"):body.payload.place,sortOrder:Number(body.payload.sortOrder||0)||0,featured:Boolean(body.payload.featured),reviewStatus:"approved",reviewNote:body.kind==="blacklist"?"JA 诚信记录": "JA 后台直接发布",reviewedAt:now,reviewedBy:user.email,submittedAt:now,status:body.kind==="blacklist"?"已记录":"已发布"};
- const json=JSON.stringify(payload);if(json.length>24000)return Response.json({error:"内容过长"},{status:400});
+ const json=JSON.stringify(payload);if(json.length>80000)return Response.json({error:"内容过长"},{status:400});
  await env.DB.prepare("INSERT INTO workspace_records(id,owner_id,kind,payload,updated_at) VALUES(?,?,?,?,CURRENT_TIMESTAMP)").bind(id,`ja:${user.id}`,body.kind,json).run();
  await env.DB.prepare("INSERT INTO audit_logs(actor_id,action,target_type,target_id) VALUES(?,'direct-publish',?,?)").bind(user.id,body.kind,id).run();
  return Response.json({ok:true,id});
