@@ -12,6 +12,7 @@ export async function GET(){
   const rows=await env.DB.prepare("SELECT id,kind,payload,updated_at AS updatedAt FROM workspace_records WHERE kind IN ('job','activity','content') ORDER BY updated_at DESC LIMIT 200").all();
   const records=rows.results
     .map(row=>({...row,payload:JSON.parse(String(row.payload))}))
-    .filter(row=>{const payload=row.payload as {reviewStatus?:string;city?:string;place?:string};if(payload.reviewStatus!=="approved")return false;if(row.kind==="job")return payload.city==="长沙";if(row.kind==="activity")return String(payload.place||"").includes("长沙");return true});
+    .filter(row=>{const payload=row.payload as {reviewStatus?:string;city?:string;place?:string;region?:string};if(payload.reviewStatus!=="approved")return false;const scope=String(payload.region||payload.city||payload.place||"湖南");return scope.includes("湖南")||scope.includes("长沙")||scope.includes("株洲")||scope.includes("湘潭")||scope.includes("岳阳")||scope.includes("常德")||scope.includes("衡阳")})
+    .sort((a,b)=>Number((b.payload as {sortOrder?:number}).sortOrder||0)-Number((a.payload as {sortOrder?:number}).sortOrder||0)||String(b.updatedAt).localeCompare(String(a.updatedAt)));
   return Response.json({records},{headers:{"cache-control":"public, max-age=60"}});
 }
