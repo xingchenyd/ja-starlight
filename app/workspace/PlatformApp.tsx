@@ -277,7 +277,7 @@ export default function PlatformApp({
             aria-label={ready ? "已同步" : "正在载入"}
           />
         </header>
-        <main className="workspace">
+        <main key={`${role}-${tab}`} className="workspace page-transition">
           {role === "student" ? (
             <StudentSpace
               tab={tab}
@@ -2073,7 +2073,7 @@ function EnterpriseRegistrations() {
       <Title
         eyebrow="REGISTRATION DATA"
         title="活动报名审核"
-        desc="查看学生报名表，决定通过或退回。这里只显示当前企业自己发布活动收到的报名。"
+        desc="测试阶段显示全部活动报名，方便企业和项目团队联调审核；正式账号启用后再按企业权限收拢。"
         action={
           <button className="outline-btn" onClick={load}>
             刷新数据
@@ -2098,7 +2098,9 @@ function EnterpriseRegistrations() {
         <div className="empty-publisher">
           <b>☷</b>
           <h2>还没有学生报名</h2>
-          <p>先发布活动并通过 JA 审核，学生完成报名表后会出现在这里。</p>
+          <p>
+            学生完成任一活动报名表后，会出现在这里供企业或项目团队测试审核。
+          </p>
         </div>
       ) : (
         <div className="registration-table enterprise-registration-table">

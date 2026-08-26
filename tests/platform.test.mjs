@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -88,10 +89,21 @@ test("enterprise can review and decide student registrations", async () => {
   const response = await page("/workspace?role=enterprise&tab=registrations");
   assert.equal(response.status, 200);
   const html = await response.text();
+  assert.match(html, /page-transition/);
   assert.match(html, /活动报名审核/);
+  assert.match(html, /测试阶段显示全部活动报名/);
   assert.match(html, /待确认/);
   assert.match(html, /已通过/);
   assert.match(html, /已退回/);
+});
+test("registration API exposes test-stage review queue", async () => {
+  const source = await readFile(
+    new URL("../app/api/registrations/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /CREATE TABLE IF NOT EXISTS audit_logs/);
+  assert.match(source, /testVisible/);
+  assert.doesNotMatch(source, /无权审核此报名/);
 });
 test("public opportunities navigate by category and never by city filters", async () => {
   const response = await page("/opportunities");
