@@ -49,8 +49,12 @@ test("JA console is directly accessible during testing", async () => {
   const html = await response.text();
   assert.match(html, /湖南运营后台/);
   assert.match(html, /JA 测试管理员/);
+  assert.match(html, /分区审核/);
+  assert.match(html, /JA 发起的活动/);
+  assert.match(html, /企业发布的活动/);
+  assert.match(html, /企业发布的内容/);
   assert.match(html, /诚信管理/);
-  assert.doesNotMatch(html, /此账号没有后台权限/);
+  assert.doesNotMatch(html, /此账号没有后台权限|<span>☷<\/span>报名数据/);
 });
 test("opportunity route is a Hunan category-based direct-email opportunity", async () => {
   const response = await page("/opportunities/job-01");
@@ -92,9 +96,31 @@ test("enterprise can review and decide student registrations", async () => {
   assert.match(html, /page-transition/);
   assert.match(html, /活动报名审核/);
   assert.match(html, /测试阶段显示全部活动报名/);
+  assert.match(html, /导出报名表/);
+  assert.match(html, /报名可视化/);
+  assert.match(html, /报名来源分布/);
   assert.match(html, /待确认/);
   assert.match(html, /已通过/);
   assert.match(html, /已退回/);
+});
+test("JA review ownership and enterprise registration export are separated", async () => {
+  const [adminSource, workspaceSource] = await Promise.all([
+    readFile(
+      new URL("../app/ja-console/JAConsole.tsx", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../app/workspace/PlatformApp.tsx", import.meta.url),
+      "utf8",
+    ),
+  ]);
+  assert.match(adminSource, /admin-review-lanes/);
+  assert.match(adminSource, /JA 发起的活动/);
+  assert.match(adminSource, /企业发布的活动/);
+  assert.match(adminSource, /企业发布的内容/);
+  assert.doesNotMatch(adminSource, /RegistrationTable/);
+  assert.match(workspaceSource, /导出报名表/);
+  assert.match(workspaceSource, /text\/csv;charset=utf-8/);
 });
 test("registration API exposes test-stage review queue", async () => {
   const source = await readFile(

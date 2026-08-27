@@ -2067,7 +2067,76 @@ function EnterpriseRegistrations() {
       (item) => item.status === "pending" || item.status === "registered",
     ).length,
     approved = items.filter((item) => item.status === "approved").length,
-    rejected = items.filter((item) => item.status === "rejected").length;
+    rejected = items.filter((item) => item.status === "rejected").length,
+    activityCount = new Set(items.map((item) => item.activityTitle)).size,
+    approvalRate = items.length
+      ? Math.round((approved / items.length) * 100)
+      : 0,
+    latest = items.slice(0, 3),
+    activityStats = Object.entries(
+      items.reduce(
+        (acc, item) => {
+          acc[item.activityTitle] = (acc[item.activityTitle] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>,
+      ),
+    ).sort((a, b) => b[1] - a[1]);
+  const exportCsv = () => {
+    if (!items.length) {
+      setNotice("当前没有可导出的报名数据");
+      return;
+    }
+    const headers = [
+      "活动",
+      "姓名",
+      "联系电话",
+      "邮箱",
+      "学校/专业",
+      "报名状态",
+      "审核意见",
+      "提交时间",
+      "完整报名信息",
+    ];
+    const csvEscape = (value: unknown) =>
+      `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const rows = items.map((item) =>
+      [
+        item.activityTitle,
+        item.answers.name || "",
+        item.answers.phone || "",
+        item.answers.email || "",
+        item.answers.school || "",
+        item.status === "approved"
+          ? "已通过"
+          : item.status === "rejected"
+            ? "已退回"
+            : "待确认",
+        item.reviewNote || "",
+        new Date(item.createdAt).toLocaleString("zh-CN"),
+        Object.entries(item.answers)
+          .map(([key, value]) => `${registrationLabel(key)}：${value}`)
+          .join("；"),
+      ]
+        .map(csvEscape)
+        .join(","),
+    );
+    const blob = new Blob(
+      [`\uFEFF${[headers.join(","), ...rows].join("\n")}`],
+      {
+        type: "text/csv;charset=utf-8",
+      },
+    );
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `JA星光计划_活动报名数据_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setNotice("报名表已导出，可用 Excel 打开");
+  };
   return (
     <>
       <Title
@@ -2075,22 +2144,92 @@ function EnterpriseRegistrations() {
         title="活动报名审核"
         desc="测试阶段显示全部活动报名，方便企业和项目团队联调审核；正式账号启用后再按企业权限收拢。"
         action={
-          <button className="outline-btn" onClick={load}>
-            刷新数据
-          </button>
+          <div className="registration-toolbar">
+            <button className="outline-btn" onClick={load}>
+              刷新数据
+            </button>
+            <button className="primary-btn" onClick={exportCsv}>
+              导出报名表
+            </button>
+          </div>
         }
       />
-      <div className="registration-summary">
-        <span>
-          <b>{pending}</b>待确认
-        </span>
-        <span>
-          <b>{approved}</b>已通过
-        </span>
-        <span>
-          <b>{rejected}</b>已退回
-        </span>
-      </div>
+      <section className="registration-analytics">
+        <div className="registration-summary visual-summary">
+          <span>
+            <small>总报名</small>
+            <b>{items.length}</b>
+          </span>
+          <span>
+            <small>待确认</small>
+            <b>{pending}</b>
+          </span>
+          <span>
+            <small>已通过</small>
+            <b>{approved}</b>
+          </span>
+          <span>
+            <small>已退回</small>
+            <b>{rejected}</b>
+          </span>
+          <span>
+            <small>通过率</small>
+            <b>{approvalRate}%</b>
+          </span>
+          <span>
+            <small>活动数</small>
+            <b>{activityCount}</b>
+          </span>
+        </div>
+        <div className="registration-visual-grid">
+          <article className="registration-chart-card">
+            <div>
+              <small>报名可视化</small>
+              <h2>报名来源分布</h2>
+            </div>
+            {activityStats.length ? (
+              activityStats.slice(0, 5).map(([title, count]) => (
+                <p key={title}>
+                  <span>{title}</span>
+                  <i>
+                    <em
+                      style={{
+                        width: `${Math.max(12, (count / Math.max(1, items.length)) * 100)}%`,
+                      }}
+                    />
+                  </i>
+                  <b>{count}</b>
+                </p>
+              ))
+            ) : (
+              <p className="empty-line">等待学生提交报名后生成分布图</p>
+            )}
+          </article>
+          <article className="registration-latest-card">
+            <div>
+              <small>LATEST</small>
+              <h2>最新报名</h2>
+            </div>
+            {latest.length ? (
+              latest.map((item) => (
+                <button key={item.id} onClick={() => setSelected(item)}>
+                  <b>{item.answers.name || "未填写姓名"}</b>
+                  <span>{item.activityTitle}</span>
+                  <em>
+                    {item.status === "approved"
+                      ? "已通过"
+                      : item.status === "rejected"
+                        ? "已退回"
+                        : "待确认"}
+                  </em>
+                </button>
+              ))
+            ) : (
+              <p className="empty-line">暂无最新报名</p>
+            )}
+          </article>
+        </div>
+      </section>
       {notice && <p className="admin-notice">{notice}</p>}
       {loading ? (
         <div className="admin-empty">正在读取报名数据…</div>
