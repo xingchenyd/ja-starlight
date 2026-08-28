@@ -2,6 +2,7 @@
 import type { Metadata } from "next";
 import HomeSections from "./HomeSections";
 import HomeCarousel from "./HomeCarousel";
+import { HomeOpportunityCount, HomeTrustMetrics } from "./HomeLiveMetrics";
 
 export const metadata: Metadata = {
   title: "JA Star Plan 星光计划｜连接青年与未来",
@@ -22,21 +23,21 @@ export default function Home() {
           <p className="eyebrow">JA STAR PLAN · HUNAN</p>
           <h1>让每一次探索，<br/><em>都成为未来的光。</em></h1>
           <p className="lead">连接青年、企业与真实世界的成长机会。</p>
-          <form className="search" action="#jobs"><label><span>寻找机会</span><input name="q" placeholder="机会类别、企业或技能" /></label><button type="submit">开始探索 →</button></form>
-          <div className="trust"><b>12,600+</b> 青年参与 <i/> <b>180+</b> 合作企业 <i/> <b>92%</b> 推荐率</div>
+          <form className="search" action="/opportunities" method="get"><label><span>寻找机会</span><input name="q" placeholder="机会类别、企业或技能" /></label><button type="submit">开始探索 →</button></form>
+          <HomeTrustMetrics />
         </div>
         <div className="hero-art" aria-label="青年成长路径插画">
           <div className="sun"/><div className="orbit orbit-a"/><div className="orbit orbit-b"/>
           <div className="photo-card"><div className="portrait photo-real"/><p>从校园到职场</p><b>看见更大的世界</b></div>
           <span className="bird bird-a">⌁</span><span className="bird bird-b">⌁</span>
-          <div className="float-note"><span>本周新增</span><b>26 个机会</b></div>
+          <HomeOpportunityCount />
         </div>
       </section>
 
       <HomeCarousel/>
 
       <HomeSections/>
-      <footer><div className="shell"><div className="brand inverse brand-official"><img src="/media/ja-china-logo.jpg" alt="JA China"/><b>Star Plan 星光计划</b></div><p>让青年拥有成就全球经济的技能、思维与格局。</p><small>© 2026 JA China. All rights reserved.</small></div></footer>
+      <footer><div className="shell"><div className="brand inverse brand-official"><img src="/media/ja-china-logo.jpg" alt="JA China"/><b>Star Plan 星光计划</b></div><p>让青年拥有成就全球经济的技能、思维与格局。</p><div className="footer-legal"><a href="/privacy">隐私政策</a><a href="/terms">平台使用规则</a><a href="mailto:support@jachina.org">联系项目团队</a></div><small>© 2026 JA China. All rights reserved.</small></div></footer>
     </main>
   );
 }

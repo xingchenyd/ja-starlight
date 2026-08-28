@@ -1,6 +1,6 @@
 /* eslint-disable @next/next/no-img-element, @next/next/no-html-link-for-pages, jsx-a11y/media-has-caption, @typescript-eslint/no-unused-vars */
 "use client";
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   activities,
   contents,
@@ -17,6 +17,7 @@ type StoredRecord = {
   id: string;
   kind: string;
   payload: Record<string, unknown>;
+  version?: number;
   updatedAt?: string;
 };
 const nav: Record<Role, [string, string, string][]> = {
@@ -28,10 +29,11 @@ const nav: Record<Role, [string, string, string][]> = {
     ["profile", "成长主页", "○"],
   ],
   enterprise: [
-    ["overview", "企业总览", "⌂"],
+    ["overview", "工作台", "⌂"],
     ["positions", "机会发布", "▣"],
     ["activities", "活动发布", "◇"],
     ["content", "内容发布", "▱"],
+    ["feedback", "互动管理", "♡"],
     ["registrations", "报名数据", "☷"],
     ["profile", "企业画像", "○"],
   ],
@@ -74,6 +76,14 @@ const contentCategories = [
   "职业探索",
   "简历面试",
   "公益实践",
+];
+const activityCategories = [
+  "企业参访",
+  "职业体验",
+  "主题工作坊",
+  "赛事路演",
+  "志愿公益",
+  "校园活动",
 ];
 const registrationOptions: RegistrationField[] = [
   { id: "name", label: "姓名", type: "text", required: true },
@@ -145,18 +155,35 @@ function getDemoId() {
 }
 async function api(path: string, init: RequestInit = {}) {
   const id = getDemoId();
+  const role = new URLSearchParams(window.location.search).get("role") === "enterprise" ? "enterprise" : "student";
   return fetch(path, {
     ...init,
-    headers: { ...(init.headers || {}), "x-starlight-demo-id": id },
+    headers: { ...(init.headers || {}), "x-starlight-demo-id": id, "x-starlight-role": role },
   });
+}
+function useDialogEscape(close: () => void) {
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previous;
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [close]);
 }
 
 export default function PlatformApp({
   initialRole,
   initialTab,
+  initialItem,
 }: {
   initialRole: Role;
   initialTab?: string;
+  initialItem?: string;
 }) {
   const [role] = useState<Role>(initialRole),
     [tab, setTab] = useState(initialTab || "overview"),
@@ -192,6 +219,7 @@ export default function PlatformApp({
         id: id || String(payload.id || ""),
         kind,
         payload,
+        version: id ? records.find((record) => record.id === id)?.version : undefined,
       }),
     });
     const data = await response.json();
@@ -203,10 +231,17 @@ export default function PlatformApp({
       id: data.id,
       kind,
       payload: { ...payload, id: data.id },
+      version: Number(data.version || 1),
       updatedAt: new Date().toISOString(),
     };
     setRecords((v) => [record, ...v.filter((x) => x.id !== data.id)]);
-    flash("已保存并同步到平台");
+    flash(
+      payload.reviewStatus === "draft"
+        ? "草稿已安全保存"
+        : payload.reviewStatus === "approved"
+          ? "已发布并同步到学生端"
+          : "已提交审核，可在发布中心查看进度",
+    );
     return data.id as string;
   };
   const remove = async (id: string) => {
@@ -236,6 +271,10 @@ export default function PlatformApp({
   };
   const studentName = String(
     records.find((r) => r.kind === "student-profile")?.payload.name || "张晨",
+  );
+  const enterpriseName = String(
+    records.find((r) => r.kind === "enterprise-profile")?.payload.name ||
+      "企业工作台",
   );
   return (
     <div className="platform v2">
@@ -269,9 +308,10 @@ export default function PlatformApp({
             <b>
               {role === "student"
                 ? `你好，${studentName}`
-                : "企业工作台 Enterprise"}
+                : `你好，${enterpriseName}`}
             </b>
           </div>
+          <NotificationCenter />
           <div
             className="sync-dot"
             aria-label={ready ? "已同步" : "正在载入"}
@@ -281,6 +321,7 @@ export default function PlatformApp({
           {role === "student" ? (
             <StudentSpace
               tab={tab}
+              initialItem={initialItem}
               setTab={setTab}
               records={records}
               catalog={catalog}
@@ -309,6 +350,24 @@ export default function PlatformApp({
       )}
     </div>
   );
+}
+
+type Notice = { id: string; title: string; body: string; targetUrl?: string; readAt?: string | null; createdAt: string };
+function NotificationCenter() {
+  const [items, setItems] = useState<Notice[]>([]), [unread, setUnread] = useState(0), [open, setOpen] = useState(false);
+  const load = useCallback(() => api("/api/notifications").then(async (response) => {
+    if (!response.ok) return;
+    const data = await response.json(); setItems(data.notifications || []); setUnread(Number(data.unread || 0));
+  }).catch(() => {}), []);
+  useEffect(() => { load(); const timer = window.setInterval(load, 60000); return () => window.clearInterval(timer); }, [load]);
+  const readAll = async () => { await api("/api/notifications", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ all: true }) }); setItems((value) => value.map((item) => ({ ...item, readAt: item.readAt || new Date().toISOString() }))); setUnread(0); };
+  return <div className="notification-center">
+    <button className="notification-trigger" aria-label={`通知${unread ? `，${unread} 条未读` : ""}`} onClick={() => setOpen((value) => !value)}>♢{unread > 0 && <b>{unread > 9 ? "9+" : unread}</b>}</button>
+    {open && <section className="notification-panel" aria-label="通知中心">
+      <header><div><small>NOTIFICATIONS</small><h2>通知中心</h2></div><button disabled={!unread} onClick={readAll}>全部已读</button></header>
+      {items.length ? items.map((item) => <a className={item.readAt ? "" : "unread"} key={item.id} href={item.targetUrl || "/workspace"}><b>{item.title}</b><p>{item.body}</p><small>{new Date(item.createdAt).toLocaleString("zh-CN")}</small></a>) : <p className="notification-empty">暂无通知</p>}
+    </section>}
+  </div>;
 }
 
 function Title({
@@ -375,6 +434,7 @@ function Logo({
 
 function StudentSpace({
   tab,
+  initialItem,
   setTab,
   records,
   catalog,
@@ -383,6 +443,7 @@ function StudentSpace({
   flash,
 }: {
   tab: string;
+  initialItem?: string;
   setTab: (s: string) => void;
   records: StoredRecord[];
   catalog: StoredRecord[];
@@ -421,13 +482,15 @@ function StudentSpace({
         allJobs={allJobs}
         allActivities={allActivities}
         allContents={allContents}
+        profile={records.find((record) => record.kind === "student-profile")}
       />
     );
   if (tab === "opportunities")
     return <OpportunityBrowser allJobs={allJobs} flash={flash} />;
   if (tab === "activities")
-    return <ActivityExperience custom={customActivities} flash={flash} />;
-  if (tab === "content") return <LearningCenter custom={customContents} />;
+    return <ActivityExperience custom={customActivities} flash={flash} initialItem={initialItem} />;
+  if (tab === "content")
+    return <LearningCenter custom={customContents} flash={flash} initialItem={initialItem} />;
   return (
     <StudentProfile
       record={records.find((r) => r.kind === "student-profile")}
@@ -442,11 +505,13 @@ function StudentOverview({
   allJobs,
   allActivities,
   allContents,
+  profile,
 }: {
   setTab: (s: string) => void;
   allJobs: Job[];
   allActivities: Activity[];
   allContents: ContentItem[];
+  profile?: StoredRecord;
 }) {
   const sortedJobs = [...allJobs].sort((a, b) =>
     String(b.publishedAt).localeCompare(String(a.publishedAt)),
@@ -533,18 +598,44 @@ function StudentOverview({
             </button>
           ))}
         </article>
-        <GrowthTimelinePreview onOpen={() => setTab("profile")} />
+        <GrowthTimelinePreview profile={profile} onOpen={() => setTab("profile")} />
       </section>
     </>
   );
 }
 
-function GrowthTimelinePreview({ onOpen }: { onOpen: () => void }) {
-  const items = [
-    ["2026.09.12", "参加未来职场开放日", "完成智能制造职业观察记录"],
-    ["2026.09.19", "参加简历工作坊", "产出一版可投递简历"],
-    ["2026.10.08", "参与可持续创新挑战赛", "形成团队项目方案与路演材料"],
-  ];
+function GrowthTimelinePreview({
+  profile,
+  onOpen,
+}: {
+  profile?: StoredRecord;
+  onOpen: () => void;
+}) {
+  const [registrations, setRegistrations] = useState<RegistrationItem[]>([]);
+  useEffect(() => {
+    api("/api/registrations")
+      .then((response) => response.json())
+      .then((data) => setRegistrations(data.registrations || []))
+      .catch(() => setRegistrations([]));
+  }, []);
+  const manual = String(profile?.payload.timelineItems || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [date, , title, , result] = line.split("｜");
+      return [date || "待补充", title || "未命名经历", result || "待补充成果"];
+    });
+  const certified = registrations
+    .filter((item) => item.status === "approved")
+    .map((item) => [
+      new Date(item.reviewedAt || item.createdAt).toLocaleDateString("zh-CN").replaceAll("/", "."),
+      item.activityTitle,
+      item.reviewNote || "活动参与已由发布方确认",
+    ]);
+  const items = [...certified, ...manual]
+    .sort((a, b) => String(b[0]).localeCompare(String(a[0])))
+    .slice(0, 3);
   return (
     <section className="overview-panel growth-timeline-preview">
       <div className="panel-head">
@@ -564,6 +655,11 @@ function GrowthTimelinePreview({ onOpen }: { onOpen: () => void }) {
             </span>
           </button>
         ))}
+        {items.length === 0 && (
+          <button className="timeline-preview-empty" onClick={onOpen}>
+            <span><b>开始建立成长时间轴</b><em>参加活动或手动添加经历后，会在这里形成真实记录。</em></span>
+          </button>
+        )}
       </div>
     </section>
   );
@@ -612,24 +708,43 @@ function OpportunityBrowser({
     [industry, setIndustry] = useState("全部行业"),
     [salaryMin, setSalaryMin] = useState(0),
     [salaryMax, setSalaryMax] = useState(500),
+    [sort, setSort] = useState("latest"),
     [open, setOpen] = useState("岗位类别"),
     [selected, setSelected] = useState<Job | null>(null),
     [company, setCompany] = useState<string | null>(null);
   const shown = useMemo(
     () =>
-      allJobs.filter(
-        (j) =>
-          (category === "全部类别" || j.jobCategory === category) &&
-          (degree === "全部学历" || j.degree === degree) &&
-          (industry === "全部行业" || j.industry === industry) &&
-          Number(j.salaryMax || 500) >= salaryMin &&
-          Number(j.salaryMin || 0) <= salaryMax &&
-          (j.company + j.title + j.jobCategory + j.tags.join(""))
-            .toLowerCase()
-            .includes(q.toLowerCase()),
-      ),
-    [allJobs, q, category, degree, industry, salaryMin, salaryMax],
+      allJobs
+        .filter(
+          (j) =>
+            (category === "全部类别" || j.jobCategory === category) &&
+            (degree === "全部学历" || j.degree === degree) &&
+            (industry === "全部行业" || j.industry === industry) &&
+            Number(j.salaryMax || 500) >= salaryMin &&
+            Number(j.salaryMin || 0) <= salaryMax &&
+            (j.company + j.title + j.jobCategory + j.tags.join(""))
+              .toLowerCase()
+              .includes(q.toLowerCase()),
+        )
+        .sort((a, b) =>
+          sort === "salary-high"
+            ? Number(b.salaryMax || 0) - Number(a.salaryMax || 0)
+            : sort === "salary-low"
+              ? Number(a.salaryMin || 0) - Number(b.salaryMin || 0)
+              : String(b.publishedAt).localeCompare(String(a.publishedAt)),
+        ),
+    [allJobs, q, category, degree, industry, salaryMin, salaryMax, sort],
   );
+  const resetFilters = () => {
+    setQ("");
+    setCategory("全部类别");
+    setDegree("全部学历");
+    setIndustry("全部行业");
+    setSalaryMin(0);
+    setSalaryMax(500);
+    setSort("latest");
+    setOpen("");
+  };
   const copy = async (email: string) => {
     try {
       await navigator.clipboard.writeText(email);
@@ -770,7 +885,18 @@ function OpportunityBrowser({
           </nav>,
         )}
       </section>
-      <div className="result-count">{shown.length} 个机会</div>
+      <div className="opportunity-resultbar">
+        <div><b>{shown.length}</b><span>个机会符合当前条件</span></div>
+        <label>
+          排序
+          <select value={sort} onChange={(e) => setSort(e.target.value)}>
+            <option value="latest">最新发布</option>
+            <option value="salary-high">最高薪资优先</option>
+            <option value="salary-low">最低门槛优先</option>
+          </select>
+        </label>
+        <button onClick={resetFilters}>清空筛选</button>
+      </div>
       <div className="student-job-list">
         {shown.map((j) => (
           <article key={j.id}>
@@ -816,6 +942,13 @@ function OpportunityBrowser({
             </button>
           </article>
         ))}
+        {shown.length === 0 && (
+          <section className="opportunity-empty">
+            <b>暂时没有匹配的机会</b>
+            <p>可以放宽薪资区间或清空部分分类条件后再查看。</p>
+            <button className="primary-btn" onClick={resetFilters}>查看全部机会</button>
+          </section>
+        )}
       </div>
       {selected && (
         <JobDialog
@@ -851,6 +984,7 @@ function JobDialog({
   onMail: () => void;
   onCopy: () => void;
 }) {
+  useDialogEscape(onClose);
   return (
     <div
       className="dialog-backdrop"
@@ -865,7 +999,7 @@ function JobDialog({
         aria-modal="true"
         aria-label={`${job.company} ${job.title}`}
       >
-        <button className="dialog-close" onClick={onClose}>
+        <button className="dialog-close" aria-label="关闭弹窗" onClick={onClose}>
           ×
         </button>
         <header>
@@ -932,6 +1066,7 @@ function CompanyJobsDialog({
   onClose: () => void;
   onSelect: (job: Job) => void;
 }) {
+  useDialogEscape(onClose);
   const first = jobs[0];
   return (
     <div
@@ -946,7 +1081,7 @@ function CompanyJobsDialog({
         role="dialog"
         aria-modal="true"
       >
-        <button className="dialog-close" onClick={onClose}>
+        <button className="dialog-close" aria-label="关闭弹窗" onClick={onClose}>
           ×
         </button>
         <header>
@@ -989,9 +1124,11 @@ type RegistrationItem = {
 function ActivityExperience({
   custom,
   flash,
+  initialItem,
 }: {
   custom: Activity[];
   flash: (s: string) => void;
+  initialItem?: string;
 }) {
   const list = [...custom, ...activities].sort(
     (a, b) =>
@@ -1000,12 +1137,15 @@ function ActivityExperience({
       String(b.date).localeCompare(String(a.date)),
   );
   const [registrations, setRegistrations] = useState<RegistrationItem[]>([]),
-    [selected, setSelected] = useState<Activity | null>(null),
-    [activeIndex, setActiveIndex] = useState(0);
+    [selectedId, setSelectedId] = useState(initialItem || ""),
+    [activeIndex, setActiveIndex] = useState(0),
+    [registrationLoading, setRegistrationLoading] = useState(true);
   useEffect(() => {
     api("/api/registrations")
       .then((r) => r.json())
-      .then((data) => setRegistrations(data.registrations || []));
+      .then((data) => setRegistrations(data.registrations || []))
+      .catch(() => setRegistrations([]))
+      .finally(() => setRegistrationLoading(false));
   }, []);
   useEffect(() => {
     if (list.length < 2) return;
@@ -1037,8 +1177,19 @@ function ActivityExperience({
     }
     const refreshed = await api("/api/registrations").then((r) => r.json());
     setRegistrations(refreshed.registrations || []);
-    setSelected(null);
+    setSelectedId("");
     flash("报名已提交，正在等待企业确认");
+  };
+  const cancelRegistration = async (activity: Activity) => {
+    const response = await api(
+      `/api/registrations?activityId=${encodeURIComponent(activity.id)}`,
+      { method: "DELETE" },
+    );
+    const data = await response.json();
+    if (!response.ok) return flash(data.error || "取消报名失败");
+    setRegistrations((value) => value.filter((item) => item.activityId !== activity.id));
+    setSelectedId("");
+    flash("已取消本次活动报名");
   };
   const stateText = (activity: Activity) => {
     const current = existing(activity.id);
@@ -1052,10 +1203,12 @@ function ActivityExperience({
   };
   const displayIndex = activeIndex % Math.max(1, list.length);
   const active = list[displayIndex] || list[0];
+  const selected = list.find((activity) => activity.id === selectedId) || null;
   const activeRegistration = active ? existing(active.id) : undefined;
   return (
     <>
       <Title eyebrow="ACTIVITIES" title="成长活动" desc="" />
+      {registrationLoading && <p className="activity-sync-state">正在同步我的报名状态…</p>}
       {active && (
         <section className="activity-showcase auto-showcase">
           <div className="activity-horizontal">
@@ -1126,7 +1279,7 @@ function ActivityExperience({
                   ? "outline-btn"
                   : "primary-btn"
               }
-              onClick={() => setSelected(active)}
+              onClick={() => setSelectedId(active.id)}
             >
               {stateText(active)}
             </button>
@@ -1168,7 +1321,7 @@ function ActivityExperience({
                     ? "outline-btn"
                     : "primary-btn"
                 }
-                onClick={() => setSelected(activity)}
+                onClick={() => setSelectedId(activity.id)}
               >
                 {stateText(activity)}
               </button>
@@ -1180,8 +1333,10 @@ function ActivityExperience({
         <ActivityRegistrationDialog
           activity={selected}
           previous={existing(selected.id)?.answers}
-          onClose={() => setSelected(null)}
+          registration={existing(selected.id)}
+          onClose={() => setSelectedId("")}
           onSubmit={(answers) => submitted(selected, answers)}
+          onCancel={() => cancelRegistration(selected)}
         />
       )}
     </>
@@ -1191,14 +1346,19 @@ function ActivityExperience({
 function ActivityRegistrationDialog({
   activity,
   previous,
+  registration,
   onClose,
   onSubmit,
+  onCancel,
 }: {
   activity: Activity;
   previous?: Record<string, string>;
+  registration?: RegistrationItem;
   onClose: () => void;
   onSubmit: (answers: Record<string, string>) => Promise<void>;
+  onCancel: () => Promise<void>;
 }) {
+  useDialogEscape(onClose);
   const fields = activity.registrationFields?.length
     ? activity.registrationFields
     : ([
@@ -1206,6 +1366,7 @@ function ActivityRegistrationDialog({
         { id: "phone", label: "联系电话", type: "tel", required: true },
         { id: "school", label: "学校与专业", type: "text", required: true },
       ] as RegistrationField[]);
+  const readOnly = registration?.status === "approved";
   const [answers, setAnswers] = useState<Record<string, string>>(
       previous || {},
     ),
@@ -1235,8 +1396,9 @@ function ActivityRegistrationDialog({
         className="dialog registration-dialog rich-registration-dialog"
         role="dialog"
         aria-modal="true"
+        aria-label={`${activity.title}报名`}
       >
-        <button className="dialog-close" onClick={onClose}>
+        <button className="dialog-close" aria-label="关闭弹窗" onClick={onClose}>
           ×
         </button>
         <div className="registration-layout">
@@ -1250,6 +1412,26 @@ function ActivityRegistrationDialog({
               请按活动发布方要求填写。标有“必填”的项目必须完成，提交后企业活动负责人和
               JA 后台均可查看。
             </p>
+            <div className="registration-progress" aria-label="报名处理进度">
+              <span className="done"><b>1</b>填写信息</span>
+              <i />
+              <span className={registration ? "done" : "active"}><b>2</b>企业确认</span>
+              <i />
+              <span className={registration?.status === "approved" ? "done" : ""}><b>3</b>报名结果</span>
+            </div>
+            {registration && (
+              <div className={`registration-result-card status-${registration.status}`}>
+                <b>
+                  {registration.status === "approved"
+                    ? "报名已通过"
+                    : registration.status === "rejected"
+                      ? "报名已退回，可修改后重新提交"
+                      : "报名已提交，等待企业确认"}
+                </b>
+                {registration.reviewNote && <p>{registration.reviewNote}</p>}
+                <small>提交于 {new Date(registration.createdAt).toLocaleString("zh-CN")}</small>
+              </div>
+            )}
             <div className="registration-fields">
               {fields.map((field) => (
                 <label key={field.id}>
@@ -1261,6 +1443,7 @@ function ActivityRegistrationDialog({
                     <textarea
                       rows={4}
                       value={answers[field.id] || ""}
+                      disabled={readOnly}
                       onChange={(e) =>
                         setAnswers((v) => ({
                           ...v,
@@ -1272,6 +1455,7 @@ function ActivityRegistrationDialog({
                     <input
                       type={field.type}
                       value={answers[field.id] || ""}
+                      disabled={readOnly}
                       onChange={(e) =>
                         setAnswers((v) => ({
                           ...v,
@@ -1291,16 +1475,15 @@ function ActivityRegistrationDialog({
               </p>
             </div>
             <div className="dialog-actions">
-              <button className="outline-btn" onClick={onClose}>
-                取消
-              </button>
-              <button
-                className="primary-btn"
-                disabled={saving}
-                onClick={submit}
-              >
-                {saving ? "正在保存…" : previous ? "保存修改" : "确认报名"}
-              </button>
+              <button className="outline-btn" onClick={onClose}>关闭</button>
+              {registration && registration.status !== "approved" && (
+                <button className="danger-text-btn" disabled={saving} onClick={onCancel}>取消报名</button>
+              )}
+              {!readOnly && (
+                <button className="primary-btn" disabled={saving} onClick={submit}>
+                  {saving ? "正在保存…" : previous ? "保存修改并重新提交" : "确认报名"}
+                </button>
+              )}
             </div>
           </aside>
         </div>
@@ -1309,58 +1492,114 @@ function ActivityRegistrationDialog({
   );
 }
 
-function LearningCenter({ custom }: { custom: ContentItem[] }) {
+type ContentComment = {
+  id: string;
+  author: string;
+  text: string;
+  reply?: string;
+  repliedBy?: string;
+  createdAt?: string;
+  mine?: boolean;
+};
+
+function LearningCenter({
+  custom,
+  flash,
+  initialItem,
+}: {
+  custom: ContentItem[];
+  flash: (s: string) => void;
+  initialItem?: string;
+}) {
   const list = [...custom, ...contents].sort(
     (a, b) =>
       Number((b as unknown as { sortOrder?: number }).sortOrder || 0) -
       Number((a as unknown as { sortOrder?: number }).sortOrder || 0),
   );
-  const [selected, setSelected] = useState<ContentItem | null>(null),
+  const [selectedId, setSelectedId] = useState(initialItem || ""),
     [category, setCategory] = useState("全部内容"),
-    [liked, setLiked] = useState<Record<string, boolean>>({}),
-    [comments, setComments] = useState<
-      Record<
-        string,
-        { id: string; author: string; text: string; reply?: string }[]
-      >
-    >({}),
+    [liked, setLiked] = useState(false),
+    [likeCount, setLikeCount] = useState(0),
+    [comments, setComments] = useState<ContentComment[]>([]),
+    [socialLoading, setSocialLoading] = useState(false),
+    [socialSaving, setSocialSaving] = useState(false),
     [draft, setDraft] = useState("");
+  const selected = list.find((content) => content.id === selectedId) || null;
   const shown = list.filter(
     (c) => category === "全部内容" || c.category === category,
   );
-  const addComment = () => {
-    if (!selected || !draft.trim()) return;
-    setComments((v) => ({
-      ...v,
-      [selected.id]: [
-        ...(v[selected.id] || []),
-        {
-          id: crypto.randomUUID(),
-          author: "学生",
-          text: draft.trim(),
-          reply: "",
-        },
-      ],
-    }));
+  useEffect(() => {
+    if (!selected) return;
+    const previous = document.body.style.overflow;
+    const close = (event: KeyboardEvent) => event.key === "Escape" && setSelectedId("");
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", close);
+    return () => {
+      document.body.style.overflow = previous;
+      document.removeEventListener("keydown", close);
+    };
+  }, [selected]);
+  useEffect(() => {
+    if (!selected) return;
+    let active = true;
+    api(`/api/social?contentId=${encodeURIComponent(selected.id)}`)
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "互动数据加载失败");
+        if (active) {
+          setLiked(Boolean(data.liked));
+          setLikeCount(Number(data.likeCount || 0));
+          setComments(data.comments || []);
+        }
+      })
+      .catch(() => active && flash("互动数据暂时无法加载"))
+      .finally(() => active && setSocialLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [selected, flash]);
+  const toggleLike = async () => {
+    if (!selected || socialSaving) return;
+    setSocialSaving(true);
+    const response = await api("/api/social", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "toggle-like", contentId: selected.id }),
+    });
+    const data = await response.json();
+    setSocialSaving(false);
+    if (!response.ok) return flash(data.error || "点赞失败");
+    setLiked(Boolean(data.liked));
+    setLikeCount(Number(data.likeCount || 0));
+  };
+  const addComment = async () => {
+    if (!selected || !draft.trim() || socialSaving) return;
+    setSocialSaving(true);
+    const response = await api("/api/social", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "add-comment",
+        contentId: selected.id,
+        text: draft.trim(),
+      }),
+    });
+    const data = await response.json();
+    setSocialSaving(false);
+    if (!response.ok) return flash(data.error || "评论发布失败");
+    setComments((value) => [data.comment, ...value]);
     setDraft("");
+    flash("评论已发布");
   };
-  const reply = (id: string) => {
-    if (!selected) return;
-    setComments((v) => ({
-      ...v,
-      [selected.id]: (v[selected.id] || []).map((c) =>
-        c.id === id
-          ? { ...c, reply: "发布方已收到，会在后续内容中补充回应。" }
-          : c,
-      ),
-    }));
-  };
-  const removeComment = (id: string) => {
-    if (!selected) return;
-    setComments((v) => ({
-      ...v,
-      [selected.id]: (v[selected.id] || []).filter((c) => c.id !== id),
-    }));
+  const removeComment = async (id: string) => {
+    const response = await api(
+      `/api/social?commentId=${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    );
+    const data = await response.json();
+    if (!response.ok) return flash(data.error || "评论删除失败");
+    setComments((value) => value.filter((comment) => comment.id !== id));
+    flash("评论已删除");
   };
   return (
     <>
@@ -1401,7 +1640,7 @@ function LearningCenter({ custom }: { custom: ContentItem[] }) {
                 <i key={tag}>{tag}</i>
               ))}
             </footer>
-            <button onClick={() => setSelected(c)}>打开内容 →</button>
+            <button onClick={() => { setSocialLoading(true); setSelectedId(c.id); }}>打开内容 →</button>
           </article>
         ))}
       </div>
@@ -1410,22 +1649,26 @@ function LearningCenter({ custom }: { custom: ContentItem[] }) {
           className="dialog-backdrop"
           role="presentation"
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setSelected(null);
+            if (e.target === e.currentTarget) setSelectedId("");
           }}
         >
-          <section className="dialog reader rich-reader">
-            <button className="dialog-close" onClick={() => setSelected(null)}>
+          <section
+            className="dialog reader rich-reader"
+            role="dialog"
+            aria-modal="true"
+            aria-label={selected.title}
+          >
+            <button className="dialog-close" aria-label="关闭内容" onClick={() => setSelectedId("")}>
               ×
             </button>
             <ContentRenderer item={selected} />
             <div className="content-social">
               <button
-                className={liked[selected.id] ? "active" : ""}
-                onClick={() =>
-                  setLiked((v) => ({ ...v, [selected.id]: !v[selected.id] }))
-                }
+                className={liked ? "active" : ""}
+                onClick={toggleLike}
+                disabled={socialSaving}
               >
-                ♥ {liked[selected.id] ? "已点赞" : "点赞"}
+                ♥ {liked ? "已点赞" : "点赞"} · {likeCount}
               </button>
               <label>
                 评论
@@ -1436,18 +1679,30 @@ function LearningCenter({ custom }: { custom: ContentItem[] }) {
                   placeholder="写下你的问题或想法"
                 />
               </label>
-              <button className="primary-btn" onClick={addComment}>
-                发布评论
+              <button
+                className="primary-btn"
+                onClick={addComment}
+                disabled={socialSaving || draft.trim().length < 2}
+              >
+                {socialSaving ? "正在发布…" : "发布评论"}
               </button>
-              {(comments[selected.id] || []).map((c) => (
+              {socialLoading && <p className="social-empty">正在读取评论…</p>}
+              {!socialLoading && comments.length === 0 && (
+                <p className="social-empty">还没有评论，欢迎提出第一个问题。</p>
+              )}
+              {comments.map((c) => (
                 <div className="comment-item" key={c.id}>
                   <b>{c.author}</b>
+                  {c.createdAt && (
+                    <small>{new Date(c.createdAt).toLocaleString("zh-CN")}</small>
+                  )}
                   <p>{c.text}</p>
-                  {c.reply && <em>{c.reply}</em>}
-                  <span>
-                    <button onClick={() => reply(c.id)}>发布方回复</button>
-                    <button onClick={() => removeComment(c.id)}>删除</button>
-                  </span>
+                  {c.reply && (
+                    <em><b>{c.repliedBy || "发布方"}回复：</b>{c.reply}</em>
+                  )}
+                  {c.mine && (
+                    <span><button onClick={() => removeComment(c.id)}>删除我的评论</button></span>
+                  )}
                 </div>
               ))}
             </div>
@@ -1495,20 +1750,24 @@ function StudentProfile({
       initial.awards || "JA 简历工作坊优秀作品；校级创新挑战赛入围",
     ),
     resumeName: String(initial.resumeName || ""),
+    resumeKey: String(initial.resumeKey || ""),
+    resumeType: String(initial.resumeType || ""),
     timelineItems: String(
       initial.timelineItems ||
         "2026.10.08｜学生项目｜校园可持续议题调研｜完成访谈、问卷整理与问题定义。｜形成项目报告、路演页和行动建议。",
     ),
   });
-  const [editing, setEditing] = useState(true),
+  const [editing, setEditing] = useState(false),
     [notice, setNotice] = useState(""),
     [active, setActive] = useState("tl-1"),
     [registrations, setRegistrations] = useState<RegistrationItem[]>([]),
     [draft, setDraft] = useState({
       date: "",
+      type: "学生项目",
       title: "",
       action: "",
       output: "",
+      evidenceUrl: "",
     });
   useEffect(() => {
     api("/api/registrations")
@@ -1522,11 +1781,45 @@ function StudentProfile({
     if (!file) return;
     const result = await upload(file, "resume");
     if (result) {
-      update("resumeName", result.name);
+      const next = {
+        ...form,
+        resumeName: result.name,
+        resumeKey: result.key,
+        resumeType: result.type,
+      };
+      setForm(next);
+      await save("student-profile", next, record?.id);
       setNotice(
-        "简历已上传。企业看到的是你整理后的成长主页，可按需查看完整简历。",
+        "简历已安全保存，仅你本人可查看；成长主页仍由你决定公开内容。",
       );
     }
+  };
+  const viewResume = async () => {
+    if (!form.resumeKey) {
+      setNotice(form.resumeName ? "请重新上传一次简历以启用安全查看" : "请先上传完整简历");
+      return;
+    }
+    setNotice("正在安全读取简历…");
+    const response = await api(
+      `/api/files?key=${encodeURIComponent(form.resumeKey)}`,
+    );
+    if (!response.ok) {
+      const message = await response.text();
+      setNotice(message || "简历读取失败，请重新上传");
+      return;
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    if (form.resumeType.includes("pdf")) {
+      window.open(url, "_blank", "noopener,noreferrer");
+    } else {
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = form.resumeName || "我的简历.docx";
+      link.click();
+    }
+    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    setNotice("完整简历已通过私有通道打开");
   };
   const skills = form.skills
     .split(",")
@@ -1571,6 +1864,7 @@ function StudentProfile({
       const [date, type, title, action, output] = line.split("｜");
       return {
         id: `manual-${index}`,
+        manualIndex: index,
         date: date || "待补充",
         type: type || "学生项目",
         title: title || "未命名成长记录",
@@ -1585,15 +1879,34 @@ function StudentProfile({
     ),
     ...manual,
   ].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const activeItem = timeline.find((item) => item.id === active) || timeline[0];
   const addTimelineItem = () => {
     if (!draft.title.trim()) return;
-    const line = `${draft.date || new Date().toLocaleDateString("zh-CN").replaceAll("/", ".")}｜学生项目｜${draft.title.trim()}｜${draft.action.trim() || "补充项目过程与承担工作。"}｜${draft.output.trim() || "补充项目成果或作品链接。"}`;
+    const output = [
+      draft.output.trim() || "补充项目成果或作品说明。",
+      draft.evidenceUrl.trim() ? `成果链接：${draft.evidenceUrl.trim()}` : "",
+    ].filter(Boolean).join(" ");
+    const line = `${draft.date || new Date().toLocaleDateString("zh-CN").replaceAll("/", ".")}｜${draft.type}｜${draft.title.trim()}｜${draft.action.trim() || "补充项目过程与承担工作。"}｜${output}`;
     const next = form.timelineItems
       ? [form.timelineItems, line].join("\n")
       : line;
     update("timelineItems", next);
-    setDraft({ date: "", title: "", action: "", output: "" });
+    setDraft({ date: "", type: "学生项目", title: "", action: "", output: "", evidenceUrl: "" });
     setActive(`manual-${manual.length}`);
+  };
+  const updateManualOrder = (manualIndex: number, direction: -1 | 1) => {
+    const lines = form.timelineItems.split("\n").filter((line) => line.trim());
+    const target = manualIndex + direction;
+    if (target < 0 || target >= lines.length) return;
+    [lines[manualIndex], lines[target]] = [lines[target], lines[manualIndex]];
+    update("timelineItems", lines.join("\n"));
+    setActive(`manual-${target}`);
+  };
+  const removeManualItem = (manualIndex: number) => {
+    const lines = form.timelineItems.split("\n").filter((line) => line.trim());
+    lines.splice(manualIndex, 1);
+    update("timelineItems", lines.join("\n"));
+    setActive(timeline[0]?.id || "");
   };
   return (
     <>
@@ -1640,13 +1953,7 @@ function StudentProfile({
               </label>
               <button
                 className="outline-btn"
-                onClick={() =>
-                  setNotice(
-                    form.resumeName
-                      ? `完整简历：${form.resumeName}`
-                      : "请先上传完整简历",
-                  )
-                }
+                onClick={viewResume}
               >
                 查看完整简历
               </button>
@@ -1678,6 +1985,23 @@ function StudentProfile({
                 </span>
               </button>
             ))}
+            {activeItem && (
+              <article className={`timeline-detail-card ${activeItem.type.includes("JA认证") ? "certified" : ""}`}>
+                <div>
+                  <small>{activeItem.type.includes("JA认证") ? "JA VERIFIED EXPERIENCE" : "PERSONAL EXPERIENCE"}</small>
+                  <h3>{activeItem.title}</h3>
+                  <p>{activeItem.action}</p>
+                  <strong>{activeItem.output}</strong>
+                </div>
+                {"manualIndex" in activeItem && editing && (
+                  <div className="timeline-item-actions">
+                    <button onClick={() => updateManualOrder(Number(activeItem.manualIndex), -1)}>上移</button>
+                    <button onClick={() => updateManualOrder(Number(activeItem.manualIndex), 1)}>下移</button>
+                    <button className="danger" onClick={() => removeManualItem(Number(activeItem.manualIndex))}>删除经历</button>
+                  </div>
+                )}
+              </article>
+            )}
           </section>
           <section className="manual-timeline-entry">
             <div>
@@ -1695,6 +2019,20 @@ function StudentProfile({
                   }
                   disabled={!editing}
                 />
+              </label>
+              <label>
+                经历类型
+                <select
+                  value={draft.type}
+                  onChange={(e) => setDraft((v) => ({ ...v, type: e.target.value }))}
+                  disabled={!editing}
+                >
+                  <option>学生项目</option>
+                  <option>实习实践</option>
+                  <option>竞赛经历</option>
+                  <option>志愿公益</option>
+                  <option>校园活动</option>
+                </select>
               </label>
               <label>
                 标题
@@ -1727,6 +2065,16 @@ function StudentProfile({
                     setDraft((v) => ({ ...v, output: e.target.value }))
                   }
                   disabled={!editing}
+                />
+              </label>
+              <label className="full">
+                成果链接（选填）
+                <input
+                  type="url"
+                  value={draft.evidenceUrl}
+                  onChange={(e) => setDraft((v) => ({ ...v, evidenceUrl: e.target.value }))}
+                  disabled={!editing}
+                  placeholder="https:// 作品、报告或演示链接"
                 />
               </label>
               <button
@@ -1808,15 +2156,6 @@ function StudentProfile({
                 rows={2}
               />
             </label>
-            <label className="full">
-              成长时间轴原始记录（每行：日期｜类型｜标题｜做了什么｜产出）
-              <textarea
-                value={form.timelineItems}
-                onChange={(e) => update("timelineItems", e.target.value)}
-                disabled={!editing}
-                rows={4}
-              />
-            </label>
           </section>
         </main>
       </div>
@@ -1855,77 +2194,13 @@ function EnterpriseSpace({
 }) {
   const positions = records.filter((r) => r.kind === "job");
   if (tab === "overview")
-    return (
-      <>
-        <Title
-          eyebrow="HUNAN ENTERPRISE WORKSPACE"
-          title="湖南企业发布，JA 审核后公开。"
-          desc="企业先把实习 / 项目机会、活动和内容提交到 JA 后台；JA 通过后按分类和排序进入学生端。"
-        />
-        <div className="review-journey">
-          <span className="done">
-            <b>1</b>企业填写并提交
-          </span>
-          <i>→</i>
-          <span>
-            <b>2</b>JA 分类、排序与审核
-          </span>
-          <i>→</i>
-          <span>
-            <b>3</b>学生端公开并沉淀成长
-          </span>
-        </div>
-        <div className="metrics">
-          <Metric
-            label="我的机会"
-            value={String(positions.length)}
-            note="实习 / 项目均可发布"
-          />
-          <Metric
-            label="待 JA 审核"
-            value={String(
-              records.filter((r) => r.payload.reviewStatus === "pending")
-                .length,
-            )}
-            note="提交后暂不公开"
-            tone="yellow"
-          />
-          <Metric
-            label="审核通过"
-            value={String(
-              records.filter((r) => r.payload.reviewStatus === "approved")
-                .length,
-            )}
-            note="已进入学生端"
-            tone="lime"
-          />
-          <Metric
-            label="企业贡献分"
-            value={String(68 + records.length * 4)}
-            note="由发布、反馈和录用回传组成"
-            tone="blue"
-          />
-        </div>
-        <section className="enterprise-hero">
-          <div>
-            <small>HUNAN PILOT</small>
-            <h2>发布活动，也形成企业贡献画像</h2>
-            <p>
-              活动发布、学生报名、审核通过和录用反馈都会沉淀到企业主页，展示企业商誉与社会责任。
-            </p>
-            <button onClick={() => setTab("activities")}>发布成长活动 →</button>
-          </div>
-          <img src="/media/ja-student-company.jpg" alt="湖南青年成长活动" />
-        </section>
-        <EnterpriseContribution records={records} />
-      </>
-    );
+    return <EnterpriseOverview records={records} setTab={setTab} />;
   if (tab === "positions")
     return (
       <EnterprisePublisher
         kind="job"
-        title="湖南实习 / 项目机会发布"
-        desc="面向湖南区域；请重点选择类别并完整填写邮箱、职责和能力要求。"
+        title="实习项目机会"
+        desc="创建、编辑和管理企业面向学生公开的实习与项目机会。"
         records={positions}
         save={save}
         remove={remove}
@@ -1937,8 +2212,8 @@ function EnterpriseSpace({
     return (
       <EnterprisePublisher
         kind="activity"
-        title="湖南成长活动发布"
-        desc="上传封面，明确报名所需字段，提交后由 JA 后台审核。"
+        title="成长活动"
+        desc="配置活动详情，明确报名所需字段和成长认证信息，提交后由 JA 审核。"
         records={records.filter((r) => r.kind === "activity")}
         save={save}
         remove={remove}
@@ -1950,8 +2225,8 @@ function EnterpriseSpace({
     return (
       <EnterprisePublisher
         kind="content"
-        title="成长内容发布"
-        desc="支持技能成长、活动分享和企业曝光，审核通过后进入学生端。"
+        title="成长内容"
+        desc="使用模块化编辑器发布文章或视频，提交后由 JA 审核。"
         records={records.filter((r) => r.kind === "content")}
         save={save}
         remove={remove}
@@ -1959,6 +2234,7 @@ function EnterpriseSpace({
         flash={flash}
       />
     );
+  if (tab === "feedback") return <PublisherFeedbackDesk flash={flash} />;
   if (tab === "registrations") return <EnterpriseRegistrations />;
   return (
     <EnterpriseProfile
@@ -1966,6 +2242,440 @@ function EnterpriseSpace({
       save={save}
       upload={upload}
     />
+  );
+}
+
+type ManagedComment = {
+  id: string;
+  contentId: string;
+  contentTitle: string;
+  authorName: string;
+  body: string;
+  replyBody?: string;
+  repliedBy?: string;
+  repliedAt?: string | null;
+  createdAt: string;
+};
+
+function PublisherFeedbackDesk({ flash }: { flash: (message: string) => void }) {
+  const [comments, setComments] = useState<ManagedComment[]>([]),
+    [selected, setSelected] = useState<ManagedComment | null>(null),
+    [reply, setReply] = useState(""),
+    [query, setQuery] = useState(""),
+    [status, setStatus] = useState("pending"),
+    [loading, setLoading] = useState(true),
+    [saving, setSaving] = useState(false),
+    [error, setError] = useState("");
+  useEffect(() => {
+    if (!selected) return;
+    const close = (event: KeyboardEvent) => event.key === "Escape" && setSelected(null);
+    document.addEventListener("keydown", close);
+    return () => document.removeEventListener("keydown", close);
+  }, [selected]);
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await api("/api/social?scope=publisher");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "评论读取失败");
+      setComments(data.comments || []);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "评论读取失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => {
+    let active = true;
+    api("/api/social?scope=publisher")
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "评论读取失败");
+        if (active) setComments(data.comments || []);
+      })
+      .catch((loadError) => {
+        if (active)
+          setError(loadError instanceof Error ? loadError.message : "评论读取失败");
+      })
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, []);
+  const shown = comments.filter((comment) => {
+    const matchesStatus =
+      status === "all" ||
+      (status === "pending" ? !comment.replyBody : Boolean(comment.replyBody));
+    const text = `${comment.contentTitle} ${comment.authorName} ${comment.body}`.toLowerCase();
+    return matchesStatus && (!query.trim() || text.includes(query.trim().toLowerCase()));
+  });
+  const act = async (action: "reply" | "delete") => {
+    if (!selected || saving) return;
+    if (action === "reply" && reply.trim().length < 2)
+      return flash("请填写至少 2 个字的回复");
+    if (action === "delete" && !window.confirm("确定删除这条评论吗？删除后学生端将不再显示。"))
+      return;
+    setSaving(true);
+    const response = await api("/api/social", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        commentId: selected.id,
+        action,
+        reply: reply.trim(),
+        scope: "publisher",
+      }),
+    });
+    const data = await response.json();
+    setSaving(false);
+    if (!response.ok) return flash(data.error || "处理失败");
+    flash(action === "reply" ? "回复已同步到学生端" : "评论已删除");
+    setSelected(null);
+    setReply("");
+    await load();
+  };
+  return (
+    <>
+      <Title eyebrow="CONTENT FEEDBACK" title="互动管理" desc="" />
+      <section className="feedback-summary">
+        <div><small>待回复</small><b>{comments.filter((comment) => !comment.replyBody).length}</b></div>
+        <div><small>已回复</small><b>{comments.filter((comment) => comment.replyBody).length}</b></div>
+        <div><small>全部评论</small><b>{comments.length}</b></div>
+      </section>
+      <section className="feedback-toolbar">
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索内容、学生或评论" />
+        <select value={status} onChange={(event) => setStatus(event.target.value)}>
+          <option value="pending">待回复</option>
+          <option value="replied">已回复</option>
+          <option value="all">全部评论</option>
+        </select>
+        <button onClick={load}>刷新</button>
+      </section>
+      {loading ? (
+        <div className="admin-empty">正在读取互动数据…</div>
+      ) : error ? (
+        <div className="admin-empty"><b>读取失败</b><p>{error}</p><button onClick={load}>重试</button></div>
+      ) : shown.length === 0 ? (
+        <div className="admin-empty"><b>当前没有需要处理的评论</b><p>学生在企业发布的成长内容下留言后，会出现在这里。</p></div>
+      ) : (
+        <div className="feedback-list">
+          {shown.map((comment) => (
+            <button key={comment.id} onClick={() => { setSelected(comment); setReply(comment.replyBody || ""); }}>
+              <span><b>{comment.contentTitle}</b><small>{new Date(comment.createdAt).toLocaleString("zh-CN")}</small></span>
+              <p><strong>{comment.authorName}</strong>{comment.body}</p>
+              <em>{comment.replyBody ? "已回复" : "待回复"}</em>
+            </button>
+          ))}
+        </div>
+      )}
+      {selected && (
+        <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSelected(null)}>
+          <section className="dialog feedback-dialog" role="dialog" aria-modal="true" aria-label="评论处理">
+            <button className="dialog-close" aria-label="关闭评论处理" onClick={() => setSelected(null)}>×</button>
+            <small>COMMENT MANAGEMENT</small>
+            <h1>{selected.contentTitle}</h1>
+            <article><b>{selected.authorName}</b><p>{selected.body}</p><small>{new Date(selected.createdAt).toLocaleString("zh-CN")}</small></article>
+            <label>发布方回复<textarea rows={5} value={reply} onChange={(event) => setReply(event.target.value)} placeholder="回应问题、补充说明或给出下一步指引" /></label>
+            <div className="dialog-actions">
+              <button className="danger-text-btn" disabled={saving} onClick={() => act("delete")}>删除评论</button>
+              <button className="primary-btn" disabled={saving || reply.trim().length < 2} onClick={() => act("reply")}>{saving ? "正在处理…" : "发布回复"}</button>
+            </div>
+          </section>
+        </div>
+      )}
+    </>
+  );
+}
+
+function EnterpriseOverview({
+  records,
+  setTab,
+}: {
+  records: StoredRecord[];
+  setTab: (tab: string) => void;
+}) {
+  const [registrations, setRegistrations] = useState<RegistrationItem[]>([]),
+    [registrationReady, setRegistrationReady] = useState(false);
+  useEffect(() => {
+    api("/api/registrations?scope=publisher")
+      .then((response) => response.json())
+      .then((data) => setRegistrations(data.registrations || []))
+      .catch(() => setRegistrations([]))
+      .finally(() => setRegistrationReady(true));
+  }, []);
+
+  const publicRecords = records.filter((record) =>
+      ["job", "activity", "content"].includes(record.kind),
+    ),
+    pending = publicRecords.filter(
+      (record) =>
+        String(record.payload.reviewStatus || "pending") === "pending",
+    ),
+    approved = publicRecords.filter(
+      (record) => record.payload.reviewStatus === "approved",
+    ),
+    rejected = publicRecords.filter(
+      (record) => record.payload.reviewStatus === "rejected",
+    ),
+    pendingRegistrations = registrations.filter((item) =>
+      ["pending", "registered"].includes(item.status),
+    ),
+    profile = records.find((record) => record.kind === "enterprise-profile"),
+    profileFields = ["name", "industry", "city", "intro", "website", "logo"],
+    completedProfileFields = profileFields.filter((field) =>
+      String(profile?.payload[field] || "").trim(),
+    ).length,
+    profileCompleteness = Math.round(
+      (completedProfileFields / profileFields.length) * 100,
+    ),
+    latest = [...publicRecords]
+      .sort((a, b) =>
+        String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")),
+      )
+      .slice(0, 5),
+    totalTasks =
+      pendingRegistrations.length +
+      rejected.length +
+      (profileCompleteness < 100 ? 1 : 0);
+
+  const kindName = (kind: string) =>
+    kind === "job" ? "机会" : kind === "activity" ? "活动" : "内容";
+  const statusMeta = (status: unknown) => {
+    if (status === "approved")
+      return { label: "已公开", className: "approved" };
+    if (status === "rejected")
+      return { label: "需修改", className: "rejected" };
+    return { label: "审核中", className: "pending" };
+  };
+  const openRecord = (record: StoredRecord) =>
+    setTab(
+      record.kind === "job"
+        ? "positions"
+        : record.kind === "activity"
+          ? "activities"
+          : "content",
+    );
+
+  return (
+    <>
+      <Title
+        eyebrow="ENTERPRISE WORKBENCH"
+        title="工作台"
+        desc="集中查看发布进度、报名待办与企业资料状态。"
+        action={
+          <div className="workbench-primary-actions">
+            <button
+              className="outline-btn"
+              onClick={() => setTab("registrations")}
+            >
+              查看报名
+            </button>
+            <button className="primary-btn" onClick={() => setTab("positions")}>
+              ＋ 发布机会
+            </button>
+          </div>
+        }
+      />
+
+      <section className="workbench-welcome">
+        <div>
+          <span className="workbench-kicker">今日工作概览</span>
+          <h2>
+            {totalTasks
+              ? `有 ${totalTasks} 项工作需要处理`
+              : "当前工作均已处理"}
+          </h2>
+          <p>
+            {pendingRegistrations.length
+              ? `${pendingRegistrations.length} 份活动报名等待审核，请优先处理。`
+              : "暂无待审核报名，可继续发布新的机会、活动或成长内容。"}
+          </p>
+        </div>
+        <div className="workbench-welcome-art" aria-hidden="true">
+          <span>JA</span>
+          <i />
+          <b>STAR PLAN</b>
+        </div>
+      </section>
+
+      <section className="workbench-metrics" aria-label="企业运营概览">
+        <button onClick={() => setTab("positions")}>
+          <span>已提交内容</span>
+          <b>{publicRecords.length}</b>
+          <small>机会、活动与内容</small>
+          <i>查看发布管理 →</i>
+        </button>
+        <button onClick={() => setTab("registrations")}>
+          <span>待审核报名</span>
+          <b>{registrationReady ? pendingRegistrations.length : "—"}</b>
+          <small>需要企业确认结果</small>
+          <i>进入报名审核 →</i>
+        </button>
+        <button onClick={() => setTab("activities")}>
+          <span>审核中</span>
+          <b>{pending.length}</b>
+          <small>等待平台审核</small>
+          <i>查看审核进度 →</i>
+        </button>
+        <button onClick={() => setTab("profile")}>
+          <span>资料完整度</span>
+          <b>{profileCompleteness}%</b>
+          <small>
+            {profileCompleteness === 100
+              ? "企业资料已完善"
+              : "完善后提升品牌展示"}
+          </small>
+          <i>维护企业资料 →</i>
+        </button>
+      </section>
+
+      <div className="workbench-main-grid">
+        <section className="workbench-card task-center">
+          <div className="workbench-card-head">
+            <div>
+              <small>ACTION CENTER</small>
+              <h2>待办事项</h2>
+            </div>
+            <span>{totalTasks} 项</span>
+          </div>
+          <div className="task-list">
+            {pendingRegistrations.length > 0 && (
+              <button onClick={() => setTab("registrations")}>
+                <i className="task-icon urgent">审</i>
+                <span>
+                  <b>审核学生报名</b>
+                  <small>{pendingRegistrations.length} 份报名等待确认</small>
+                </span>
+                <em>立即处理 →</em>
+              </button>
+            )}
+            {rejected.length > 0 && (
+              <button onClick={() => openRecord(rejected[0])}>
+                <i className="task-icon warning">改</i>
+                <span>
+                  <b>修改退回内容</b>
+                  <small>
+                    {rejected.length} 条发布内容需要根据审核意见调整
+                  </small>
+                </span>
+                <em>查看意见 →</em>
+              </button>
+            )}
+            {profileCompleteness < 100 && (
+              <button onClick={() => setTab("profile")}>
+                <i className="task-icon profile">企</i>
+                <span>
+                  <b>完善企业资料</b>
+                  <small>
+                    当前完成 {profileCompleteness}%，补充品牌信息与企业介绍
+                  </small>
+                </span>
+                <em>继续完善 →</em>
+              </button>
+            )}
+            {totalTasks === 0 && (
+              <div className="task-empty">
+                <b>✓</b>
+                <span>暂无待办事项</span>
+                <small>新的报名或审核反馈会出现在这里。</small>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="workbench-card publish-overview">
+          <div className="workbench-card-head">
+            <div>
+              <small>PUBLISHING STATUS</small>
+              <h2>发布状态</h2>
+            </div>
+            <button onClick={() => setTab("content")}>发布内容</button>
+          </div>
+          <div className="status-summary">
+            <article>
+              <span className="status-dot approved" />
+              <b>{approved.length}</b>
+              <small>已公开</small>
+            </article>
+            <article>
+              <span className="status-dot pending" />
+              <b>{pending.length}</b>
+              <small>审核中</small>
+            </article>
+            <article>
+              <span className="status-dot rejected" />
+              <b>{rejected.length}</b>
+              <small>需修改</small>
+            </article>
+          </div>
+          <div
+            className="status-progress"
+            aria-label={`已公开 ${approved.length} 条，共 ${publicRecords.length} 条`}
+          >
+            <span
+              style={{
+                width: `${publicRecords.length ? Math.round((approved.length / publicRecords.length) * 100) : 0}%`,
+              }}
+            />
+          </div>
+          <p>审核通过的内容会自动进入学生端对应栏目。</p>
+        </section>
+      </div>
+
+      <section className="workbench-card recent-publishing">
+        <div className="workbench-card-head">
+          <div>
+            <small>RECENT UPDATES</small>
+            <h2>最近发布</h2>
+          </div>
+          <button onClick={() => setTab("positions")}>查看全部</button>
+        </div>
+        {latest.length ? (
+          <div className="recent-publishing-table">
+            <div className="recent-publishing-row head" aria-hidden="true">
+              <span>名称</span>
+              <span>类型</span>
+              <span>更新时间</span>
+              <span>状态</span>
+              <span />
+            </div>
+            {latest.map((record) => {
+              const status = statusMeta(record.payload.reviewStatus);
+              return (
+                <button
+                  className="recent-publishing-row"
+                  key={record.id}
+                  onClick={() => openRecord(record)}
+                >
+                  <strong>
+                    {String(record.payload.title || "未命名内容")}
+                  </strong>
+                  <span>{kindName(record.kind)}</span>
+                  <span>
+                    {record.updatedAt
+                      ? new Date(record.updatedAt).toLocaleDateString("zh-CN")
+                      : "刚刚"}
+                  </span>
+                  <span className={`workbench-status ${status.className}`}>
+                    {status.label}
+                  </span>
+                  <em>查看 →</em>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="workbench-empty">
+            <b>开始建立企业在星光计划中的内容资产</b>
+            <p>发布第一条实习机会、成长活动或专业内容。</p>
+            <button className="primary-btn" onClick={() => setTab("positions")}>
+              发布第一条机会
+            </button>
+          </div>
+        )}
+      </section>
+    </>
   );
 }
 
@@ -2016,15 +2726,29 @@ function EnterpriseRegistrations() {
   const [items, setItems] = useState<RegistrationItem[]>([]),
     [loading, setLoading] = useState(true),
     [selected, setSelected] = useState<RegistrationItem | null>(null),
-    [notice, setNotice] = useState("");
-  const load = () => {
+    [notice, setNotice] = useState(""),
+    [loadError, setLoadError] = useState(""),
+    [query, setQuery] = useState(""),
+    [statusFilter, setStatusFilter] = useState("all"),
+    [activityFilter, setActivityFilter] = useState("all"),
+    [sortOrder, setSortOrder] = useState("newest"),
+    [selectedIds, setSelectedIds] = useState<string[]>([]),
+    [bulkNote, setBulkNote] = useState(""),
+    [bulkSaving, setBulkSaving] = useState(false);
+  const load = async () => {
     setLoading(true);
-    api("/api/registrations?scope=publisher")
-      .then((r) => r.json())
-      .then((data) => {
-        setItems(data.registrations || []);
-        setLoading(false);
-      });
+    setLoadError("");
+    try {
+      const response = await api("/api/registrations?scope=publisher");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "读取失败");
+      setItems(data.registrations || []);
+      setSelectedIds([]);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "报名数据读取失败");
+    } finally {
+      setLoading(false);
+    }
   };
   useEffect(() => {
     let active = true;
@@ -2035,33 +2759,61 @@ function EnterpriseRegistrations() {
           setItems(data.registrations || []);
           setLoading(false);
         }
+      })
+      .catch(() => {
+        if (active) {
+          setLoadError("报名数据读取失败，请刷新重试");
+          setLoading(false);
+        }
       });
     return () => {
       active = false;
     };
   }, []);
-  const decide = async (
-    item: RegistrationItem,
+  const review = async (
+    ids: string[],
     decision: "approved" | "rejected",
     note: string,
   ) => {
     const response = await api("/api/registrations", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ registrationId: item.id, decision, note }),
+      body: JSON.stringify({ registrationIds: ids, decision, note }),
     });
     const data = await response.json();
     if (!response.ok) {
       setNotice(data.error || "审核失败");
-      return;
+      return false;
     }
     setNotice(
       decision === "approved"
-        ? `已通过 ${item.answers.name || "该学生"} 的报名`
-        : `已退回 ${item.answers.name || "该学生"} 的报名`,
+        ? `已通过 ${ids.length} 份报名`
+        : `已退回 ${ids.length} 份报名`,
+    );
+    setItems((current) =>
+      current.map((item) =>
+        ids.includes(item.id)
+          ? {
+              ...item,
+              status: decision,
+              reviewNote:
+                note.trim() ||
+                (decision === "approved" ? "企业确认报名通过" : ""),
+              reviewedAt: new Date().toISOString(),
+            }
+          : item,
+      ),
     );
     setSelected(null);
-    load();
+    setSelectedIds((current) => current.filter((id) => !ids.includes(id)));
+    return true;
+  };
+  const decide = async (
+    item: RegistrationItem,
+    decision: "approved" | "rejected",
+    note: string,
+  ) => {
+    await review([item.id], decision, note);
   };
   const pending = items.filter(
       (item) => item.status === "pending" || item.status === "registered",
@@ -2081,9 +2833,58 @@ function EnterpriseRegistrations() {
         },
         {} as Record<string, number>,
       ),
-    ).sort((a, b) => b[1] - a[1]);
+    ).sort((a, b) => b[1] - a[1]),
+    activityNames = activityStats.map(([title]) => title);
+  const filteredItems = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return items
+      .filter(
+        (item) =>
+          statusFilter === "all" ||
+          (statusFilter === "pending"
+            ? item.status === "pending" || item.status === "registered"
+            : item.status === statusFilter),
+      )
+      .filter(
+        (item) =>
+          activityFilter === "all" || item.activityTitle === activityFilter,
+      )
+      .filter((item) =>
+        `${item.answers.name || ""} ${item.answers.school || ""} ${item.answers.phone || ""} ${item.answers.email || ""}`
+          .toLowerCase()
+          .includes(normalizedQuery),
+      )
+      .sort((a, b) =>
+        sortOrder === "oldest"
+          ? String(a.createdAt).localeCompare(String(b.createdAt))
+          : String(b.createdAt).localeCompare(String(a.createdAt)),
+      );
+  }, [activityFilter, items, query, sortOrder, statusFilter]);
+  const selectableIds = filteredItems
+    .filter((item) => item.status === "pending" || item.status === "registered")
+    .map((item) => item.id);
+  const allSelectableChecked =
+    selectableIds.length > 0 &&
+    selectableIds.every((id) => selectedIds.includes(id));
+  const toggleAll = () =>
+    setSelectedIds((current) =>
+      allSelectableChecked
+        ? current.filter((id) => !selectableIds.includes(id))
+        : [...new Set([...current, ...selectableIds])],
+    );
+  const batchReview = async (decision: "approved" | "rejected") => {
+    if (!selectedIds.length) return;
+    if (decision === "rejected" && !bulkNote.trim()) {
+      setNotice("批量退回时请填写统一原因");
+      return;
+    }
+    setBulkSaving(true);
+    const ok = await review(selectedIds, decision, bulkNote);
+    if (ok) setBulkNote("");
+    setBulkSaving(false);
+  };
   const exportCsv = () => {
-    if (!items.length) {
+    if (!filteredItems.length) {
       setNotice("当前没有可导出的报名数据");
       return;
     }
@@ -2100,7 +2901,7 @@ function EnterpriseRegistrations() {
     ];
     const csvEscape = (value: unknown) =>
       `"${String(value ?? "").replaceAll('"', '""')}"`;
-    const rows = items.map((item) =>
+    const rows = filteredItems.map((item) =>
       [
         item.activityTitle,
         item.answers.name || "",
@@ -2135,25 +2936,72 @@ function EnterpriseRegistrations() {
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
-    setNotice("报名表已导出，可用 Excel 打开");
+    setNotice(`已导出当前筛选结果，共 ${filteredItems.length} 条报名`);
   };
   return (
     <>
       <Title
         eyebrow="REGISTRATION DATA"
         title="活动报名审核"
-        desc="测试阶段显示全部活动报名，方便企业和项目团队联调审核；正式账号启用后再按企业权限收拢。"
+        desc="查看当前企业活动的学生报名，完成筛选、审核、结果记录与数据导出。"
         action={
           <div className="registration-toolbar">
             <button className="outline-btn" onClick={load}>
               刷新数据
             </button>
             <button className="primary-btn" onClick={exportCsv}>
-              导出报名表
+              导出筛选结果
             </button>
           </div>
         }
       />
+      <section className="registration-filterbar" aria-label="报名筛选条件">
+        <label className="registration-search">
+          <span>搜索学生</span>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="姓名、学校、电话或邮箱"
+          />
+        </label>
+        <label>
+          <span>活动</span>
+          <select
+            value={activityFilter}
+            onChange={(event) => setActivityFilter(event.target.value)}
+          >
+            <option value="all">全部活动</option>
+            {activityNames.map((name) => (
+              <option value={name} key={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>状态</span>
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+          >
+            <option value="all">全部状态</option>
+            <option value="pending">待确认</option>
+            <option value="approved">已通过</option>
+            <option value="rejected">已退回</option>
+          </select>
+        </label>
+        <label>
+          <span>排序</span>
+          <select
+            value={sortOrder}
+            onChange={(event) => setSortOrder(event.target.value)}
+          >
+            <option value="newest">最新报名优先</option>
+            <option value="oldest">最早报名优先</option>
+          </select>
+        </label>
+        <b>当前显示 {filteredItems.length} 条</b>
+      </section>
       <section className="registration-analytics">
         <div className="registration-summary visual-summary">
           <span>
@@ -2231,6 +3079,42 @@ function EnterpriseRegistrations() {
         </div>
       </section>
       {notice && <p className="admin-notice">{notice}</p>}
+      {loadError && (
+        <div className="registration-load-error" role="alert">
+          <span>{loadError}</span>
+          <button onClick={load}>重新加载</button>
+        </div>
+      )}
+      {selectedIds.length > 0 && (
+        <section className="registration-bulkbar">
+          <div>
+            <b>已选择 {selectedIds.length} 份待审核报名</b>
+            <button onClick={() => setSelectedIds([])}>取消选择</button>
+          </div>
+          <label>
+            <span>统一审核意见</span>
+            <input
+              value={bulkNote}
+              onChange={(event) => setBulkNote(event.target.value)}
+              placeholder="通过时选填，退回时必填"
+            />
+          </label>
+          <button
+            className="bulk-reject"
+            disabled={bulkSaving}
+            onClick={() => batchReview("rejected")}
+          >
+            批量退回
+          </button>
+          <button
+            className="bulk-approve"
+            disabled={bulkSaving}
+            onClick={() => batchReview("approved")}
+          >
+            批量通过
+          </button>
+        </section>
+      )}
       {loading ? (
         <div className="admin-empty">正在读取报名数据…</div>
       ) : items.length === 0 ? (
@@ -2238,23 +3122,78 @@ function EnterpriseRegistrations() {
           <b>☷</b>
           <h2>还没有学生报名</h2>
           <p>
-            学生完成任一活动报名表后，会出现在这里供企业或项目团队测试审核。
+            学生完成任一活动报名表后，会出现在这里供活动发布方审核。
           </p>
+        </div>
+      ) : filteredItems.length === 0 ? (
+        <div className="publisher-no-results">
+          <b>没有符合当前筛选条件的报名</b>
+          <p>可清除关键词，或切换活动和审核状态。</p>
+          <button
+            onClick={() => {
+              setQuery("");
+              setActivityFilter("all");
+              setStatusFilter("all");
+            }}
+          >
+            清除筛选
+          </button>
         </div>
       ) : (
         <div className="registration-table enterprise-registration-table">
           <div className="registration-row head">
+            <label aria-label="选择当前页面全部待审核报名">
+              <input
+                type="checkbox"
+                checked={allSelectableChecked}
+                onChange={toggleAll}
+              />
+            </label>
             <b>活动</b>
             <b>学生</b>
-            <b>联系电话</b>
+            <b>学校 / 联系方式</b>
+            <b>提交时间</b>
             <b>报名状态</b>
             <b>审核</b>
           </div>
-          {items.map((item) => (
+          {filteredItems.map((item) => (
             <div className="registration-row" key={item.id}>
+              <label
+                aria-label={`选择 ${item.answers.name || "该学生"} 的报名`}
+              >
+                {(item.status === "pending" ||
+                  item.status === "registered") && (
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(item.id)}
+                    onChange={() =>
+                      setSelectedIds((current) =>
+                        current.includes(item.id)
+                          ? current.filter((id) => id !== item.id)
+                          : [...current, item.id],
+                      )
+                    }
+                  />
+                )}
+              </label>
               <strong>{item.activityTitle}</strong>
-              <span>{item.answers.name || "未填写"}</span>
-              <span>{item.answers.phone || "未填写"}</span>
+              <span className="registration-student-name">
+                <b>{item.answers.name || "未填写姓名"}</b>
+                <small>{item.answers.email || "未填写邮箱"}</small>
+              </span>
+              <span className="registration-contact">
+                <b>{item.answers.school || "未填写学校"}</b>
+                <small>{item.answers.phone || "未填写电话"}</small>
+              </span>
+              <span className="registration-created-at">
+                {new Date(item.createdAt).toLocaleDateString("zh-CN")}
+                <small>
+                  {new Date(item.createdAt).toLocaleTimeString("zh-CN", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </small>
+              </span>
               <span className={`registration-state ${item.status}`}>
                 {item.status === "approved"
                   ? "已通过"
@@ -2294,6 +3233,7 @@ function RegistrationDetail({
     note: string,
   ) => Promise<void>;
 }) {
+  useDialogEscape(onClose);
   const [note, setNote] = useState(item.reviewNote || ""),
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
@@ -2310,12 +3250,39 @@ function RegistrationDetail({
   return (
     <div className="dialog-backdrop">
       <section className="dialog registration-detail">
-        <button className="dialog-close" onClick={onClose}>
+        <button className="dialog-close" aria-label="关闭报名详情" onClick={onClose}>
           ×
         </button>
-        <small>REGISTRATION REVIEW</small>
-        <h1>{item.activityTitle}</h1>
-        <div>
+        <header className="registration-detail-header">
+          <span>{String(item.answers.name || "学生").slice(0, 1)}</span>
+          <div>
+            <small>REGISTRATION REVIEW</small>
+            <h1>{item.answers.name || "未填写姓名"}</h1>
+            <p>{item.activityTitle}</p>
+          </div>
+          <b className={`registration-state ${item.status}`}>
+            {pending
+              ? "待确认"
+              : item.status === "approved"
+                ? "已通过"
+                : "已退回"}
+          </b>
+        </header>
+        <section className="registration-detail-meta">
+          <p>
+            <small>提交时间</small>
+            <b>{new Date(item.createdAt).toLocaleString("zh-CN")}</b>
+          </p>
+          <p>
+            <small>学校与专业</small>
+            <b>{item.answers.school || "未填写"}</b>
+          </p>
+          <p>
+            <small>联系方式</small>
+            <b>{item.answers.phone || item.answers.email || "未填写"}</b>
+          </p>
+        </section>
+        <div className="registration-answer-grid">
           {Object.entries(item.answers).map(([key, value]) => (
             <p key={key}>
               <b>{registrationLabel(key)}</b>
@@ -2323,20 +3290,42 @@ function RegistrationDetail({
             </p>
           ))}
         </div>
-        <small>
-          提交时间：{new Date(item.createdAt).toLocaleString("zh-CN")}
-        </small>
         {pending && onDecision ? (
-          <>
+          <section className="registration-decision-panel">
             <label className="registration-review-note">
-              企业审核意见
+              <span>企业审核意见</span>
               <textarea
                 rows={3}
                 value={note}
-                onChange={(e) => setNote(e.target.value)}
+                onChange={(e) => {
+                  setNote(e.target.value);
+                  setError("");
+                }}
                 placeholder="通过时可填写提醒；退回时必须说明原因"
               />
             </label>
+            <div className="review-note-templates">
+              <span>快捷填写：</span>
+              <button
+                onClick={() => setNote("报名信息完整，请留意后续活动通知。")}
+              >
+                信息完整
+              </button>
+              <button
+                onClick={() =>
+                  setNote("请补充学校、专业和年级信息后重新提交。")
+                }
+              >
+                补充学业信息
+              </button>
+              <button
+                onClick={() =>
+                  setNote("请检查联系电话或邮箱，确保活动团队可以联系到你。")
+                }
+              >
+                检查联系方式
+              </button>
+            </div>
             {error && <p className="form-error">{error}</p>}
             <div className="registration-review-actions">
               <button disabled={saving} onClick={() => decide("rejected")}>
@@ -2350,11 +3339,16 @@ function RegistrationDetail({
                 确认通过
               </button>
             </div>
-          </>
+          </section>
         ) : (
           <p className={`registration-result ${item.status}`}>
             <b>{item.status === "approved" ? "报名已通过" : "报名已退回"}</b>
             {item.reviewNote && <span>{item.reviewNote}</span>}
+            {item.reviewedAt && (
+              <small>
+                审核时间：{new Date(item.reviewedAt).toLocaleString("zh-CN")}
+              </small>
+            )}
           </p>
         )}
       </section>
@@ -2408,10 +3402,22 @@ function EnterprisePublisher({
 }) {
   const [open, setOpen] = useState(false),
     [edit, setEdit] = useState<StoredRecord | undefined>(),
-    [status, setStatus] = useState("全部状态");
+    [status, setStatus] = useState("全部状态"),
+    [query, setQuery] = useState("");
   const start = (r?: StoredRecord) => {
     setEdit(r);
     setOpen(true);
+  };
+  const statusCounts = {
+    all: records.length,
+    draft: records.filter((r) => r.payload.reviewStatus === "draft").length,
+    pending: records.filter(
+      (r) => String(r.payload.reviewStatus || "pending") === "pending",
+    ).length,
+    approved: records.filter((r) => r.payload.reviewStatus === "approved")
+      .length,
+    rejected: records.filter((r) => r.payload.reviewStatus === "rejected")
+      .length,
   };
   const sorted = records
     .filter(
@@ -2419,11 +3425,27 @@ function EnterprisePublisher({
         status === "全部状态" ||
         String(r.payload.reviewStatus || "pending") === status,
     )
+    .filter((r) =>
+      `${String(r.payload.title || "")} ${String(r.payload.summary || "")}`
+        .toLowerCase()
+        .includes(query.trim().toLowerCase()),
+    )
     .sort(
       (a, b) =>
         Number(b.payload.sortOrder || 0) - Number(a.payload.sortOrder || 0) ||
         String(b.updatedAt).localeCompare(String(a.updatedAt)),
     );
+  const safeRemove = async (record: StoredRecord) => {
+    if (
+      !window.confirm(
+        `确认删除“${String(record.payload.title || "未命名内容")}”？删除后无法恢复。`,
+      )
+    )
+      return;
+    await remove(record.id);
+  };
+  const objectName =
+    kind === "job" ? "机会" : kind === "activity" ? "活动" : "内容";
   return (
     <>
       <Title
@@ -2432,36 +3454,97 @@ function EnterprisePublisher({
         desc={desc}
         action={
           <button className="primary-btn" onClick={() => start()}>
-            ＋ 新建
-            {kind === "job" ? "机会" : kind === "activity" ? "活动" : "内容"}
+            ＋ 新建{objectName}
           </button>
         }
       />
-      <div className="publisher-toolbar">
-        <span>按 JA 排序数字优先展示</span>
-        <select value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option>全部状态</option>
-          <option value="pending">待审核</option>
-          <option value="approved">已通过</option>
-          <option value="rejected">已退回</option>
-        </select>
+      <section className="publisher-summary" aria-label="发布内容统计">
+        <button
+          className={status === "全部状态" ? "active" : ""}
+          onClick={() => setStatus("全部状态")}
+        >
+          <span>全部</span>
+          <b>{statusCounts.all}</b>
+        </button>
+        <button
+          className={status === "draft" ? "active" : ""}
+          onClick={() => setStatus("draft")}
+        >
+          <span>草稿</span>
+          <b>{statusCounts.draft}</b>
+        </button>
+        <button
+          className={status === "pending" ? "active" : ""}
+          onClick={() => setStatus("pending")}
+        >
+          <span>审核中</span>
+          <b>{statusCounts.pending}</b>
+        </button>
+        <button
+          className={status === "approved" ? "active" : ""}
+          onClick={() => setStatus("approved")}
+        >
+          <span>已公开</span>
+          <b>{statusCounts.approved}</b>
+        </button>
+        <button
+          className={status === "rejected" ? "active" : ""}
+          onClick={() => setStatus("rejected")}
+        >
+          <span>需修改</span>
+          <b>{statusCounts.rejected}</b>
+        </button>
+      </section>
+      <div className="publisher-controlbar">
+        <label>
+          <span>搜索{objectName}</span>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={`输入${objectName}名称或摘要`}
+          />
+        </label>
+        <p>
+          {kind === "job"
+            ? "机会完成校验后直接公开，学生通过企业邮箱投递简历。"
+            : "提交后进入 JA 审核，审核意见和公开状态会实时同步。"}
+        </p>
       </div>
       {records.length === 0 ? (
         <div className="empty-publisher">
           <b>{kind === "job" ? "▣" : kind === "activity" ? "◇" : "▱"}</b>
-          <h2>还没有提交内容</h2>
-          <p>提交后先进入 JA 后台审核，不会立即出现在学生端。</p>
+          <h2>还没有创建{objectName}</h2>
+          <p>
+            {kind === "job"
+              ? "创建后可直接进入学生端，发布前会检查岗位信息和投递邮箱。"
+              : "可以先保存草稿，确认无误后再提交 JA 审核。"}
+          </p>
           <button onClick={() => start()}>开始创建</button>
+        </div>
+      ) : sorted.length === 0 ? (
+        <div className="publisher-no-results">
+          <b>没有找到符合条件的{objectName}</b>
+          <p>尝试更换状态，或清除搜索关键词。</p>
+          <button
+            onClick={() => {
+              setStatus("全部状态");
+              setQuery("");
+            }}
+          >
+            清除筛选
+          </button>
         </div>
       ) : (
         <div className="published-list">
           {sorted.map((r) => {
             const statusText =
               r.payload.reviewStatus === "approved"
-                ? "已通过"
+                ? "已公开"
                 : r.payload.reviewStatus === "rejected"
-                  ? "已退回"
-                  : "等待 JA 审核";
+                  ? "需修改"
+                  : r.payload.reviewStatus === "draft"
+                    ? "草稿"
+                    : "审核中";
             return (
               <article
                 key={r.id}
@@ -2471,7 +3554,7 @@ function EnterprisePublisher({
                   r.payload.coverType === "video" ? (
                     <video src={String(r.payload.cover)} muted />
                   ) : (
-                    <img src={String(r.payload.cover)} alt="" />
+                    <img src={String(r.payload.cover)} alt={String(r.payload.title || "发布内容封面")} />
                   )
                 ) : (
                   <div className="record-symbol">
@@ -2486,7 +3569,7 @@ function EnterprisePublisher({
                   <small>
                     {kind === "job"
                       ? `${String(r.payload.company || "湖南企业")} · ${String(r.payload.jobCategory || "其他类别")}`
-                      : `${String(r.payload.category || "成长内容")} · 排序 ${String(r.payload.sortOrder || 0)}`}
+                      : `${String(r.payload.publisher || "湖南企业")} · ${String(r.payload.category || "成长内容")}`}
                     {r.payload.featured ? " · 首页推荐" : ""}
                   </small>
                   <h2>{String(r.payload.title || "未命名")}</h2>
@@ -2507,9 +3590,11 @@ function EnterprisePublisher({
                 <button onClick={() => start(r)}>
                   {r.payload.reviewStatus === "rejected"
                     ? "修改并重提"
-                    : "编辑"}
+                    : r.payload.reviewStatus === "draft"
+                      ? "继续编辑"
+                      : "查看与编辑"}
                 </button>
-                <button className="danger-link" onClick={() => remove(r.id)}>
+                <button className="danger-link" onClick={() => safeRemove(r)}>
                   删除
                 </button>
               </article>
@@ -2871,6 +3956,87 @@ function ContentRenderer({
   );
 }
 
+function JobPublishingPreview({
+  item,
+}: {
+  item: {
+    title: string;
+    company: string;
+    summary: string;
+    city: string;
+    category: string;
+    industry: string;
+    degree: string;
+    mode: string;
+    duration: string;
+    salaryMin: string;
+    salaryMax: string;
+    email: string;
+    responsibilities: string;
+    requirements: string;
+  };
+}) {
+  const lines = (value: string) =>
+    value
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+  return (
+    <article className="job-publishing-preview">
+      <header>
+        <span>{item.company.trim().slice(0, 2) || "企业"}</span>
+        <div>
+          <small>{item.company || "企业名称"}</small>
+          <h1>{item.title || "机会名称"}</h1>
+        </div>
+      </header>
+      <p>{item.summary || "一句话介绍这份机会的工作内容和学生收获。"}</p>
+      <div className="job-preview-tags">
+        <span>{item.city || "长沙"}</span>
+        <span>{item.category || "机会类别"}</span>
+        <span>{item.industry || "所属行业"}</span>
+        <span>{item.degree || "学历要求"}</span>
+        <span>{item.mode || "工作方式"}</span>
+      </div>
+      <section>
+        <b>薪资与周期</b>
+        <p>
+          {item.salaryMin || "0"}–{item.salaryMax || "0"} 元/天 ·{" "}
+          {item.duration || "周期待定"}
+        </p>
+      </section>
+      <section>
+        <b>岗位职责</b>
+        {lines(item.responsibilities).length ? (
+          <ul>
+            {lines(item.responsibilities).map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        ) : (
+          <p>尚未填写岗位职责。</p>
+        )}
+      </section>
+      <section>
+        <b>能力要求</b>
+        {lines(item.requirements).length ? (
+          <ul>
+            {lines(item.requirements).map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        ) : (
+          <p>尚未填写能力要求。</p>
+        )}
+      </section>
+      <footer>
+        <small>简历投递邮箱</small>
+        <b>{item.email || "hr@example.com"}</b>
+      </footer>
+    </article>
+  );
+}
+
 function PublishDialog({
   kind,
   record,
@@ -2896,6 +4062,7 @@ function PublishDialog({
   } | null>;
   onClose: () => void;
 }) {
+  useDialogEscape(onClose);
   const old = record?.payload || {};
   const oldFields = (old.registrationFields as RegistrationField[]) || [];
   const [selectedFields, setSelectedFields] = useState<string[]>(
@@ -2913,14 +4080,24 @@ function PublishDialog({
     );
   const [form, setForm] = useState({
     title: String(old.title || ""),
-    company: String(old.company || ""),
+    company: String(old.company || old.publisher || ""),
     summary: String(old.summary || ""),
     email: String(old.contactEmail || ""),
+    contactName: String(old.contactName || ""),
+    contactPhone: String(old.contactPhone || ""),
     city: String(old.city || "长沙"),
     category: String(old.jobCategory || old.category || "产品运营"),
     duration: String(old.duration || ""),
     date: String(old.date || ""),
+    deadline: String(old.registrationDeadline || ""),
     capacity: String(old.capacity || "100"),
+    degree: String(old.degree || "本科"),
+    industry: String(old.industry || "互联网AI"),
+    salaryMin: String(old.salaryMin ?? "100"),
+    salaryMax: String(old.salaryMax ?? "200"),
+    mode: String(old.mode || "线下"),
+    positionCount: String(old.positionCount || "1"),
+    audience: String(old.audience || "在校学生"),
     responsibilities: String(
       ((old.responsibilities as string[]) || []).join("\n"),
     ),
@@ -2933,9 +4110,14 @@ function PublishDialog({
     agenda: String(((old.agenda as string[]) || []).join("\n")),
     attachments: String(((old.attachments as string[]) || []).join("\n")),
   });
-  const [saving, setSaving] = useState(false),
-    [step, setStep] = useState(kind === "activity" ? "基础信息" : "内容编辑"),
-    [autosave, setAutosave] = useState("草稿已准备"),
+  const [saving, setSaving] = useState<"" | "draft" | "submit">(""),
+    [step, setStep] = useState("基础信息"),
+    [autosave, setAutosave] = useState(
+      record ? "已载入平台记录" : "正在准备本地草稿…",
+    ),
+    [draftReady, setDraftReady] = useState(Boolean(record)),
+    [workingId, setWorkingId] = useState(record?.id || ""),
+    [errors, setErrors] = useState<Record<string, string>>({}),
     [blocks, setBlocks] = useState<RichBlock[]>(
       (old.bodyBlocks as RichBlock[] | undefined) ||
         starterBlocks[kind === "activity" ? "activity" : "content"],
@@ -2943,18 +4125,74 @@ function PublishDialog({
     [abilities, setAbilities] = useState<string[]>(
       (old.abilityTags as string[] | undefined) || ["表达沟通", "行业认知"],
     );
+  const draftKey = `starlight-enterprise-draft-${kind}-${record?.id || "new"}`;
   useEffect(() => {
-    const timer = window.setTimeout(
-      () =>
-        setAutosave(
-          `✓ 草稿已自动保存 ${new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`,
-        ),
-      700,
-    );
+    if (record) return;
+    const timer = window.setTimeout(() => {
+      try {
+        const stored = window.localStorage.getItem(draftKey);
+        if (stored) {
+          const draft = JSON.parse(stored) as {
+            form?: typeof form;
+            blocks?: RichBlock[];
+            selectedFields?: string[];
+            customQuestions?: string;
+            abilities?: string[];
+          };
+          if (draft.form) setForm((current) => ({ ...current, ...draft.form }));
+          if (draft.blocks) setBlocks(draft.blocks);
+          if (draft.selectedFields) setSelectedFields(draft.selectedFields);
+          if (typeof draft.customQuestions === "string")
+            setCustomQuestions(draft.customQuestions);
+          if (draft.abilities) setAbilities(draft.abilities);
+          setAutosave("✓ 已恢复上次未完成草稿");
+        } else {
+          setAutosave("尚未保存到平台");
+        }
+      } catch {
+        setAutosave("本地草稿不可用，请及时保存到平台");
+      } finally {
+        setDraftReady(true);
+      }
+    }, 0);
     return () => window.clearTimeout(timer);
-  }, [form, blocks, selectedFields, customQuestions, abilities]);
-  const change = (k: string, v: string | boolean) =>
+  }, [draftKey, record]);
+  useEffect(() => {
+    if (!draftReady) return;
+    const timer = window.setTimeout(() => {
+      window.localStorage.setItem(
+        draftKey,
+        JSON.stringify({
+          form,
+          blocks,
+          selectedFields,
+          customQuestions,
+          abilities,
+        }),
+      );
+      setAutosave(
+        `✓ 已保存到当前设备 ${new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`,
+      );
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [
+    abilities,
+    blocks,
+    customQuestions,
+    draftKey,
+    draftReady,
+    form,
+    selectedFields,
+  ]);
+  const change = (k: string, v: string | boolean) => {
     setForm((f) => ({ ...f, [k]: v }));
+    setErrors((current) => {
+      if (!current[k]) return current;
+      const next = { ...current };
+      delete next[k];
+      return next;
+    });
+  };
   const media = async (file?: File) => {
     if (!file) return;
     const r = await upload(file);
@@ -2966,97 +4204,210 @@ function PublishDialog({
         mediaType: r.type.startsWith("video/") ? "video" : f.mediaType,
       }));
   };
-  const submit = async () => {
-    if (
-      !form.title ||
-      !form.summary ||
-      (kind === "job" && (!form.company || !/^\S+@\S+\.\S+$/.test(form.email)))
-    )
-      return;
-    setSaving(true);
+  const registrationFields = [
+    ...registrationOptions.filter((x) => selectedFields.includes(x.id)),
+    ...customQuestions
+      .split("\n")
+      .map((x) => x.trim())
+      .filter(Boolean)
+      .map((label, index) => ({
+        id: `custom_${index + 1}`,
+        label,
+        type: "textarea" as const,
+        required: false,
+      })),
+  ];
+  const splitLines = (value: string) =>
+    value
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  const buildPayload = (mode: "draft" | "submit") => {
+    const isDraft = mode === "draft";
+    const reviewStatus = isDraft
+      ? "draft"
+      : kind === "job"
+        ? "approved"
+        : "pending";
     const base = {
-      id: record?.id || crypto.randomUUID(),
-      title: form.title,
-      summary: form.summary,
-      cover: form.cover || "/media/ja-career-fair.jpg",
+      ...old,
+      id: workingId || record?.id || crypto.randomUUID(),
+      title: form.title.trim() || "未命名草稿",
+      summary: form.summary.trim(),
+      cover: form.cover,
       coverType: form.coverType,
       region: "湖南",
-      sortOrder: Number(form.sortOrder) || 0,
-      featured: form.featured,
-      reviewStatus: "pending",
-      reviewNote: "",
-      submittedAt: new Date().toISOString(),
+      sortOrder: Number(old.sortOrder || 0) || 0,
+      featured: Boolean(old.featured),
+      reviewStatus,
+      reviewNote: isDraft ? String(old.reviewNote || "") : "",
+      submittedAt: isDraft
+        ? String(old.submittedAt || "")
+        : new Date().toISOString(),
+      draftUpdatedAt: new Date().toISOString(),
+      editorVersion: 2,
       bodyBlocks: blocks,
-      attachments: form.attachments
-        .split("\n")
-        .map((x) => x.trim())
-        .filter(Boolean),
+      attachments: splitLines(form.attachments),
       plainText: [
         form.title,
         form.summary,
         ...blocks.map((block) => `${block.title || ""} ${block.text || ""}`),
       ].join("\n"),
     };
-    const registrationFields = [
-      ...registrationOptions.filter((x) => selectedFields.includes(x.id)),
-      ...customQuestions
-        .split("\n")
-        .map((x) => x.trim())
-        .filter(Boolean)
-        .map((label, index) => ({
-          id: `custom_${index + 1}`,
-          label,
-          type: "textarea" as const,
-          required: false,
-        })),
-    ];
-    const payload =
-      kind === "job"
-        ? {
-            ...base,
-            company: form.company,
-            contactEmail: form.email,
-            city: form.city || "长沙",
-            jobCategory: form.category,
-            mode: "线下/混合办公",
-            duration: form.duration || "待定",
-            tags: [form.category, "湖南企业", "企业发布"],
-            status: "审核中",
-            logo: form.company.slice(0, 2),
-            color: "#00a0af",
-            responsibilities: form.responsibilities.split("\n").filter(Boolean),
-            requirements: form.requirements.split("\n").filter(Boolean),
-            benefits: ["企业导师", "真实项目"],
-            publishedAt: new Date().toLocaleDateString("zh-CN"),
-          }
-        : kind === "activity"
-          ? {
-              ...base,
-              date: form.date || "待定",
-              place: form.city || "湖南",
-              category: form.category || "企业活动",
-              capacity: Number(form.capacity) || 100,
-              registered: 0,
-              status: "审核中",
-              registrationFields,
-              agenda: form.agenda
-                .split("\n")
-                .map((x) => x.trim())
-                .filter(Boolean),
-              abilityTags: abilities,
-              publisher: form.company || "湖南企业",
-            }
-          : {
-              ...base,
-              category: form.category || "企业曝光",
-              duration: form.duration || "10 分钟",
-              level: "入门",
-              mediaType: form.mediaType,
-              tags: abilities,
-              publisher: form.company || "湖南企业",
-            };
-    await save(kind, payload, record?.id);
-    setSaving(false);
+    if (kind === "job") {
+      const salaryMin = Number(form.salaryMin) || 0;
+      const salaryMax = Number(form.salaryMax) || 0;
+      return {
+        ...base,
+        company: form.company.trim(),
+        contactEmail: form.email.trim(),
+        contactName: form.contactName.trim(),
+        contactPhone: form.contactPhone.trim(),
+        city: form.city.trim() || "长沙",
+        jobCategory: form.category,
+        industry: form.industry,
+        degree: form.degree,
+        mode: form.mode,
+        duration: form.duration.trim() || "待定",
+        positionCount: Number(form.positionCount) || 1,
+        salaryMin,
+        salaryMax,
+        salary: salaryMax ? `${salaryMin}-${salaryMax} 元/天` : "薪资面议",
+        tags: [form.category, form.industry, `${form.degree}可投`],
+        status: isDraft ? "草稿" : "招募中",
+        logo: form.company.trim().slice(0, 2) || "企业",
+        color: "#00a0af",
+        responsibilities: splitLines(form.responsibilities),
+        requirements: splitLines(form.requirements),
+        benefits: (old.benefits as string[] | undefined) || [
+          "企业导师",
+          "真实项目",
+        ],
+        publishedAt: isDraft
+          ? String(old.publishedAt || "")
+          : new Date().toLocaleDateString("zh-CN"),
+      };
+    }
+    if (kind === "activity") {
+      return {
+        ...base,
+        date: form.date,
+        registrationDeadline: form.deadline,
+        place: form.city.trim() || "长沙",
+        category: form.category || "企业活动",
+        capacity: Number(form.capacity) || 100,
+        registered: Number(old.registered || 0),
+        audience: form.audience.trim(),
+        contactName: form.contactName.trim(),
+        contactPhone: form.contactPhone.trim(),
+        status: isDraft ? "草稿" : "审核中",
+        registrationFields,
+        agenda: splitLines(form.agenda),
+        abilityTags: abilities,
+        publisher: form.company.trim() || "湖南企业",
+      };
+    }
+    return {
+      ...base,
+      category: form.category || "企业曝光",
+      duration: form.duration.trim() || "10 分钟",
+      level: String(old.level || "入门"),
+      mediaType: form.mediaType,
+      tags: abilities,
+      publisher: form.company.trim() || "湖南企业",
+      status: isDraft ? "草稿" : "审核中",
+    };
+  };
+  const validate = () => {
+    const next: Record<string, string> = {};
+    if (form.title.trim().length < 4) next.title = "标题至少填写 4 个字";
+    if (!form.company.trim()) next.company = "请填写发布企业名称";
+    if (form.summary.trim().length < 12)
+      next.summary = "摘要至少填写 12 个字，说明学生可以获得什么";
+    if (kind !== "job" && !form.cover)
+      next.cover = "活动和内容必须上传真实封面";
+    if (kind === "job") {
+      if (!/^\S+@\S+\.\S+$/.test(form.email))
+        next.email = "请填写有效的简历接收邮箱";
+      if (!form.industry) next.industry = "请选择所属行业";
+      if (!form.degree) next.degree = "请选择学历要求";
+      if (splitLines(form.responsibilities).length < 2)
+        next.responsibilities = "至少填写 2 条岗位职责";
+      if (splitLines(form.requirements).length < 2)
+        next.requirements = "至少填写 2 条能力要求";
+      const min = Number(form.salaryMin);
+      const max = Number(form.salaryMax);
+      if (min < 0 || max > 500 || min > max)
+        next.salary = "薪资区间应在 0–500 元/天，且下限不能高于上限";
+    }
+    if (kind === "activity") {
+      if (!form.date) next.date = "请选择活动日期";
+      if (Number(form.capacity) < 1) next.capacity = "报名人数必须大于 0";
+      if (
+        form.deadline &&
+        form.date &&
+        new Date(form.deadline) > new Date(form.date)
+      )
+        next.deadline = "报名截止日期不能晚于活动日期";
+      if (!selectedFields.includes("name"))
+        next.registration = "报名表必须包含姓名";
+      if (
+        !selectedFields.some((field) => field === "phone" || field === "email")
+      )
+        next.registration = "报名表必须包含联系电话或常用邮箱";
+      if (splitLines(form.agenda).length < 2)
+        next.agenda = "至少填写 2 个活动环节";
+    }
+    if (kind === "content") {
+      if (blocks.length < 2) next.blocks = "正文至少包含 2 个内容模块";
+      if (
+        blocks.some(
+          (block) =>
+            !String(block.title || block.text || block.url || "").trim(),
+        )
+      )
+        next.blocks = "正文中仍有空白模块，请补充或删除";
+    }
+    setErrors(next);
+    if (Object.keys(next).length) {
+      const basicKeys = [
+        "title",
+        "company",
+        "summary",
+        "cover",
+        "email",
+        "date",
+        "capacity",
+        "deadline",
+      ];
+      const first = Object.keys(next)[0];
+      if (basicKeys.includes(first)) setStep("基础信息");
+      else if (["responsibilities", "requirements", "salary"].includes(first))
+        setStep("岗位详情");
+      else if (first === "registration") setStep("报名设置");
+      else if (first === "agenda") setStep("成长设计");
+      else if (first === "blocks")
+        setStep(kind === "content" ? "内容编辑" : "活动详情");
+      return false;
+    }
+    return true;
+  };
+  const saveDraft = async () => {
+    setSaving("draft");
+    const id = await save(kind, buildPayload("draft"), workingId || undefined);
+    if (id) {
+      setWorkingId(id);
+      setAutosave("✓ 草稿已保存到平台");
+    }
+    setSaving("");
+  };
+  const submit = async () => {
+    if (!validate()) return;
+    setSaving("submit");
+    const id = await save(kind, buildPayload("submit"), workingId || undefined);
+    setSaving("");
+    if (!id) return;
+    window.localStorage.removeItem(draftKey);
     onClose();
   };
   const preview = {
@@ -3068,28 +4419,24 @@ function PublishDialog({
       .split("\n")
       .map((x) => x.trim())
       .filter(Boolean),
-    registrationFields: [
-      ...registrationOptions.filter((x) => selectedFields.includes(x.id)),
-      ...customQuestions
-        .split("\n")
-        .map((x) => x.trim())
-        .filter(Boolean)
-        .map((label, index) => ({
-          id: `custom_${index + 1}`,
-          label,
-          type: "textarea" as const,
-          required: false,
-        })),
-    ],
+    registrationFields,
   };
   const steps =
-    kind === "activity"
-      ? ["基础信息", "活动详情", "报名设置", "成长设计", "预览"]
-      : ["内容编辑", "媒体排版", "预览"];
+    kind === "job"
+      ? ["基础信息", "岗位详情", "预览"]
+      : kind === "activity"
+        ? ["基础信息", "活动详情", "报名设置", "成长设计", "预览"]
+        : ["基础信息", "内容编辑", "展示设置", "预览"];
+  const currentStepIndex = steps.indexOf(step);
+  const goNext = () =>
+    setStep(steps[Math.min(steps.length - 1, currentStepIndex + 1)]);
+  const goPrevious = () => setStep(steps[Math.max(0, currentStepIndex - 1)]);
+  const issue = (key: string) =>
+    errors[key] ? <small className="field-error">{errors[key]}</small> : null;
   return (
     <div className="dialog-backdrop">
       <section className="dialog publisher-dialog studio-dialog">
-        <button className="dialog-close" onClick={onClose}>
+        <button className="dialog-close" aria-label="关闭发布窗口" onClick={onClose}>
           ×
         </button>
         <div className="studio-top">
@@ -3107,75 +4454,54 @@ function PublishDialog({
           <span>{autosave}</span>
         </div>
         <div className="review-flow-strip">
-          <span className="active">1 发布方编辑</span>
+          <span className="active">1 企业编辑与校验</span>
           <i>→</i>
-          <span>2 JA 审核与排序</span>
+          <span>{kind === "job" ? "2 确认后直接发布" : "2 提交 JA 审核"}</span>
           <i>→</i>
           <span>3 学生端公开展示</span>
         </div>
         <nav className="studio-steps">
-          {steps.map((name) => (
+          {steps.map((name, index) => (
             <button
               key={name}
-              className={step === name ? "active" : ""}
+              className={`${step === name ? "active" : ""} ${index < currentStepIndex ? "complete" : ""}`}
               onClick={() => setStep(name)}
+              aria-current={step === name ? "step" : undefined}
             >
+              <span>{index < currentStepIndex ? "✓" : index + 1}</span>
               {name}
             </button>
           ))}
         </nav>
+        {Object.keys(errors).length > 0 && (
+          <div className="publisher-error-summary" role="alert">
+            <b>还有 {Object.keys(errors).length} 项信息需要完善</b>
+            <p>{Object.values(errors).join("；")}</p>
+          </div>
+        )}
         <div className="studio-grid">
           <div className="studio-main">
             <div className="publisher-fields">
-              {(step === "基础信息" || step === "内容编辑") && (
+              {step === "基础信息" && (
                 <>
-                  {kind === "job" && (
-                    <>
-                      <label>
-                        湖南企业名称
-                        <input
-                          value={form.company}
-                          onChange={(e) => change("company", e.target.value)}
-                          placeholder="例如：湖南本地企业"
-                        />
-                      </label>
-                      <label>
-                        简历接收邮箱
-                        <input
-                          type="email"
-                          value={form.email}
-                          onChange={(e) => change("email", e.target.value)}
-                          placeholder="hr@example.com"
-                        />
-                      </label>
-                      <label>
-                        机会类别
-                        <select
-                          value={form.category}
-                          onChange={(e) => change("category", e.target.value)}
-                        >
-                          {jobCategories.slice(1).map((x) => (
-                            <option key={x}>{x}</option>
-                          ))}
-                        </select>
-                      </label>
-                    </>
-                  )}
-                  {kind !== "job" && (
-                    <label>
-                      分类
-                      <select
-                        value={form.category}
-                        onChange={(e) => change("category", e.target.value)}
-                      >
-                        {contentCategories.slice(1).map((x) => (
-                          <option key={x}>{x}</option>
-                        ))}
-                      </select>
-                    </label>
-                  )}
-                  <label>
-                    标题
+                  <label className={errors.company ? "has-error" : ""}>
+                    <span>发布企业名称 *</span>
+                    <input
+                      value={form.company}
+                      onChange={(e) => change("company", e.target.value)}
+                      placeholder="请填写营业主体或正式品牌名称"
+                      aria-invalid={Boolean(errors.company)}
+                    />
+                    {issue("company")}
+                  </label>
+                  <label className={errors.title ? "has-error" : ""}>
+                    <span>
+                      {kind === "job"
+                        ? "机会名称 *"
+                        : kind === "activity"
+                          ? "活动名称 *"
+                          : "内容标题 *"}
+                    </span>
                     <input
                       value={form.title}
                       onChange={(e) => change("title", e.target.value)}
@@ -3186,71 +4512,160 @@ function PublishDialog({
                             ? "活动名称"
                             : "内容标题"
                       }
+                      maxLength={60}
+                      aria-invalid={Boolean(errors.title)}
                     />
+                    <small className="field-hint">{form.title.length}/60</small>
+                    {issue("title")}
                   </label>
                   <label>
-                    {kind === "job" ? "所在城市" : "地点/场景"}
-                    <input
-                      value={form.city}
-                      onChange={(e) => change("city", e.target.value)}
-                    />
+                    <span>{kind === "job" ? "机会类别 *" : "内容分类 *"}</span>
+                    <select
+                      value={form.category}
+                      onChange={(e) => change("category", e.target.value)}
+                    >
+                      {(kind === "job"
+                        ? jobCategories.slice(1)
+                        : kind === "activity"
+                          ? activityCategories
+                          : contentCategories.slice(1)
+                      ).map((x) => (
+                        <option key={x}>{x}</option>
+                      ))}
+                    </select>
                   </label>
-                  <label>
-                    排序数字
-                    <input
-                      type="number"
-                      value={form.sortOrder}
-                      onChange={(e) => change("sortOrder", e.target.value)}
-                      placeholder="数字越大越靠前"
-                    />
-                  </label>
-                  <label className="switch-line">
-                    <input
-                      type="checkbox"
-                      checked={form.featured}
-                      onChange={(e) => change("featured", e.target.checked)}
-                    />
-                    <span>建议首页推荐</span>
-                  </label>
-                  <label className="full">
-                    摘要
+                  {kind !== "content" && (
+                    <label>
+                      <span>
+                        {kind === "job" ? "工作城市 *" : "活动地点 *"}
+                      </span>
+                      <input
+                        value={form.city}
+                        onChange={(e) => change("city", e.target.value)}
+                        placeholder="例如：长沙市岳麓区"
+                      />
+                    </label>
+                  )}
+                  <label
+                    className={`full ${errors.summary ? "has-error" : ""}`}
+                  >
+                    <span>一句话摘要 *</span>
                     <textarea
                       rows={3}
                       value={form.summary}
                       onChange={(e) => change("summary", e.target.value)}
                       placeholder="一句话讲清楚价值，学生端会优先展示"
+                      maxLength={160}
+                      aria-invalid={Boolean(errors.summary)}
                     />
+                    <small className="field-hint">
+                      {form.summary.length}/160
+                    </small>
+                    {issue("summary")}
                   </label>
-                  <label className="media-upload full">
-                    封面图片或视频
-                    <input
-                      type="file"
-                      accept="image/*,video/mp4,video/webm"
-                      onChange={(e) => media(e.target.files?.[0])}
-                    />
-                    <span>
-                      {form.cover
-                        ? `✓ ${form.coverType === "video" ? "视频" : "图片"}已上传`
-                        : "选择封面素材"}
-                    </span>
-                  </label>
+                  {kind !== "job" && (
+                    <label
+                      className={`media-upload full ${errors.cover ? "has-error" : ""}`}
+                    >
+                      <span>展示封面 *</span>
+                      <input
+                        type="file"
+                        accept="image/*,video/mp4,video/webm"
+                        onChange={(e) => media(e.target.files?.[0])}
+                      />
+                      <span className="media-upload-state">
+                        {form.cover
+                          ? `✓ ${form.coverType === "video" ? "视频" : "图片"}上传成功，可在右侧预览`
+                          : "上传 16:9 图片或 MP4/WebM 视频"}
+                      </span>
+                      {issue("cover")}
+                    </label>
+                  )}
+                  {kind === "job" && (
+                    <>
+                      <label className={errors.email ? "has-error" : ""}>
+                        <span>简历接收邮箱 *</span>
+                        <input
+                          type="email"
+                          value={form.email}
+                          onChange={(e) => change("email", e.target.value)}
+                          placeholder="hr@example.com"
+                          aria-invalid={Boolean(errors.email)}
+                        />
+                        {issue("email")}
+                      </label>
+                      <label>
+                        <span>招聘联系人</span>
+                        <input
+                          value={form.contactName}
+                          onChange={(e) =>
+                            change("contactName", e.target.value)
+                          }
+                          placeholder="例如：李老师"
+                        />
+                      </label>
+                    </>
+                  )}
                   {kind === "activity" && (
                     <>
-                      <label>
-                        活动日期
+                      <label className={errors.date ? "has-error" : ""}>
+                        <span>活动日期 *</span>
                         <input
                           type="date"
                           value={form.date}
                           onChange={(e) => change("date", e.target.value)}
+                          aria-invalid={Boolean(errors.date)}
                         />
+                        {issue("date")}
                       </label>
-                      <label>
-                        报名人数上限
+                      <label className={errors.deadline ? "has-error" : ""}>
+                        <span>报名截止日期</span>
+                        <input
+                          type="date"
+                          value={form.deadline}
+                          onChange={(e) => change("deadline", e.target.value)}
+                          aria-invalid={Boolean(errors.deadline)}
+                        />
+                        {issue("deadline")}
+                      </label>
+                      <label className={errors.capacity ? "has-error" : ""}>
+                        <span>报名人数上限 *</span>
                         <input
                           type="number"
                           min="1"
                           value={form.capacity}
                           onChange={(e) => change("capacity", e.target.value)}
+                          aria-invalid={Boolean(errors.capacity)}
+                        />
+                        {issue("capacity")}
+                      </label>
+                      <label>
+                        <span>面向人群</span>
+                        <input
+                          value={form.audience}
+                          onChange={(e) => change("audience", e.target.value)}
+                          placeholder="例如：大一至大三学生"
+                        />
+                      </label>
+                      <label>
+                        <span>活动联系人</span>
+                        <input
+                          value={form.contactName}
+                          onChange={(e) =>
+                            change("contactName", e.target.value)
+                          }
+                          placeholder="例如：王老师"
+                        />
+                      </label>
+                      <label>
+                        <span>联系电话</span>
+                        <input
+                          type="tel"
+                          value={form.contactPhone}
+                          onChange={(e) =>
+                            change("contactPhone", e.target.value)
+                          }
+                          placeholder="用于活动通知与应急联系"
                         />
                       </label>
                     </>
@@ -3258,14 +4673,15 @@ function PublishDialog({
                   {kind === "content" && (
                     <>
                       <label>
-                        阅读/观看时长
+                        <span>预计阅读/观看时长</span>
                         <input
                           value={form.duration}
                           onChange={(e) => change("duration", e.target.value)}
+                          placeholder="例如：8 分钟"
                         />
                       </label>
                       <label>
-                        内容形式
+                        <span>内容形式 *</span>
                         <select
                           value={form.mediaType}
                           onChange={(e) => change("mediaType", e.target.value)}
@@ -3276,56 +4692,158 @@ function PublishDialog({
                       </label>
                     </>
                   )}
-                  {kind === "job" && (
-                    <>
-                      <label className="full">
-                        职责 / 项目说明（每行一条）
-                        <textarea
-                          rows={4}
-                          value={form.responsibilities}
-                          onChange={(e) =>
-                            change("responsibilities", e.target.value)
-                          }
-                        />
-                      </label>
-                      <label className="full">
-                        能力要求（每行一条）
-                        <textarea
-                          rows={4}
-                          value={form.requirements}
-                          onChange={(e) =>
-                            change("requirements", e.target.value)
-                          }
-                        />
-                      </label>
-                    </>
-                  )}
                 </>
               )}
-              {(step === "活动详情" || step === "媒体排版") && (
+              {step === "岗位详情" && kind === "job" && (
+                <>
+                  <label className={errors.industry ? "has-error" : ""}>
+                    <span>所属行业 *</span>
+                    <select
+                      value={form.industry}
+                      onChange={(e) => change("industry", e.target.value)}
+                    >
+                      {industryOptions.slice(1).map((option) => (
+                        <option key={option}>{option}</option>
+                      ))}
+                    </select>
+                    {issue("industry")}
+                  </label>
+                  <label className={errors.degree ? "has-error" : ""}>
+                    <span>最低学历 *</span>
+                    <select
+                      value={form.degree}
+                      onChange={(e) => change("degree", e.target.value)}
+                    >
+                      {degreeOptions.slice(1).map((option) => (
+                        <option key={option}>{option}</option>
+                      ))}
+                    </select>
+                    {issue("degree")}
+                  </label>
+                  <label>
+                    <span>工作方式</span>
+                    <select
+                      value={form.mode}
+                      onChange={(e) => change("mode", e.target.value)}
+                    >
+                      <option>线下</option>
+                      <option>线上</option>
+                      <option>混合办公</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>项目/实习周期</span>
+                    <input
+                      value={form.duration}
+                      onChange={(e) => change("duration", e.target.value)}
+                      placeholder="例如：3 个月，每周 3 天"
+                    />
+                  </label>
+                  <label>
+                    <span>招募人数</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={form.positionCount}
+                      onChange={(e) => change("positionCount", e.target.value)}
+                    />
+                  </label>
+                  <div
+                    className={`salary-editor full ${errors.salary ? "has-error" : ""}`}
+                  >
+                    <span>日薪区间（元/天）*</span>
+                    <label>
+                      下限
+                      <input
+                        type="number"
+                        min="0"
+                        max="500"
+                        value={form.salaryMin}
+                        onChange={(e) => change("salaryMin", e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      上限
+                      <input
+                        type="number"
+                        min="0"
+                        max="500"
+                        value={form.salaryMax}
+                        onChange={(e) => change("salaryMax", e.target.value)}
+                      />
+                    </label>
+                    {issue("salary")}
+                  </div>
+                  <label
+                    className={`full ${errors.responsibilities ? "has-error" : ""}`}
+                  >
+                    <span>岗位职责（每行一条）*</span>
+                    <textarea
+                      rows={6}
+                      value={form.responsibilities}
+                      onChange={(e) =>
+                        change("responsibilities", e.target.value)
+                      }
+                      placeholder="参与用户调研与需求整理&#10;协助运营数据分析与复盘"
+                    />
+                    {issue("responsibilities")}
+                  </label>
+                  <label
+                    className={`full ${errors.requirements ? "has-error" : ""}`}
+                  >
+                    <span>能力要求（每行一条）*</span>
+                    <textarea
+                      rows={6}
+                      value={form.requirements}
+                      onChange={(e) => change("requirements", e.target.value)}
+                      placeholder="具备清晰的沟通表达能力&#10;能够熟练使用常用办公软件"
+                    />
+                    {issue("requirements")}
+                  </label>
+                  <label className="full">
+                    <span>补充资料链接（每行一个）</span>
+                    <textarea
+                      rows={3}
+                      value={form.attachments}
+                      onChange={(e) => change("attachments", e.target.value)}
+                      placeholder="企业介绍、项目说明或外部网页"
+                    />
+                  </label>
+                </>
+              )}
+              {((step === "活动详情" && kind === "activity") ||
+                (step === "内容编辑" && kind === "content")) && (
                 <ContentBlockEditor
                   blocks={blocks}
                   setBlocks={setBlocks}
                   upload={upload}
                 />
-              )}{" "}
+              )}
               {step === "报名设置" && (
                 <fieldset className="registration-config full">
                   <legend>学生报名需要填写什么信息？</legend>
-                  <p>勾选后，学生点击报名会进入对应的信息填写页面。</p>
+                  <p>
+                    姓名与至少一种联系方式必须保留；报名数据只向活动发布方开放。
+                  </p>
+                  {issue("registration")}
                   <div>
                     {registrationOptions.map((field) => (
                       <label key={field.id}>
                         <input
                           type="checkbox"
                           checked={selectedFields.includes(field.id)}
-                          onChange={() =>
+                          onChange={() => {
                             setSelectedFields((v) =>
                               v.includes(field.id)
                                 ? v.filter((x) => x !== field.id)
                                 : [...v, field.id],
-                            )
-                          }
+                            );
+                            setErrors((current) => {
+                              const next = { ...current };
+                              delete next.registration;
+                              return next;
+                            });
+                          }}
                         />
                         <span>{field.label}</span>
                         <small>{field.required ? "必填" : "选填"}</small>
@@ -3342,17 +4860,18 @@ function PublishDialog({
                     />
                   </label>
                 </fieldset>
-              )}{" "}
+              )}
               {step === "成长设计" && (
                 <>
-                  <label className="full">
-                    活动议程（每行一个环节）
+                  <label className={`full ${errors.agenda ? "has-error" : ""}`}>
+                    <span>活动议程（每行一个环节）*</span>
                     <textarea
                       rows={5}
                       value={form.agenda}
                       onChange={(e) => change("agenda", e.target.value)}
                       placeholder="09:00-09:30 签到&#10;09:30-11:00 企业参访"
                     />
+                    {issue("agenda")}
                   </label>
                   <fieldset className="ability-picker full">
                     <legend>预期培养维度</legend>
@@ -3373,32 +4892,143 @@ function PublishDialog({
                       </label>
                     ))}
                   </fieldset>
+                  <label className="full">
+                    <span>活动资料或附件（每行一个）</span>
+                    <textarea
+                      rows={3}
+                      value={form.attachments}
+                      onChange={(e) => change("attachments", e.target.value)}
+                      placeholder="活动手册、交通指引或准备材料"
+                    />
+                  </label>
                 </>
-              )}{" "}
-              {step === "预览" && <ContentRenderer item={preview} />}
-              <label className="full">
-                附件链接 / 资料包（每行一个，可选）
-                <textarea
-                  rows={2}
-                  value={form.attachments}
-                  onChange={(e) => change("attachments", e.target.value)}
-                  placeholder="PDF、PPT 或外部作品链接"
-                />
-              </label>
+              )}
+              {step === "展示设置" && kind === "content" && (
+                <>
+                  <fieldset className="ability-picker full">
+                    <legend>内容能力标签</legend>
+                    {abilityOptions.map((tag) => (
+                      <label key={tag}>
+                        <input
+                          type="checkbox"
+                          checked={abilities.includes(tag)}
+                          onChange={() =>
+                            setAbilities((value) =>
+                              value.includes(tag)
+                                ? value.filter((item) => item !== tag)
+                                : [...value, tag],
+                            )
+                          }
+                        />
+                        <span>{tag}</span>
+                      </label>
+                    ))}
+                  </fieldset>
+                  <label className="full">
+                    <span>延伸阅读与附件（每行一个）</span>
+                    <textarea
+                      rows={4}
+                      value={form.attachments}
+                      onChange={(e) => change("attachments", e.target.value)}
+                      placeholder="PDF、资料包或可信外部链接"
+                    />
+                  </label>
+                </>
+              )}
+              {step === "预览" && (
+                <section className="publish-readiness full">
+                  <small>FINAL CHECK</small>
+                  <h2>发布前确认</h2>
+                  <div>
+                    <p className={form.title && form.summary ? "done" : ""}>
+                      <b>{form.title && form.summary ? "✓" : "1"}</b>
+                      标题与摘要完整
+                    </p>
+                    <p className={kind === "job" || form.cover ? "done" : ""}>
+                      <b>{kind === "job" || form.cover ? "✓" : "2"}</b>
+                      展示素材已准备
+                    </p>
+                    <p
+                      className={
+                        kind !== "content" || blocks.length >= 2 ? "done" : ""
+                      }
+                    >
+                      <b>
+                        {kind !== "content" || blocks.length >= 2 ? "✓" : "3"}
+                      </b>
+                      详细内容已编排
+                    </p>
+                  </div>
+                  <p className="publish-readiness-note">
+                    {kind === "job"
+                      ? "确认发布后，机会将直接进入学生端；如需调整可随时返回编辑。"
+                      : "提交后进入 JA 审核。被退回时会保留全部内容和审核意见，可修改后再次提交。"}
+                  </p>
+                </section>
+              )}
             </div>
           </div>
           <aside className="studio-preview">
-            <b>实时展示预览</b>
-            <ContentRenderer item={preview} />
+            <div className="studio-preview-head">
+              <b>学生端展示预览</b>
+              <span>实时更新</span>
+            </div>
+            {kind === "job" ? (
+              <JobPublishingPreview item={form} />
+            ) : (
+              <ContentRenderer item={preview} />
+            )}
           </aside>
         </div>
-        <div className="dialog-actions">
-          <button className="outline-btn" onClick={onClose}>
-            取消
-          </button>
-          <button className="primary-btn" disabled={saving} onClick={submit}>
-            {saving ? "正在提交…" : "提交 JA 审核"}
-          </button>
+        <div className="dialog-actions publisher-dialog-actions">
+          <div>
+            <button
+              className="quiet-btn"
+              onClick={onClose}
+              disabled={Boolean(saving)}
+            >
+              关闭
+            </button>
+            <button
+              className="outline-btn"
+              onClick={saveDraft}
+              disabled={Boolean(saving)}
+            >
+              {saving === "draft" ? "正在保存…" : "保存草稿"}
+            </button>
+          </div>
+          <div>
+            {currentStepIndex > 0 && (
+              <button
+                className="quiet-btn"
+                onClick={goPrevious}
+                disabled={Boolean(saving)}
+              >
+                上一步
+              </button>
+            )}
+            {currentStepIndex < steps.length - 1 ? (
+              <button
+                className="primary-btn"
+                onClick={goNext}
+                disabled={Boolean(saving)}
+              >
+                下一步：{steps[currentStepIndex + 1]}
+              </button>
+            ) : (
+              <button
+                className="primary-btn"
+                disabled={Boolean(saving)}
+                onClick={submit}
+              >
+                {saving === "submit"
+                  ? "正在提交…"
+                  : kind === "job"
+                    ? "确认并发布"
+                    : "提交 JA 审核"}
+              </button>
+            )}
+          </div>
         </div>
       </section>
     </div>
@@ -3429,7 +5059,7 @@ function EnterpriseProfile({
   const old = record?.payload || {};
   const [form, setForm] = useState({
     name: String(old.name || "湖南示例企业"),
-    industry: String(old.industry || "湖南优势产业"),
+    industry: String(old.industry || "制造业"),
     city: String(old.city || "长沙"),
     intro: String(
       old.intro ||
@@ -3437,51 +5067,83 @@ function EnterpriseProfile({
     ),
     website: String(old.website || "https://example.com"),
     logo: String(old.logo || "/og.png"),
+    creditCode: String(old.creditCode || ""),
+    companySize: String(old.companySize || "50-199人"),
+    address: String(old.address || "长沙市"),
+    contactName: String(old.contactName || ""),
+    contactPhone: String(old.contactPhone || ""),
+    contactEmail: String(old.contactEmail || ""),
   });
+  const [saving, setSaving] = useState(false),
+    [error, setError] = useState("");
   const change = (k: string, v: string) => setForm((x) => ({ ...x, [k]: v }));
   const logo = async (file?: File) => {
     if (!file) return;
     const r = await upload(file);
     if (r?.url) change("logo", r.url);
   };
+  const requiredChecks = [
+    Boolean(form.name.trim()),
+    Boolean(form.industry.trim()),
+    form.intro.trim().length >= 30,
+    Boolean(form.logo.trim()),
+    Boolean(form.contactName.trim()),
+    /^\S+@\S+\.\S+$/.test(form.contactEmail),
+    Boolean(form.contactPhone.trim()),
+    Boolean(form.address.trim()),
+  ];
+  const completeness = Math.round(
+    (requiredChecks.filter(Boolean).length / requiredChecks.length) * 100,
+  );
+  const submit = async () => {
+    setError("");
+    if (!form.name.trim() || !form.industry.trim()) return setError("请填写企业名称与所属行业");
+    if (form.intro.trim().length < 30) return setError("企业简介至少填写 30 个字");
+    if (!form.contactName.trim() || !form.contactPhone.trim() || !/^\S+@\S+\.\S+$/.test(form.contactEmail))
+      return setError("请完整填写内部联系人、电话和有效邮箱");
+    setSaving(true);
+    const id = await save("enterprise-profile", { ...form, region: "湖南" }, record?.id);
+    setSaving(false);
+    if (!id) setError("企业资料保存失败，请检查后重试");
+  };
   return (
     <>
       <Title
         eyebrow="HUNAN COMPANY PROFILE"
-        title="企业贡献画像"
-        desc="企业 Logo、介绍、所在城市和社会责任画像会与审核通过的机会一起展示。"
+        title="企业资料"
+        desc=""
         action={
           <button
             className="primary-btn"
-            onClick={() =>
-              save(
-                "enterprise-profile",
-                { ...form, region: "湖南" },
-                record?.id,
-              )
-            }
+            onClick={submit}
+            disabled={saving}
           >
-            保存企业资料
+            {saving ? "正在保存…" : "保存企业资料"}
           </button>
         }
       />
       <div className="enterprise-profile-editor">
         <section>
           <img src={form.logo} alt={`${form.name} logo`} />
-          <small>JA HUNAN VERIFIED ORGANIZATION</small>
+          <small>PUBLIC COMPANY PROFILE PREVIEW</small>
           <h1>{form.name}</h1>
           <h2>{form.industry}</h2>
           <p>{form.intro}</p>
-          <div className="company-credit-tags">
-            <span>提供真实机会</span>
-            <span>参与青年成长</span>
-            <span>录用反馈待接入</span>
+          <div className="company-credit-tags profile-facts">
+            <span>{form.companySize}</span>
+            <span>{form.city}</span>
+            <span>{form.address}</span>
           </div>
           <a href={form.website} target="_blank" rel="noreferrer">
             访问企业官网 ↗
           </a>
         </section>
         <form onSubmit={(e) => e.preventDefault()}>
+          <div className="profile-completeness-card">
+            <span><b>资料完整度 {completeness}%</b><small>完整资料有助于学生判断机会真实性</small></span>
+            <i><em style={{ width: `${completeness}%` }} /></i>
+          </div>
+          {error && <p className="form-error">{error}</p>}
           <label>
             企业名称
             <input
@@ -3491,10 +5153,12 @@ function EnterpriseProfile({
           </label>
           <label>
             所属行业
-            <input
+            <select
               value={form.industry}
               onChange={(e) => change("industry", e.target.value)}
-            />
+            >
+              {industryOptions.filter((item) => item !== "全部行业").map((item) => <option key={item}>{item}</option>)}
+            </select>
           </label>
           <label>
             所在城市
@@ -3504,6 +5168,16 @@ function EnterpriseProfile({
             />
           </label>
           <label>
+            企业规模
+            <select value={form.companySize} onChange={(e) => change("companySize", e.target.value)}>
+              <option>1-49人</option><option>50-199人</option><option>200-499人</option><option>500-999人</option><option>1000人以上</option>
+            </select>
+          </label>
+          <label>
+            办公地址
+            <input value={form.address} onChange={(e) => change("address", e.target.value)} />
+          </label>
+          <label>
             企业简介
             <textarea
               rows={5}
@@ -3511,6 +5185,13 @@ function EnterpriseProfile({
               onChange={(e) => change("intro", e.target.value)}
             />
           </label>
+          <fieldset className="enterprise-private-fields">
+            <legend>内部联络信息（不在学生端公开）</legend>
+            <label>联系人<input value={form.contactName} onChange={(e) => change("contactName", e.target.value)} /></label>
+            <label>联系电话<input type="tel" value={form.contactPhone} onChange={(e) => change("contactPhone", e.target.value)} /></label>
+            <label>联系邮箱<input type="email" value={form.contactEmail} onChange={(e) => change("contactEmail", e.target.value)} /></label>
+            <label>统一社会信用代码（选填）<input value={form.creditCode} onChange={(e) => change("creditCode", e.target.value)} /></label>
+          </fieldset>
           <label>
             企业官网
             <input

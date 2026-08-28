@@ -1,0 +1,4 @@
+/* eslint-disable @next/next/no-html-link-for-pages */
+import type {Metadata} from "next";
+export const metadata:Metadata={title:"隐私政策",description:"JA Star Plan 星光计划个人信息处理说明。",robots:{index:true,follow:true}};
+export default function Privacy(){return <main className="legal-page"><a href="/">← 返回 JA Star Plan</a><small>PRIVACY POLICY</small><h1>隐私政策</h1><p>更新日期：2026 年 8 月 29 日</p><section><h2>我们处理的信息</h2><p>学生报名活动时，平台会按活动发布方配置收集姓名、联系方式、学校专业及报名回答；学生主动上传的简历仅用于本人查看和个人成长主页维护。企业账号会保存主体资料、内部联络信息和发布记录。</p><h2>信息用途</h2><p>报名信息仅向对应活动发布方和获授权的 JA 管理员开放，用于报名确认、活动组织和必要的安全联络。平台不会代替学生向岗位投递简历，也不会向无关企业开放学生信息。</p><h2>保存与安全</h2><p>公开图片和视频与私有简历分开存储。私有文件访问会记录访问日志；内容删除优先进入可恢复归档。正式运营方应根据项目周期确定具体保存期限，并定期清理不再需要的数据。</p><h2>你的权利</h2><p>你可以在对应工作台查看、修改或删除个人资料，取消尚未通过的活动报名，也可以联系项目团队申请导出、更正或删除相关信息。</p><h2>联系我们</h2><p><a href="mailto:support@jachina.org">support@jachina.org</a></p></section></main>}

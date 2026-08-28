@@ -28,6 +28,17 @@ type Registration = {
   createdAt: string;
   reviewNote?: string;
 };
+type ManagedComment = {
+  id: string;
+  contentId: string;
+  contentTitle: string;
+  authorName: string;
+  body: string;
+  replyBody?: string;
+  repliedBy?: string;
+  createdAt: string;
+};
+type Organization = { id: string; ownerId: string; name: string; creditCode: string; verificationStatus: string; verifiedAt?: string | null; createdAt: string; updatedAt: string };
 type Field = { id: string; label: string; type: string; required: boolean };
 const reviewable = ["activity", "content"];
 const activityCategories = [
@@ -48,6 +59,16 @@ const contentCategories = [
   "简历面试",
   "公益实践",
 ];
+const jobCategories = [
+  "产品运营",
+  "技术研发",
+  "数据分析",
+  "品牌内容",
+  "智能制造",
+  "金融与商业",
+  "项目实践",
+  "公益实践",
+];
 const kindName = (kind: string) =>
   kind === "job"
     ? "实习/项目"
@@ -61,6 +82,56 @@ const kindName = (kind: string) =>
 const stateName = (state: unknown) =>
   state === "approved" ? "已通过" : state === "rejected" ? "已退回" : "待审核";
 const orderOf = (item: RecordItem) => Number(item.payload.sortOrder || 0) || 0;
+const publisherOf = (item: RecordItem) =>
+  String(item.payload.company || item.payload.publisher || "湖南平台");
+const reviewLaneOf = (item: RecordItem) =>
+  item.kind === "activity"
+    ? String(item.ownerId || "").startsWith("ja:")
+      ? "ja-activity"
+      : "enterprise-activity"
+    : "enterprise-content";
+const reviewRiskOf = (item: RecordItem) => {
+  const issues: string[] = [];
+  const payload = item.payload;
+  const blocks = (payload.bodyBlocks as RichBlock[] | undefined) || [];
+  if (String(payload.summary || "").trim().length < 20)
+    issues.push("简介过短");
+  if (item.kind === "job") {
+    if (!String(payload.logoUrl || payload.logo || "").trim()) issues.push("缺少企业 Logo");
+    if (!String(payload.contactEmail || "").includes("@")) issues.push("投递邮箱需核验");
+    if (!Array.isArray(payload.responsibilities) || payload.responsibilities.length < 2) issues.push("岗位职责不完整");
+    if (!Array.isArray(payload.requirements) || payload.requirements.length < 2) issues.push("能力要求不完整");
+  } else {
+    if (!String(payload.cover || "").trim()) issues.push("缺少封面");
+    if (!blocks.length) issues.push("缺少正文内容");
+  }
+  if (item.kind === "activity") {
+    if (!String(payload.date || "").trim()) issues.push("未设置活动日期");
+    if (!String(payload.place || "").trim()) issues.push("未设置活动地点");
+    const fields = (payload.registrationFields as Field[] | undefined) || [];
+    if (!fields.length) issues.push("未配置报名字段");
+  }
+  if (item.kind === "content" && !String(payload.category || "").trim())
+    issues.push("未选择内容分类");
+  const serialized = JSON.stringify(payload);
+  if (/https?:\/\//i.test(serialized)) issues.push("包含外部链接，需核验");
+  const age = Date.now() - new Date(item.updatedAt).getTime();
+  if (Number.isFinite(age) && age > 7 * 86400000) issues.push("已等待超过 7 天");
+  const level = issues.length >= 4 ? "high" : issues.length >= 2 ? "medium" : "low";
+  return { issues, level, score: Math.max(20, 100 - issues.length * 18) };
+};
+function useDialogEscape(close: () => void) {
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    const onKeyDown = (event: KeyboardEvent) => event.key === "Escape" && close();
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previous;
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [close]);
+}
 const fieldOptions: Field[] = [
   { id: "name", label: "姓名", type: "text", required: true },
   { id: "phone", label: "联系电话", type: "tel", required: true },
@@ -119,28 +190,50 @@ export default function JAConsole({ operator }: { operator: string }) {
     [records, setRecords] = useState<RecordItem[]>([]),
     [logs, setLogs] = useState<Log[]>([]),
     [registrations, setRegistrations] = useState<Registration[]>([]),
+    [organizations, setOrganizations] = useState<Organization[]>([]),
     [notice, setNotice] = useState(""),
     [selectedId, setSelectedId] = useState(""),
     [reason, setReason] = useState(""),
-    [loading, setLoading] = useState(true);
+    [loading, setLoading] = useState(true),
+    [loadError, setLoadError] = useState("");
   const load = async () => {
     setLoading(true);
-    const response = await fetch("/api/admin");
-    const data = await response.json();
-    setRecords(data.records || []);
-    setLogs(data.logs || []);
-    setRegistrations(data.registrations || []);
-    setLoading(false);
+    setLoadError("");
+    try {
+      const response = await fetch("/api/admin");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "后台数据读取失败");
+      setRecords(data.records || []);
+      setLogs(data.logs || []);
+      setRegistrations(data.registrations || []);
+      setOrganizations(data.organizations || []);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "后台数据读取失败");
+    } finally {
+      setLoading(false);
+    }
   };
   useEffect(() => {
     let active = true;
     fetch("/api/admin")
-      .then((response) => response.json())
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "后台数据读取失败");
+        return data;
+      })
       .then((data) => {
         if (active) {
           setRecords(data.records || []);
           setLogs(data.logs || []);
           setRegistrations(data.registrations || []);
+          setOrganizations(data.organizations || []);
+          setLoadError("");
+          setLoading(false);
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setLoadError(error instanceof Error ? error.message : "后台数据读取失败");
           setLoading(false);
         }
       });
@@ -168,7 +261,7 @@ export default function JAConsole({ operator }: { operator: string }) {
       records
         .filter(
           (r) =>
-            reviewable.includes(r.kind) &&
+            ["job", "activity", "content"].includes(r.kind) &&
             r.payload.reviewStatus === "approved",
         )
         .sort(
@@ -245,15 +338,67 @@ export default function JAConsole({ operator }: { operator: string }) {
     setReason("");
     await load();
   };
+  const decideMany = async (
+    ids: string[],
+    decision: "approved" | "rejected",
+    batchReason: string,
+  ) => {
+    if (!ids.length) return { ok: false, message: "请先选择待审核内容" };
+    if (decision === "rejected" && !batchReason.trim())
+      return { ok: false, message: "批量退回时必须填写统一修改意见" };
+    const response = await fetch("/api/admin", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ids,
+        decision,
+        reason: batchReason.trim(),
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok)
+      return { ok: false, message: data.error || "批量审核失败" };
+    setNotice(
+      decision === "approved"
+        ? `已批量通过 ${data.count || ids.length} 条内容`
+        : `已批量退回 ${data.count || ids.length} 条内容`,
+    );
+    await load();
+    return { ok: true, message: "" };
+  };
+  const configure = async (settings: {
+    sortOrder: number;
+    category: string;
+    featured: boolean;
+  }) => {
+    if (!selected) return;
+    const response = await fetch("/api/admin", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: selected.id, action: "configure", ...settings }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setNotice(data.error || "展示设置保存失败");
+      return;
+    }
+    setNotice("展示分类、排序和推荐位已更新");
+    setSelectedId("");
+    await load();
+  };
   const title =
     tab === "pulse"
       ? "平台活力看板"
       : tab === "review"
         ? "分区审核"
+        : tab === "organizations"
+          ? "企业主体认证"
         : tab === "publish"
           ? "JA 内容发布"
           : tab === "records"
             ? "平台内容排序"
+            : tab === "feedback"
+              ? "互动管理"
             : tab === "integrity"
               ? "诚信管理"
               : "审计日志";
@@ -262,10 +407,14 @@ export default function JAConsole({ operator }: { operator: string }) {
       ? "用真实发布、报名和审核数据说明 Star Plan 的平台活性。"
       : tab === "review"
         ? "只审核三类需要公开前确认的内容：JA 发起活动、企业发布活动、企业发布内容。"
+        : tab === "organizations"
+          ? "核验企业主体名称和统一社会信用代码，通过后企业才能正式发布。"
         : tab === "publish"
           ? "由 JA 创建活动、文章或视频；JA 活动会进入内部审核队列。"
           : tab === "records"
             ? "集中查看已提交和已发布内容的状态、分类、推荐和排序。"
+            : tab === "feedback"
+              ? "集中回应学生对成长内容的提问，并处理不适合公开的评论。"
             : tab === "integrity"
               ? "记录虚假信息、失约或其他诚信风险，后续可接入账号限制。"
               : "记录后台的重要操作，便于追踪审核与发布过程。";
@@ -289,6 +438,9 @@ export default function JAConsole({ operator }: { operator: string }) {
           >
             <span>✓</span>分区审核 <i>{pending.length}</i>
           </button>
+          <button className={tab === "organizations" ? "active" : ""} onClick={() => setTab("organizations")}>
+            <span>◎</span>企业认证 <i>{organizations.filter((item) => item.verificationStatus === "pending").length}</i>
+          </button>
           <button
             className={tab === "publish" ? "active" : ""}
             onClick={() => setTab("publish")}
@@ -300,6 +452,12 @@ export default function JAConsole({ operator }: { operator: string }) {
             onClick={() => setTab("records")}
           >
             <span>▱</span>平台内容
+          </button>
+          <button
+            className={tab === "feedback" ? "active" : ""}
+            onClick={() => setTab("feedback")}
+          >
+            <span>♡</span>互动管理
           </button>
           <button
             className={tab === "integrity" ? "active" : ""}
@@ -314,12 +472,7 @@ export default function JAConsole({ operator }: { operator: string }) {
             <span>◷</span>审计日志
           </button>
         </nav>
-        <div className="side-help">
-          <b>测试阶段</b>
-          <p>
-            当前 JA 后台临时免管理员验证，便于企业内测；正式上线前恢复白名单。
-          </p>
-        </div>
+        <div className="side-help"><b>安全后台</b><p>企业认证、内容审核和操作日志均按管理员身份记录。</p></div>
         <a className="back" href="/signout-with-chatgpt?return_to=/">
           退出后台
         </a>
@@ -347,82 +500,22 @@ export default function JAConsole({ operator }: { operator: string }) {
           <div className="ja-view" key={tab}>
             {notice && <p className="admin-notice">{notice}</p>}
             {tab === "pulse" && (
-              <AdminPulse records={records} registrations={registrations} />
+              <AdminPulse records={records} registrations={registrations} logs={logs} />
             )}{" "}
             {tab === "review" && (
-              <>
-                <section className="admin-test-guide">
-                  <div>
-                    <small>如何测试审核闭环</small>
-                    <h2>三类公开内容，分区审核</h2>
-                  </div>
-                  <ol>
-                    <li>
-                      <b>1</b>
-                      <span>
-                        在 JA 后台创建活动，或在
-                        <a href="/workspace?role=enterprise" target="_blank">
-                          企业端
-                        </a>
-                        新建活动 / 内容并提交
-                      </span>
-                    </li>
-                    <li>
-                      <b>2</b>
-                      <span>回到此页设置分类、排序数字和推荐位</span>
-                    </li>
-                    <li>
-                      <b>3</b>
-                      <span>
-                        审核通过后到
-                        <a href="/workspace?role=student" target="_blank">
-                          学生端
-                        </a>
-                        查看公开展示
-                      </span>
-                    </li>
-                  </ol>
-                  <button onClick={load}>刷新待审核列表</button>
-                </section>
-                <div className="admin-review-lanes">
-                  {loading ? (
-                    <div className="admin-empty">正在读取审核队列…</div>
-                  ) : pending.length === 0 ? (
-                    <div className="admin-empty">
-                      当前没有待审核内容，请先从 JA
-                      后台创建活动，或从企业端提交活动 / 内容。
-                    </div>
-                  ) : (
-                    reviewQueues.map((queue) => (
-                      <section className="admin-review-lane" key={queue.key}>
-                        <div className="lane-head">
-                          <div>
-                            <small>{queue.key.toUpperCase()}</small>
-                            <h2>{queue.title}</h2>
-                            <p>{queue.desc}</p>
-                          </div>
-                          <b>{queue.items.length}</b>
-                        </div>
-                        {queue.items.length ? (
-                          queue.items.map((r) => (
-                            <RecordCard
-                              key={r.id}
-                              item={r}
-                              onOpen={() => {
-                                setSelectedId(r.id);
-                                setReason("");
-                              }}
-                            />
-                          ))
-                        ) : (
-                          <p className="lane-empty">暂无待审核</p>
-                        )}
-                      </section>
-                    ))
-                  )}
-                </div>
-              </>
+              <ReviewOperationsDesk
+                queues={reviewQueues}
+                loading={loading}
+                error={loadError}
+                refresh={load}
+                onOpen={(id) => {
+                  setSelectedId(id);
+                  setReason("");
+                }}
+                onDecideMany={decideMany}
+              />
             )}{" "}
+            {tab === "organizations" && <OrganizationVerification items={organizations} onUpdated={load} onNotice={setNotice} />}
             {tab === "publish" && (
               <AdminPublisher
                 onPublished={async (message) => {
@@ -442,6 +535,9 @@ export default function JAConsole({ operator }: { operator: string }) {
                 ))}
               </div>
             )}
+            {tab === "feedback" && (
+              <JAFeedbackDesk onNotice={setNotice} />
+            )}
             {tab === "integrity" && (
               <IntegrityDesk
                 items={blacklist}
@@ -452,34 +548,19 @@ export default function JAConsole({ operator }: { operator: string }) {
               />
             )}
             {tab === "audit" && (
-              <div className="admin-table">
-                <div>
-                  <b>时间</b>
-                  <b>动作</b>
-                  <b>对象</b>
-                  <b>操作者</b>
-                </div>
-                {logs.map((l) => (
-                  <div key={l.id}>
-                    <span>{new Date(l.createdAt).toLocaleString("zh-CN")}</span>
-                    <span>{l.action}</span>
-                    <span>
-                      {l.targetType} · {l.targetId}
-                    </span>
-                    <span>{l.actorId.slice(0, 18)}…</span>
-                  </div>
-                ))}
-              </div>
+              <AuditLogDesk logs={logs} />
             )}
           </div>
         </section>
       </div>
       {selected && (
         <ReviewDrawer
+          key={selected.id}
           selected={selected}
           reason={reason}
           setReason={setReason}
           decide={decide}
+          configure={configure}
           close={() => {
             setSelectedId("");
             setReason("");
@@ -490,6 +571,189 @@ export default function JAConsole({ operator }: { operator: string }) {
   );
 }
 
+function OrganizationVerification({ items, onUpdated, onNotice }: { items: Organization[]; onUpdated: () => Promise<void>; onNotice: (message: string) => void }) {
+  const [selected, setSelected] = useState<Organization | null>(null), [reason, setReason] = useState(""), [saving, setSaving] = useState(false), [filter, setFilter] = useState("pending");
+  const shown = items.filter((item) => filter === "all" || item.verificationStatus === filter);
+  const decide = async (decision: "approved" | "rejected") => {
+    if (!selected || saving) return;
+    if (decision === "rejected" && reason.trim().length < 4) return onNotice("退回企业认证时请填写具体原因");
+    setSaving(true);
+    const response = await fetch("/api/admin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "verify-organization", organizationId: selected.id, decision, reason: reason.trim() }) });
+    const data = await response.json(); setSaving(false);
+    if (!response.ok) return onNotice(data.error || "企业认证处理失败");
+    onNotice(decision === "approved" ? "企业主体认证已通过" : "企业认证已退回补充材料"); setSelected(null); setReason(""); await onUpdated();
+  };
+  return <>
+    <section className="organization-summary"><div><small>ORGANIZATION VERIFICATION</small><h2>企业主体认证</h2><p>认证通过后，企业才可以提交公开岗位、活动和成长内容。</p></div><div><span><b>{items.filter((item) => item.verificationStatus === "pending").length}</b>待核验</span><span><b>{items.filter((item) => item.verificationStatus === "verified").length}</b>已认证</span></div></section>
+    <div className="category-nav">{[["pending","待核验"],["verified","已认证"],["rejected","已退回"],["all","全部"]].map(([value,label]) => <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{label}</button>)}</div>
+    <div className="organization-list">{shown.map((item) => <button key={item.id} onClick={() => { setSelected(item); setReason(""); }}><span className={`org-state ${item.verificationStatus}`}>{item.verificationStatus === "verified" ? "已认证" : item.verificationStatus === "rejected" ? "已退回" : "待核验"}</span><div><h3>{item.name}</h3><p>统一社会信用代码：{item.creditCode || "未填写"}</p><small>更新于 {new Date(item.updatedAt).toLocaleString("zh-CN")}</small></div><b>查看资料 →</b></button>)}</div>
+    {!shown.length && <div className="admin-empty">当前分类暂无企业认证申请。</div>}
+    {selected && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSelected(null)}><section className="dialog organization-dialog" role="dialog" aria-modal="true" aria-label={`${selected.name}企业认证`}><button className="dialog-close" aria-label="关闭企业认证" onClick={() => setSelected(null)}>×</button><small>ENTERPRISE DUE DILIGENCE</small><h1>{selected.name}</h1><div className="org-code"><span>统一社会信用代码</span><b>{selected.creditCode || "企业尚未填写"}</b></div><ul><li>核对企业主体名称与营业执照是否一致</li><li>核对联络人是否属于企业或获得正式授权</li><li>通过后，该企业发布的岗位可直接公开，活动与内容仍进入 JA 审核</li></ul><label>认证意见<textarea rows={4} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="退回时必须说明需补充的材料" /></label><div className="drawer-actions"><button disabled={saving} onClick={() => decide("rejected")}>退回补充</button><button className="approve" disabled={saving || !selected.creditCode} onClick={() => decide("approved")}>确认通过</button></div></section></div>}
+  </>;
+}
+
+type ReviewQueue = {
+  key: string;
+  title: string;
+  desc: string;
+  items: RecordItem[];
+};
+
+function ReviewOperationsDesk({
+  queues,
+  loading,
+  error,
+  refresh,
+  onOpen,
+  onDecideMany,
+}: {
+  queues: ReviewQueue[];
+  loading: boolean;
+  error: string;
+  refresh: () => Promise<void>;
+  onOpen: (id: string) => void;
+  onDecideMany: (
+    ids: string[],
+    decision: "approved" | "rejected",
+    reason: string,
+  ) => Promise<{ ok: boolean; message: string }>;
+}) {
+  const [query, setQuery] = useState(""),
+    [lane, setLane] = useState("all"),
+    [risk, setRisk] = useState("all"),
+    [selected, setSelected] = useState<string[]>([]),
+    [batchReason, setBatchReason] = useState(""),
+    [batchError, setBatchError] = useState(""),
+    [saving, setSaving] = useState(false);
+  const allItems = useMemo(() => queues.flatMap((queue) => queue.items), [queues]);
+  const visibleQueues = useMemo(
+    () =>
+      queues
+        .filter((queue) => lane === "all" || queue.key === lane)
+        .map((queue) => ({
+          ...queue,
+          items: queue.items.filter((item) => {
+            const haystack = `${item.payload.title || ""} ${publisherOf(item)} ${item.payload.summary || ""}`.toLowerCase();
+            const queryMatches = !query.trim() || haystack.includes(query.trim().toLowerCase());
+            const riskMatches = risk === "all" || reviewRiskOf(item).level === risk;
+            return queryMatches && riskMatches;
+          }),
+        })),
+    [queues, lane, query, risk],
+  );
+  const visibleIds = visibleQueues.flatMap((queue) => queue.items.map((item) => item.id));
+  const selectedVisible = selected.filter((id) => visibleIds.includes(id));
+  const totalVisible = visibleIds.length;
+  const highRisk = allItems.filter((item) => reviewRiskOf(item).level === "high").length;
+  const toggle = (id: string) =>
+    setSelected((value) =>
+      value.includes(id) ? value.filter((item) => item !== id) : [...value, id],
+    );
+  const submitBatch = async (decision: "approved" | "rejected") => {
+    setSaving(true);
+    setBatchError("");
+    const result = await onDecideMany(selectedVisible, decision, batchReason);
+    setSaving(false);
+    if (!result.ok) {
+      setBatchError(result.message);
+      return;
+    }
+    setSelected([]);
+    setBatchReason("");
+  };
+  return (
+    <>
+      <section className="review-operations-head">
+        <div>
+          <small>CONTENT GOVERNANCE</small>
+          <h2>三类公开内容，分区审核</h2>
+          <p>先核验事实与报名规则，再处理展示分类、推荐位和排序。</p>
+        </div>
+        <div className="review-operations-stats">
+          <span><b>{allItems.length}</b>待处理</span>
+          <span><b>{highRisk}</b>高风险</span>
+          <button onClick={refresh} disabled={loading}>{loading ? "刷新中…" : "刷新队列"}</button>
+        </div>
+      </section>
+      <section className="review-filterbar" aria-label="审核筛选">
+        <label className="review-search">
+          <span>搜索</span>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="标题、发布方或简介"
+          />
+        </label>
+        <label>
+          <span>审核分区</span>
+          <select value={lane} onChange={(event) => setLane(event.target.value)}>
+            <option value="all">全部分区</option>
+            {queues.map((queue) => <option key={queue.key} value={queue.key}>{queue.title}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>风险等级</span>
+          <select value={risk} onChange={(event) => setRisk(event.target.value)}>
+            <option value="all">全部风险</option>
+            <option value="high">高风险</option>
+            <option value="medium">需核验</option>
+            <option value="low">信息较完整</option>
+          </select>
+        </label>
+        <span className="review-filter-result">当前 {totalVisible} 条</span>
+      </section>
+      {selectedVisible.length > 0 && (
+        <section className="review-batchbar">
+          <div>
+            <b>已选择 {selectedVisible.length} 条</b>
+            <span>批量操作仅处理当前筛选范围内的内容</span>
+          </div>
+          <input
+            value={batchReason}
+            onChange={(event) => setBatchReason(event.target.value)}
+            placeholder="统一审核意见；批量退回时必填"
+          />
+          <button disabled={saving} onClick={() => submitBatch("rejected")}>批量退回</button>
+          <button className="approve" disabled={saving} onClick={() => submitBatch("approved")}>批量通过</button>
+          <button className="clear" onClick={() => setSelected([])}>取消选择</button>
+          {batchError && <p role="alert">{batchError}</p>}
+        </section>
+      )}
+      {error ? (
+        <section className="admin-empty admin-error-state">
+          <b>审核数据加载失败</b><p>{error}</p><button onClick={refresh}>重新加载</button>
+        </section>
+      ) : loading ? (
+        <div className="admin-empty">正在读取审核队列…</div>
+      ) : allItems.length === 0 ? (
+        <div className="admin-empty">当前三条审核队列均已处理完成。</div>
+      ) : totalVisible === 0 ? (
+        <div className="admin-empty">没有符合当前筛选条件的待审核内容。</div>
+      ) : (
+        <div className="admin-review-lanes">
+          {visibleQueues.map((queue) => (
+            <section className="admin-review-lane" key={queue.key}>
+              <div className="lane-head">
+                <div><small>{queue.key.toUpperCase()}</small><h2>{queue.title}</h2><p>{queue.desc}</p></div>
+                <b>{queue.items.length}</b>
+              </div>
+              {queue.items.length ? queue.items.map((item) => (
+                <div className={`review-select-card ${selected.includes(item.id) ? "selected" : ""}`} key={item.id}>
+                  <label className="review-select-control">
+                    <input type="checkbox" checked={selected.includes(item.id)} onChange={() => toggle(item.id)} />
+                    <span>选择</span>
+                  </label>
+                  <RecordCard item={item} onOpen={() => onOpen(item.id)} />
+                </div>
+              )) : <p className="lane-empty">此分区暂无匹配内容</p>}
+            </section>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 function RecordCard({
   item,
   onOpen,
@@ -497,14 +761,15 @@ function RecordCard({
   item: RecordItem;
   onOpen: () => void;
 }) {
+  const risk = reviewRiskOf(item);
   return (
     <article>
-      <span>{kindName(item.kind)}</span>
+      <span className={`review-risk ${risk.level}`}>
+        {risk.level === "high" ? "高风险" : risk.level === "medium" ? "需核验" : "较完整"}
+      </span>
       <div>
         <small>
-          {String(
-            item.payload.company || item.payload.category || "湖南平台内容",
-          )}{" "}
+          {publisherOf(item)} · {kindName(item.kind)}{" "}
           · 排序 {orderOf(item)}
           {item.payload.featured ? " · 首页推荐" : ""}
         </small>
@@ -514,8 +779,13 @@ function RecordCard({
           {String(item.payload.summary || "无简介")}
         </p>
         <em>
-          更新于 {new Date(String(item.updatedAt)).toLocaleString("zh-CN")}
+          完整度 {risk.score}% · 更新于 {new Date(String(item.updatedAt)).toLocaleString("zh-CN")}
         </em>
+        {risk.issues.length > 0 && (
+          <div className="review-issue-list">
+            {risk.issues.slice(0, 3).map((issue) => <span key={issue}>{issue}</span>)}
+          </div>
+        )}
       </div>
       <button className="inspect" onClick={onOpen}>
         查看详情
@@ -527,9 +797,11 @@ function RecordCard({
 function AdminPulse({
   records,
   registrations,
+  logs,
 }: {
   records: RecordItem[];
   registrations: Registration[];
+  logs: Log[];
 }) {
   const jobs = records.filter(
       (r) => r.kind === "job" && r.payload.reviewStatus === "approved",
@@ -540,19 +812,26 @@ function AdminPulse({
     cont = records.filter(
       (r) => r.kind === "content" && r.payload.reviewStatus === "approved",
     ).length,
-    approved = registrations.filter((r) => r.status === "approved").length;
+    approved = registrations.filter((r) => r.status === "approved").length,
+    pending = records.filter(
+      (r) => reviewable.includes(r.kind) && (!r.payload.reviewStatus || r.payload.reviewStatus === "pending"),
+    ).length,
+    today = new Date().toISOString().slice(0, 10),
+    processedToday = logs.filter(
+      (log) => log.createdAt.slice(0, 10) === today && /approved|rejected|review/.test(log.action),
+    ).length;
   return (
     <>
       <div className="metrics admin-pulse-metrics">
         <Metric
-          label="实习 / 项目机会"
-          value={String(jobs)}
-          note="湖南企业公开机会"
+          label="待审核内容"
+          value={String(pending)}
+          note="三条审核队列合计"
         />
         <Metric
-          label="成长活动"
-          value={String(acts)}
-          note="可报名或可回顾活动"
+          label="今日处理"
+          value={String(processedToday)}
+          note="通过、退回与复核操作"
         />
         <Metric
           label="报名转化"
@@ -569,10 +848,7 @@ function AdminPulse({
         <div>
           <small>LIVE VALUE MAP</small>
           <h2>平台从机会供给，到成长沉淀</h2>
-          <p>
-            这里先用现有数据做动态演示：企业发布内容，JA
-            审核排序，学生报名后形成成长记录，并逐步沉淀就业、实习、项目产出。
-          </p>
+          <p>所有数字均来自当前发布、报名和审核记录，用于判断供给、参与和转化是否顺畅。</p>
         </div>
         <ol>
           <li>
@@ -588,8 +864,8 @@ function AdminPulse({
             <span>确认通过</span>
           </li>
           <li>
-            <b>{Math.max(12, cont * 3)}</b>
-            <span>成长沉淀</span>
+            <b>{cont}</b>
+            <span>公开内容</span>
           </li>
         </ol>
       </section>
@@ -608,6 +884,83 @@ function AdminPulse({
     </>
   );
 }
+function AuditLogDesk({ logs }: { logs: Log[] }) {
+  const [query, setQuery] = useState(""),
+    [action, setAction] = useState("all");
+  const actionName = (value: string) => {
+    const labels: Record<string, string> = {
+      approved: "审核通过",
+      rejected: "审核退回",
+      "batch-approved": "批量通过",
+      "batch-rejected": "批量退回",
+      "configure-publication": "调整展示设置",
+      "submit-ja-activity-review": "提交 JA 活动审核",
+      "direct-publish": "JA 直接发布",
+      "comment-reply": "回复评论",
+      "comment-delete": "删除评论",
+    };
+    return labels[value] || value.replaceAll("-", " ");
+  };
+  const actionGroup = (value: string) =>
+    value.includes("approved") || value === "approved"
+      ? "approved"
+      : value.includes("rejected") || value === "rejected"
+        ? "rejected"
+        : value.includes("publish") || value.includes("configure")
+          ? "publish"
+          : "other";
+  const shown = logs.filter((log) => {
+    const text = `${actionName(log.action)} ${log.targetType} ${log.targetId} ${log.actorId}`.toLowerCase();
+    return (action === "all" || actionGroup(log.action) === action) && (!query.trim() || text.includes(query.trim().toLowerCase()));
+  });
+  const exportLogs = () => {
+    const rows = [
+      ["时间", "动作", "对象类型", "对象ID", "操作者"],
+      ...shown.map((log) => [
+        new Date(log.createdAt).toLocaleString("zh-CN"),
+        actionName(log.action),
+        log.targetType,
+        log.targetId,
+        log.actorId,
+      ]),
+    ];
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" }));
+    link.download = `JA星光计划_审计日志_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  };
+  return (
+    <>
+      <section className="audit-summary-strip">
+        <div><small>当前记录</small><b>{logs.length}</b></div>
+        <div><small>审核通过</small><b>{logs.filter((log) => actionGroup(log.action) === "approved").length}</b></div>
+        <div><small>审核退回</small><b>{logs.filter((log) => actionGroup(log.action) === "rejected").length}</b></div>
+      </section>
+      <section className="feedback-toolbar audit-toolbar">
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索动作、对象 ID 或操作者" />
+        <select value={action} onChange={(event) => setAction(event.target.value)}>
+          <option value="all">全部动作</option><option value="approved">审核通过</option><option value="rejected">审核退回</option><option value="publish">发布与配置</option><option value="other">其他操作</option>
+        </select>
+        <button onClick={exportLogs} disabled={!shown.length}>导出当前结果</button>
+      </section>
+      <div className="admin-table audit-readable-table">
+        <div><b>时间</b><b>动作</b><b>对象</b><b>操作者</b></div>
+        {shown.map((log) => (
+          <div key={log.id}>
+            <span>{new Date(log.createdAt).toLocaleString("zh-CN")}</span>
+            <span><i className={`audit-action ${actionGroup(log.action)}`}>{actionName(log.action)}</i></span>
+            <span>{log.targetType}<small>{log.targetId}</small></span>
+            <span>{log.actorId}</span>
+          </div>
+        ))}
+      </div>
+      {!shown.length && <div className="admin-empty">没有符合当前筛选条件的审计记录。</div>}
+    </>
+  );
+}
+
 function Metric({
   label,
   value,
@@ -1248,6 +1601,135 @@ function AdminPublisher({
   );
 }
 
+function JAFeedbackDesk({
+  onNotice,
+}: {
+  onNotice: (message: string) => void;
+}) {
+  const [comments, setComments] = useState<ManagedComment[]>([]),
+    [selected, setSelected] = useState<ManagedComment | null>(null),
+    [reply, setReply] = useState(""),
+    [query, setQuery] = useState(""),
+    [status, setStatus] = useState("pending"),
+    [loading, setLoading] = useState(true),
+    [saving, setSaving] = useState(false),
+    [error, setError] = useState("");
+  useEffect(() => {
+    if (!selected) return;
+    const close = (event: KeyboardEvent) => event.key === "Escape" && setSelected(null);
+    document.addEventListener("keydown", close);
+    return () => document.removeEventListener("keydown", close);
+  }, [selected]);
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch("/api/social?scope=ja");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "互动数据读取失败");
+      setComments(data.comments || []);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "互动数据读取失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => {
+    let active = true;
+    fetch("/api/social?scope=ja")
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "互动数据读取失败");
+        if (active) setComments(data.comments || []);
+      })
+      .catch((loadError) => {
+        if (active)
+          setError(loadError instanceof Error ? loadError.message : "互动数据读取失败");
+      })
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, []);
+  const shown = comments.filter((comment) => {
+    const matchesStatus =
+      status === "all" ||
+      (status === "pending" ? !comment.replyBody : Boolean(comment.replyBody));
+    const text = `${comment.contentTitle} ${comment.authorName} ${comment.body}`.toLowerCase();
+    return matchesStatus && (!query.trim() || text.includes(query.trim().toLowerCase()));
+  });
+  const act = async (action: "reply" | "delete") => {
+    if (!selected || saving) return;
+    if (action === "reply" && reply.trim().length < 2) {
+      onNotice("请填写至少 2 个字的回复");
+      return;
+    }
+    if (action === "delete" && !window.confirm("确定删除该评论吗？此操作会留下审计记录。")) return;
+    setSaving(true);
+    const response = await fetch("/api/social", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        commentId: selected.id,
+        action,
+        reply: reply.trim(),
+        scope: "ja",
+      }),
+    });
+    const data = await response.json();
+    setSaving(false);
+    if (!response.ok) {
+      onNotice(data.error || "处理失败");
+      return;
+    }
+    onNotice(action === "reply" ? "JA 回复已同步到学生端" : "评论已删除");
+    setSelected(null);
+    setReply("");
+    await load();
+  };
+  return (
+    <>
+      <section className="feedback-summary ja-feedback-summary">
+        <div><small>待回复</small><b>{comments.filter((item) => !item.replyBody).length}</b></div>
+        <div><small>已回复</small><b>{comments.filter((item) => item.replyBody).length}</b></div>
+        <div><small>全部评论</small><b>{comments.length}</b></div>
+      </section>
+      <section className="feedback-toolbar">
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索内容、学生或评论" />
+        <select value={status} onChange={(event) => setStatus(event.target.value)}>
+          <option value="pending">待回复</option><option value="replied">已回复</option><option value="all">全部评论</option>
+        </select>
+        <button onClick={load}>刷新</button>
+      </section>
+      {loading ? <div className="admin-empty">正在读取互动数据…</div> : error ? (
+        <div className="admin-empty"><b>读取失败</b><p>{error}</p><button onClick={load}>重试</button></div>
+      ) : shown.length === 0 ? (
+        <div className="admin-empty"><b>当前没有需要处理的评论</b><p>企业或 JA 发布内容下的学生留言会集中到这里。</p></div>
+      ) : (
+        <div className="feedback-list">
+          {shown.map((comment) => (
+            <button key={comment.id} onClick={() => { setSelected(comment); setReply(comment.replyBody || ""); }}>
+              <span><b>{comment.contentTitle}</b><small>{new Date(comment.createdAt).toLocaleString("zh-CN")}</small></span>
+              <p><strong>{comment.authorName}</strong>{comment.body}</p><em>{comment.replyBody ? "已回复" : "待回复"}</em>
+            </button>
+          ))}
+        </div>
+      )}
+      {selected && (
+        <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSelected(null)}>
+          <section className="dialog feedback-dialog" role="dialog" aria-modal="true" aria-label="JA 评论处理">
+            <button className="dialog-close" aria-label="关闭评论处理" onClick={() => setSelected(null)}>×</button>
+            <small>JA COMMENT OPERATIONS</small><h1>{selected.contentTitle}</h1>
+            <article><b>{selected.authorName}</b><p>{selected.body}</p><small>{new Date(selected.createdAt).toLocaleString("zh-CN")}</small></article>
+            <label>JA 项目团队回复<textarea rows={5} value={reply} onChange={(event) => setReply(event.target.value)} /></label>
+            <div className="dialog-actions"><button className="danger-text-btn" onClick={() => act("delete")}>删除评论</button><button className="primary-btn" disabled={saving || reply.trim().length < 2} onClick={() => act("reply")}>{saving ? "正在处理…" : "发布回复"}</button></div>
+          </section>
+        </div>
+      )}
+    </>
+  );
+}
+
 function IntegrityDesk({
   items,
   onSaved,
@@ -1260,12 +1742,21 @@ function IntegrityDesk({
       type: "学生",
       summary: "",
       level: "观察",
+      incidentDate: new Date().toISOString().slice(0, 10),
+      handling: "",
+      evidence: "",
+      expiresAt: "",
     }),
-    [saving, setSaving] = useState(false);
+    [saving, setSaving] = useState(false),
+    [query, setQuery] = useState(""),
+    [status, setStatus] = useState("active");
   const change = (key: string, value: string) =>
     setForm((v) => ({ ...v, [key]: value }));
   const save = async () => {
-    if (!form.target.trim() || !form.summary.trim()) return;
+    if (!form.target.trim() || !form.summary.trim()) {
+      await onSaved("请填写对象名称和事实说明");
+      return;
+    }
     setSaving(true);
     const response = await fetch("/api/admin", {
       method: "PUT",
@@ -1278,6 +1769,11 @@ function IntegrityDesk({
           target: form.target,
           type: form.type,
           level: form.level,
+          incidentDate: form.incidentDate,
+          handling: form.handling,
+          evidence: form.evidence,
+          expiresAt: form.expiresAt,
+          state: "active",
         },
       }),
     });
@@ -1287,9 +1783,41 @@ function IntegrityDesk({
       await onSaved(result.error || "记录失败");
       return;
     }
-    setForm({ target: "", type: "学生", summary: "", level: "观察" });
+    setForm({
+      target: "",
+      type: "学生",
+      summary: "",
+      level: "观察",
+      incidentDate: new Date().toISOString().slice(0, 10),
+      handling: "",
+      evidence: "",
+      expiresAt: "",
+    });
     await onSaved("诚信记录已保存");
   };
+  const resolve = async (item: RecordItem) => {
+    if (!window.confirm("确认将该诚信记录标记为已解除吗？记录仍会保留在审计中。")) return;
+    const response = await fetch("/api/admin", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        id: item.id,
+        kind: "blacklist",
+        payload: {
+          ...item.payload,
+          state: "resolved",
+          resolvedAt: new Date().toISOString(),
+        },
+      }),
+    });
+    const data = await response.json();
+    await onSaved(response.ok ? "诚信记录已标记为解除" : data.error || "更新失败");
+  };
+  const shown = items.filter((item) => {
+    const state = String(item.payload.state || "active");
+    const text = `${item.payload.target || ""} ${item.payload.summary || ""} ${item.payload.type || ""}`.toLowerCase();
+    return (status === "all" || state === status) && (!query.trim() || text.includes(query.trim().toLowerCase()));
+  });
   return (
     <section className="integrity-desk">
       <div className="integrity-form">
@@ -1335,21 +1863,44 @@ function IntegrityDesk({
             onChange={(e) => change("summary", e.target.value)}
           />
         </label>
+        <label>
+          发生日期
+          <input type="date" value={form.incidentDate} onChange={(e) => change("incidentDate", e.target.value)} />
+        </label>
+        <label>
+          已采取措施
+          <textarea rows={3} value={form.handling} onChange={(e) => change("handling", e.target.value)} placeholder="例如：电话核实、书面提醒或限制报名" />
+        </label>
+        <label>
+          证据或工单编号
+          <input value={form.evidence} onChange={(e) => change("evidence", e.target.value)} placeholder="只记录内部编号，不粘贴敏感原文" />
+        </label>
+        <label>
+          限制到期日（选填）
+          <input type="date" value={form.expiresAt} onChange={(e) => change("expiresAt", e.target.value)} />
+        </label>
         <button disabled={saving} onClick={save}>
           {saving ? "正在保存…" : "保存诚信记录"}
         </button>
       </div>
       <div className="integrity-list">
-        {items.length === 0 ? (
+        <div className="integrity-list-toolbar">
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索对象或事实说明" />
+          <select value={status} onChange={(e) => setStatus(e.target.value)}><option value="active">生效中</option><option value="resolved">已解除</option><option value="all">全部记录</option></select>
+        </div>
+        {shown.length === 0 ? (
           <p>暂无诚信记录。</p>
         ) : (
-          items.map((item) => (
+          shown.map((item) => (
             <article key={item.id}>
-              <b>{String(item.payload.target || item.payload.title)}</b>
+              <header><b>{String(item.payload.target || item.payload.title)}</b><em>{String(item.payload.state || "active") === "resolved" ? "已解除" : "生效中"}</em></header>
               <span>
                 {String(item.payload.type)} · {String(item.payload.level)}
               </span>
               <p>{String(item.payload.summary)}</p>
+              {item.payload.handling && <small>处理：{String(item.payload.handling)}</small>}
+              {item.payload.evidence && <small>凭证：{String(item.payload.evidence)}</small>}
+              {String(item.payload.state || "active") !== "resolved" && <button onClick={() => resolve(item)}>标记为已解除</button>}
             </article>
           ))
         )}
@@ -1363,6 +1914,7 @@ function ReviewDrawer({
   reason,
   setReason,
   decide,
+  configure,
   close,
 }: {
   selected: RecordItem;
@@ -1372,8 +1924,16 @@ function ReviewDrawer({
     decision: "approved" | "rejected",
     settings?: { sortOrder: number; category: string; featured: boolean },
   ) => void;
+  configure: (settings: {
+    sortOrder: number;
+    category: string;
+    featured: boolean;
+  }) => void;
   close: () => void;
 }) {
+  useDialogEscape(close);
+  const risk = reviewRiskOf(selected);
+  const isJaActivity = reviewLaneOf(selected) === "ja-activity";
   const [sortOrder, setSortOrder] = useState(
       String(selected.payload.sortOrder || 0),
     ),
@@ -1386,15 +1946,26 @@ function ReviewDrawer({
     ),
     [featured, setFeatured] = useState(Boolean(selected.payload.featured));
   const choices =
-    selected.kind === "activity" ? activityCategories : contentCategories;
+    selected.kind === "job"
+      ? jobCategories
+      : selected.kind === "activity"
+        ? activityCategories
+        : contentCategories;
   const blocks = (selected.payload.bodyBlocks as RichBlock[] | undefined) || [];
   return (
     <div className="admin-review-drawer">
-      <button className="drawer-close" onClick={close}>
+      <button className="drawer-close" aria-label="关闭审核详情" onClick={close}>
         ×
       </button>
       <small>{kindName(selected.kind)}审核详情</small>
       <h1>{String(selected.payload.title || "未命名")}</h1>
+      <div className="review-drawer-summary">
+        <span className={`review-risk ${risk.level}`}>
+          {risk.level === "high" ? "高风险" : risk.level === "medium" ? "需核验" : "信息较完整"}
+        </span>
+        <span>{isJaActivity ? "JA 内部审核" : "企业公开内容审核"}</span>
+        <span>信息完整度 {risk.score}%</span>
+      </div>
       <div className="review-meta">
         <span>
           <b>发布方</b>
@@ -1403,6 +1974,10 @@ function ReviewDrawer({
               selected.payload.publisher ||
               "湖南平台",
           )}
+        </span>
+        <span>
+          <b>提交时间</b>
+          {new Date(String(selected.payload.submittedAt || selected.updatedAt)).toLocaleString("zh-CN")}
         </span>
         {selected.kind === "job" && (
           <>
@@ -1423,6 +1998,33 @@ function ReviewDrawer({
           </>
         )}
       </div>
+      <section className="review-evidence">
+        <div className="review-evidence-head">
+          <div><small>PRE-PUBLISH CHECK</small><h3>公开前核验清单</h3></div>
+          <b>{risk.issues.length ? `${risk.issues.length} 项需确认` : "基础检查通过"}</b>
+        </div>
+        <ul>
+          {[
+            ["发布主体", publisherOf(selected) !== "湖南平台", "发布方名称明确"],
+            ["封面素材", Boolean(selected.payload.cover), "已提供可公开展示的封面"],
+            ["内容摘要", String(selected.payload.summary || "").trim().length >= 20, "摘要不少于 20 字"],
+            ["正文结构", ((selected.payload.bodyBlocks as RichBlock[] | undefined) || []).length > 0, "正文包含有效内容区块"],
+            ...(selected.kind === "activity"
+              ? [
+                  ["活动要素", Boolean(selected.payload.date && selected.payload.place), "日期与地点完整"],
+                  ["报名规则", ((selected.payload.registrationFields as Field[] | undefined) || []).length > 0, "报名字段已配置"],
+                ]
+              : [["内容分类", Boolean(selected.payload.category), "内容分类已选择"]]),
+          ].map(([name, passed, text]) => (
+            <li className={passed ? "passed" : "attention"} key={String(name)}>
+              <span>{passed ? "✓" : "!"}</span><div><b>{String(name)}</b><p>{String(text)}</p></div>
+            </li>
+          ))}
+        </ul>
+        {risk.issues.includes("包含外部链接，需核验") && (
+          <p className="review-link-warning">检测到外部链接，请确认链接归属、有效性和隐私说明后再公开。</p>
+        )}
+      </section>
       {selected.payload.cover && (
         <img src={String(selected.payload.cover)} alt="发布方上传的审核素材" />
       )}
@@ -1546,7 +2148,7 @@ function ReviewDrawer({
               })
             }
           >
-            退回企业修改
+            {isJaActivity ? "退回 JA 发布人员" : "退回企业修改"}
           </button>
           <button
             className="approve"
@@ -1562,11 +2164,27 @@ function ReviewDrawer({
           </button>
         </div>
       ) : (
-        <p className="review-result">
-          当前状态：{stateName(selected.payload.reviewStatus)}
-          <br />
-          {String(selected.payload.reviewNote || "")}
-        </p>
+        <>
+          <p className="review-result">
+            当前状态：{stateName(selected.payload.reviewStatus)}
+            <br />
+            {String(selected.payload.reviewNote || "")}
+          </p>
+          {selected.payload.reviewStatus === "approved" && (
+            <button
+              className="save-display-settings"
+              onClick={() =>
+                configure({
+                  sortOrder: Number(sortOrder) || 0,
+                  category,
+                  featured,
+                })
+              }
+            >
+              保存展示设置
+            </button>
+          )}
+        </>
       )}
     </div>
   );

@@ -20,42 +20,42 @@ const fallbackSlides: Slide[] = [
     eyebrow: "成长活动",
     title: "未来职业市集：把职业探索带到真实现场",
     meta: "青年与企业面对面 · 活动报名",
-    href: "/workspace?role=student&tab=activities",
+    href: "/activities/act-04",
   },
   {
     image: "/media/ja-official-forum.jpg",
     eyebrow: "校企同频",
     title: "创变未来人才引擎：与导师坐在同一张圆桌",
     meta: "嘉宾对谈 · 行业理解",
-    href: "/workspace?role=student&tab=content",
+    href: "/content/con-07",
   },
   {
     image: "/media/ja-official-coy-awards.jpg",
     eyebrow: "学生公司",
     title: "JA 中国学生公司大赛：让成果被看见",
     meta: "创新实践 · 团队协作",
-    href: "/workspace?role=student&tab=content",
+    href: "/content/con-10",
   },
   {
     image: "/media/ja-official-market.jpg",
     eyebrow: "项目展销",
     title: "产品展销会：从一个想法到真实用户反馈",
     meta: "商业实践 · 路演复盘",
-    href: "/workspace?role=student&tab=activities",
+    href: "/activities/act-06",
   },
   {
     image: "/media/ja-official-manufacturing.jpg",
     eyebrow: "职业体验",
     title: "智造未来一日营：走进制造业真实工作流",
     meta: "企业参访 · 岗位观察",
-    href: "/workspace?role=student&tab=activities",
+    href: "/activities/act-01",
   },
   {
     image: "/media/ja-official-student-company.jpg",
     eyebrow: "创业实践",
     title: "Shining Universe 学生公司：把小产品推向市场",
     meta: "项目作品 · 成长档案",
-    href: "/workspace?role=student&tab=content",
+    href: "/content/con-06",
   },
 ];
 
@@ -73,8 +73,8 @@ function fromCatalog(record: CatalogRecord): Slide | null {
     ),
     href:
       record.kind === "activity"
-        ? "/workspace?role=student&tab=activities"
-        : "/workspace?role=student&tab=content",
+        ? `/activities/${encodeURIComponent(record.id)}`
+        : `/content/${encodeURIComponent(record.id)}`,
   };
 }
 

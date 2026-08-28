@@ -48,7 +48,7 @@ test("JA console is directly accessible during testing", async () => {
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /湖南运营后台/);
-  assert.match(html, /JA 测试管理员/);
+  assert.match(html, /JA 本地测试管理员/);
   assert.match(html, /分区审核/);
   assert.match(html, /JA 发起的活动/);
   assert.match(html, /企业发布的活动/);
@@ -68,7 +68,7 @@ test("opportunity route is a Hunan category-based direct-email opportunity", asy
   assert.match(html, /平台不读取邮件/);
   assert.doesNotMatch(html, /站内申请|与企业沟通|北京|上海|深圳/);
 });
-test("enterprise publishing explains the JA review workflow", async () => {
+test("enterprise workbench exposes operational tasks and publishing status", async () => {
   const [enterprise, content] = await Promise.all([
     page("/workspace?role=enterprise"),
     page("/content"),
@@ -76,8 +76,10 @@ test("enterprise publishing explains the JA review workflow", async () => {
   assert.equal(enterprise.status, 200);
   assert.equal(content.status, 200);
   const enterpriseHtml = await enterprise.text();
-  assert.match(enterpriseHtml, /湖南企业发布，JA 审核后公开/);
-  assert.match(enterpriseHtml, /JA 分类、排序与审核/);
+  assert.match(enterpriseHtml, /今日工作概览/);
+  assert.match(enterpriseHtml, /待办事项/);
+  assert.match(enterpriseHtml, /发布状态/);
+  assert.match(enterpriseHtml, /资料完整度/);
   assert.match(enterpriseHtml, /活动发布/);
   assert.match(await content.text(), /成长内容/);
 });
@@ -89,16 +91,36 @@ test("activity publishing and registration data entry points are present", async
   assert.match(html, /活动发布/);
   assert.match(html, /明确报名所需字段/);
 });
+test("enterprise publisher supports drafts, validation and the correct review ownership", async () => {
+  const [workspaceSource, platformApiSource] = await Promise.all([
+    readFile(
+      new URL("../app/workspace/PlatformApp.tsx", import.meta.url),
+      "utf8",
+    ),
+    readFile(new URL("../app/api/platform/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(workspaceSource, /保存草稿/);
+  assert.match(workspaceSource, /已恢复上次未完成草稿/);
+  assert.match(workspaceSource, /确认并发布/);
+  assert.match(workspaceSource, /至少填写 2 条岗位职责/);
+  assert.match(platformApiSource, /body\.kind === "job"/);
+  assert.match(platformApiSource, /isDraft \? "draft" : "approved"/);
+  assert.match(
+    platformApiSource,
+    /payload\.reviewStatus = isDraft \? "draft" : "pending"/,
+  );
+  assert.match(platformApiSource, /无权修改该记录/);
+});
 test("enterprise can review and decide student registrations", async () => {
   const response = await page("/workspace?role=enterprise&tab=registrations");
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /page-transition/);
   assert.match(html, /活动报名审核/);
-  assert.match(html, /测试阶段显示全部活动报名/);
-  assert.match(html, /导出报名表/);
+  assert.match(html, /导出筛选结果/);
   assert.match(html, /报名可视化/);
   assert.match(html, /报名来源分布/);
+  assert.match(html, /姓名、学校、电话或邮箱/);
   assert.match(html, /待确认/);
   assert.match(html, /已通过/);
   assert.match(html, /已退回/);
@@ -119,17 +141,27 @@ test("JA review ownership and enterprise registration export are separated", asy
   assert.match(adminSource, /企业发布的活动/);
   assert.match(adminSource, /企业发布的内容/);
   assert.doesNotMatch(adminSource, /RegistrationTable/);
-  assert.match(workspaceSource, /导出报名表/);
+  assert.match(workspaceSource, /导出筛选结果/);
   assert.match(workspaceSource, /text\/csv;charset=utf-8/);
 });
-test("registration API exposes test-stage review queue", async () => {
-  const source = await readFile(
-    new URL("../app/api/registrations/route.ts", import.meta.url),
-    "utf8",
-  );
-  assert.match(source, /CREATE TABLE IF NOT EXISTS audit_logs/);
-  assert.match(source, /testVisible/);
-  assert.doesNotMatch(source, /无权审核此报名/);
+test("registration API scopes enterprise data and supports batch review", async () => {
+  const [apiSource, workspaceSource] = await Promise.all([
+    readFile(
+      new URL("../app/api/registrations/route.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../app/workspace/PlatformApp.tsx", import.meta.url),
+      "utf8",
+    ),
+  ]);
+  assert.match(apiSource, /CREATE TABLE IF NOT EXISTS audit_logs/);
+  assert.match(apiSource, /WHERE publisher_owner_id=\?/);
+  assert.match(apiSource, /registrationIds/);
+  assert.match(apiSource, /无权审核其他企业的报名/);
+  assert.doesNotMatch(apiSource, /testVisible/);
+  assert.match(workspaceSource, /批量通过/);
+  assert.match(workspaceSource, /已导出当前筛选结果/);
 });
 test("public opportunities navigate by category and never by city filters", async () => {
   const response = await page("/opportunities");
@@ -138,7 +170,7 @@ test("public opportunities navigate by category and never by city filters", asyn
   assert.match(html, /机会类别/);
   assert.match(html, /技术研发/);
   assert.match(html, /简历邮箱/);
-  assert.match(html, /湖南开放机会/);
+  assert.match(html, /个开放机会/);
   assert.doesNotMatch(html, /全部城市|北京|上海|深圳|立即申请|站内沟通/);
 });
 test("student opportunity filters use dual-ended salary slider", async () => {
@@ -171,4 +203,76 @@ test("growth profile focuses on resume and unified timeline", async () => {
     html,
     /学习与活动反馈|<h2>项目经历<\/h2>|timeline-spotlight/,
   );
+});
+test("student interactions are persistent and permission scoped", async () => {
+  const [workspaceSource, socialApiSource] = await Promise.all([
+    readFile(new URL("../app/workspace/PlatformApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/social/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(workspaceSource, /\/api\/social\?contentId=/);
+  assert.match(workspaceSource, /删除我的评论/);
+  assert.doesNotMatch(workspaceSource, /发布方已收到，会在后续内容中补充回应/);
+  assert.match(socialApiSource, /CREATE TABLE IF NOT EXISTS content_likes/);
+  assert.match(socialApiSource, /CREATE TABLE IF NOT EXISTS content_comments/);
+  assert.match(socialApiSource, /无权管理其他发布方的评论/);
+  assert.match(socialApiSource, /WHERE id=\? AND author_id=\?/);
+});
+test("enterprise and JA consoles expose real comment operations", async () => {
+  const [enterprise, admin, workspaceSource] = await Promise.all([
+    page("/workspace?role=enterprise&tab=feedback"),
+    page("/ja-console"),
+    readFile(new URL("../app/workspace/PlatformApp.tsx", import.meta.url), "utf8"),
+  ]);
+  const enterpriseHtml = await enterprise.text();
+  const adminHtml = await admin.text();
+  assert.match(enterpriseHtml, /互动管理/);
+  assert.match(enterpriseHtml, /CONTENT FEEDBACK/);
+  assert.match(workspaceSource, /发布方回复/);
+  assert.match(workspaceSource, /scope: "publisher"/);
+  assert.match(adminHtml, /互动管理/);
+  assert.match(adminHtml, /审计日志/);
+});
+test("JA publication operations support risk checks, batch review and display configuration", async () => {
+  const [adminSource, adminApiSource] = await Promise.all([
+    readFile(new URL("../app/ja-console/JAConsole.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(adminSource, /公开前核验清单/);
+  assert.match(adminSource, /批量通过/);
+  assert.match(adminSource, /保存展示设置/);
+  assert.match(adminSource, /导出当前结果/);
+  assert.match(adminApiSource, /configure-publication/);
+  assert.match(adminApiSource, /单次最多审核 100 条内容/);
+  assert.match(adminApiSource, /JA 仅审核 JA 活动、企业活动和企业内容/);
+});
+test("commercial profile and private resume flows are explicit", async () => {
+  const [workspaceSource, platformApiSource, fileApiSource] = await Promise.all([
+    readFile(new URL("../app/workspace/PlatformApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/platform/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/files/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(workspaceSource, /资料完整度/);
+  assert.match(workspaceSource, /内部联络信息（不在学生端公开）/);
+  assert.doesNotMatch(workspaceSource, /JA HUNAN VERIFIED ORGANIZATION/);
+  assert.match(workspaceSource, /正在安全读取简历/);
+  assert.match(platformApiSource, /统一社会信用代码应为 18 位/);
+  assert.match(fileApiSource, /private, no-store/);
+});
+test("public discovery uses live catalog data and deep-links to exact items", async () => {
+  const [homeSource, sectionsSource, carouselSource, contentSource, workspaceSource, detailSource] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/HomeSections.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/HomeCarousel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/content/ContentCatalog.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/workspace/PlatformApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/opportunities/[id]/DynamicJobDetail.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(homeSource, /action="\/opportunities"/);
+  assert.doesNotMatch(homeSource, /12,600\+|180\+|92%|26 个机会/);
+  assert.match(sectionsSource, /\/opportunities\/\$\{encodeURIComponent\(job\.id\)\}/);
+  assert.match(sectionsSource, /\/activities\/\$\{encodeURIComponent\(activity\.id\)\}/);
+  assert.match(carouselSource, /record\.id/);
+  assert.match(contentSource, /\/content\/\$\{encodeURIComponent\(content\.id\)\}/);
+  assert.match(workspaceSource, /initialItem/);
+  assert.match(detailSource, /fetch\(`\/api\/catalog\?id=/);
 });

@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { headers } from "next/headers";
+import { getActor, notify, writeAudit } from "../../../db/runtime";
 
 type ActivityRow = { id: string; ownerId: string; payload: string };
 type RegistrationRow = {
@@ -44,18 +44,18 @@ async function setup() {
   if (alters.length) await env.DB.batch(alters);
   await env.DB.batch(setupSql.slice(3).map((sql) => env.DB.prepare(sql)));
 }
-async function actor(request: Request) {
-  const h = await headers();
-  const real = h.get("oai-authenticated-user-id");
-  const demo = request.headers.get("x-starlight-demo-id");
-  return (
-    real ?? (demo && /^[a-zA-Z0-9-]{8,80}$/.test(demo) ? `demo:${demo}` : null)
-  );
-}
 function cleanAnswers(value: unknown) {
-  const json = JSON.stringify(value);
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("报名信息格式不正确");
+  const clean = Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, answer]) => [
+      String(key).slice(0, 80),
+      String(answer ?? "").trim().slice(0, 1200),
+    ]),
+  );
+  const json = JSON.stringify(clean);
   if (json.length > 12000) throw new Error("报名信息过长");
-  return json;
+  return { clean, json };
 }
 function parseRegistration(row: RegistrationRow) {
   return {
@@ -84,17 +84,32 @@ function findActivity(rows: ActivityRow[], activityId: string) {
 
 export async function GET(request: Request) {
   await setup();
-  const owner = await actor(request);
-  if (!owner) return Response.json({ registrations: [] });
+  const identity = await getActor(request);
+  if (!identity) return Response.json({ registrations: [] }, { status: 401 });
+  const owner = identity.id;
   const scope = new URL(request.url).searchParams.get("scope");
   if (scope === "publisher") {
-    const registrationRows = await env.DB.prepare(
-      "SELECT id,activity_id AS activityId,activity_title AS activityTitle,publisher_owner_id AS publisherOwnerId,answers,status,review_note AS reviewNote,reviewed_at AS reviewedAt,created_at AS createdAt FROM activity_registrations ORDER BY created_at DESC LIMIT 500",
-    ).all();
+    if (identity.role !== "enterprise" && !identity.testMode)
+      return Response.json({ error: "仅企业账号可查看报名数据" }, { status: 403 });
+    const demo = owner.startsWith("demo:");
+    const registrationRows = demo
+      ? await env.DB.prepare(
+          "SELECT id,activity_id AS activityId,activity_title AS activityTitle,publisher_owner_id AS publisherOwnerId,answers,status,review_note AS reviewNote,reviewed_at AS reviewedAt,created_at AS createdAt FROM activity_registrations WHERE publisher_owner_id=? OR publisher_owner_id='ja:seed' ORDER BY created_at DESC LIMIT 500",
+        )
+          .bind(owner)
+          .all()
+      : await env.DB.prepare(
+          "SELECT id,activity_id AS activityId,activity_title AS activityTitle,publisher_owner_id AS publisherOwnerId,answers,status,review_note AS reviewNote,reviewed_at AS reviewedAt,created_at AS createdAt FROM activity_registrations WHERE publisher_owner_id=? ORDER BY created_at DESC LIMIT 500",
+        )
+          .bind(owner)
+          .all();
     return Response.json({
       registrations: (registrationRows.results as unknown as RegistrationRow[])
         .map(parseRegistration)
-        .map((row) => ({ ...row, testVisible: true })),
+        .map((row) => ({
+          ...row,
+          demoSeed: row.publisherOwnerId === "ja:seed",
+        })),
     });
   }
   const rows = await env.DB.prepare(
@@ -111,9 +126,12 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   await setup();
-  const student = await actor(request);
-  if (!student)
+  const identity = await getActor(request);
+  if (!identity)
     return Response.json({ error: "缺少报名身份" }, { status: 401 });
+  if (identity.role !== "student" && !identity.testMode)
+    return Response.json({ error: "仅学生账号可报名活动" }, { status: 403 });
+  const student = identity.id;
   const body = (await request.json()) as {
     activityId?: string;
     activityTitle?: string;
@@ -126,16 +144,62 @@ export async function POST(request: Request) {
     Object.keys(body.answers).length === 0
   )
     return Response.json({ error: "请完整填写报名信息" }, { status: 400 });
+  let answerData: { clean: Record<string, string>; json: string };
+  try {
+    answerData = cleanAnswers(body.answers);
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : "报名信息不正确" },
+      { status: 400 },
+    );
+  }
   const activityRows = await activities();
   const record = findActivity(activityRows, body.activityId);
   let publisher = "ja:seed";
   let canonicalActivityId = body.activityId;
+  let canonicalTitle = String(body.activityTitle).trim().slice(0, 200);
   if (record) {
     const payload = JSON.parse(String(record.payload));
     if (payload.reviewStatus !== "approved")
       return Response.json({ error: "该活动暂未开放报名" }, { status: 400 });
+    if (["报名截止", "已结束", "已满员"].includes(String(payload.status || "")))
+      return Response.json({ error: "该活动当前不可报名" }, { status: 400 });
+    const deadline = String(payload.deadline || payload.date || "");
+    if (deadline && /^\d{4}-\d{2}-\d{2}/.test(deadline)) {
+      const closeAt = new Date(`${deadline.slice(0, 10)}T23:59:59+08:00`);
+      if (Date.now() > closeAt.getTime())
+        return Response.json({ error: "该活动报名已截止" }, { status: 400 });
+    }
+    const fields = Array.isArray(payload.registrationFields)
+      ? (payload.registrationFields as { id?: string; label?: string; required?: boolean; type?: string }[])
+      : [];
+    const missing = fields.find(
+      (field) => field.required && !answerData.clean[String(field.id || "")],
+    );
+    if (missing)
+      return Response.json(
+        { error: `请填写：${String(missing.label || "必填信息")}` },
+        { status: 400 },
+      );
+    const emailField = fields.find((field) => field.type === "email");
+    if (
+      emailField &&
+      answerData.clean[String(emailField.id || "")] &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(answerData.clean[String(emailField.id)])
+    )
+      return Response.json({ error: "请填写有效邮箱" }, { status: 400 });
+    const phoneField = fields.find((field) => field.type === "tel");
+    if (
+      phoneField &&
+      answerData.clean[String(phoneField.id || "")] &&
+      !/^[0-9+\-\s]{7,24}$/.test(answerData.clean[String(phoneField.id)])
+    )
+      return Response.json({ error: "请填写有效联系电话" }, { status: 400 });
     publisher = String(record.ownerId);
     canonicalActivityId = record.id;
+    canonicalTitle = String(payload.title || canonicalTitle).slice(0, 200);
+    const capacity = Number(payload.capacity || 0);
+    if (capacity > 0) answerData.clean.__capacity = String(capacity);
   }
   const previous = await env.DB.prepare(
     "SELECT id FROM activity_registrations WHERE student_owner_id=? AND activity_id IN (?,?) LIMIT 1",
@@ -149,93 +213,132 @@ export async function POST(request: Request) {
     )
       .bind(
         canonicalActivityId,
-        body.activityTitle,
+        canonicalTitle,
         publisher,
-        cleanAnswers(body.answers),
+        answerData.json,
         id,
       )
       .run();
-  else
-    await env.DB.prepare(
-      "INSERT INTO activity_registrations(id,activity_id,activity_title,student_owner_id,publisher_owner_id,answers,status,review_note,reviewed_at,created_at) VALUES(?,?,?,?,?,?,'pending','',NULL,CURRENT_TIMESTAMP)",
-    )
-      .bind(
-        id,
-        canonicalActivityId,
-        body.activityTitle,
-        student,
-        publisher,
-        cleanAnswers(body.answers),
-      )
-      .run();
-  await env.DB.prepare(
-    "INSERT INTO audit_logs(actor_id,action,target_type,target_id) VALUES(?,'register','activity',?)",
-  )
-    .bind(student, canonicalActivityId)
-    .run();
+  else {
+    const capacity = Number(answerData.clean.__capacity || 0);
+    delete answerData.clean.__capacity;
+    answerData.json = JSON.stringify(answerData.clean);
+    const inserted = await env.DB.prepare(
+      "INSERT INTO activity_registrations(id,activity_id,activity_title,student_owner_id,publisher_owner_id,answers,status,review_note,reviewed_at,created_at) SELECT ?,?,?,?,?,?,'pending','',NULL,CURRENT_TIMESTAMP WHERE ?<=0 OR (SELECT COUNT(*) FROM activity_registrations WHERE activity_id=? AND status IN ('pending','approved'))<?",
+    ).bind(id, canonicalActivityId, canonicalTitle, student, publisher, answerData.json, capacity, canonicalActivityId, capacity).run();
+    if (!inserted.meta.changes)
+      return Response.json({ error: "该活动报名名额已满" }, { status: 409 });
+  }
+  await writeAudit(student, "register", "activity", canonicalActivityId);
+  await notify(publisher, "new-registration", "收到新的活动报名", `${canonicalTitle} 有新的学生报名待确认。`, "/workspace?role=enterprise&tab=registrations");
   return Response.json({ ok: true, id, status: "pending" });
 }
 
 export async function PATCH(request: Request) {
   await setup();
-  const publisher = await actor(request);
-  if (!publisher)
+  const identity = await getActor(request);
+  if (!identity)
     return Response.json({ error: "缺少企业身份" }, { status: 401 });
+  if (identity.role !== "enterprise" && !identity.testMode)
+    return Response.json({ error: "仅活动发布企业可审核报名" }, { status: 403 });
+  const publisher = identity.id;
   const body = (await request.json()) as {
     registrationId?: string;
+    registrationIds?: string[];
     decision?: "approved" | "rejected";
     note?: string;
   };
+  const ids = [
+    ...(Array.isArray(body.registrationIds) ? body.registrationIds : []),
+    ...(body.registrationId ? [body.registrationId] : []),
+  ].filter((id, index, values) => id && values.indexOf(id) === index);
   if (
-    !body.registrationId ||
+    !ids.length ||
+    ids.length > 100 ||
     !["approved", "rejected"].includes(String(body.decision))
   )
     return Response.json({ error: "缺少审核决定" }, { status: 400 });
   if (body.decision === "rejected" && !body.note?.trim())
     return Response.json({ error: "退回时请填写原因" }, { status: 400 });
-  const registration = (await env.DB.prepare(
-    "SELECT id,activity_id AS activityId,publisher_owner_id AS publisherOwnerId FROM activity_registrations WHERE id=?",
+  const placeholders = ids.map(() => "?").join(",");
+  const registrations = await env.DB.prepare(
+    `SELECT id,activity_id AS activityId,activity_title AS activityTitle,student_owner_id AS studentOwnerId,publisher_owner_id AS publisherOwnerId FROM activity_registrations WHERE id IN (${placeholders})`,
   )
-    .bind(body.registrationId)
-    .first()) as {
-    id: string;
-    activityId: string;
-    publisherOwnerId: string;
-  } | null;
-  if (!registration)
-    return Response.json({ error: "报名不存在" }, { status: 404 });
-  await env.DB.prepare(
-    "UPDATE activity_registrations SET publisher_owner_id=?,status=?,review_note=?,reviewed_at=CURRENT_TIMESTAMP WHERE id=?",
-  )
-    .bind(
-      publisher,
-      body.decision,
-      body.note?.trim() ||
-        (body.decision === "approved" ? "企业确认报名通过" : ""),
-      body.registrationId,
-    )
-    .run();
-  await env.DB.prepare(
-    "INSERT INTO audit_logs(actor_id,action,target_type,target_id) VALUES(?,?,'activity-registration',?)",
-  )
-    .bind(publisher, `registration-${body.decision}`, body.registrationId)
-    .run();
-  return Response.json({ ok: true, status: body.decision });
+    .bind(...ids)
+    .all<{
+      id: string;
+      activityId: string;
+      publisherOwnerId: string;
+      studentOwnerId: string;
+      activityTitle: string;
+    }>();
+  if (registrations.results.length !== ids.length)
+    return Response.json(
+      { error: "部分报名不存在，请刷新后重试" },
+      { status: 404 },
+    );
+  const unauthorized = registrations.results.some(
+    (registration) =>
+      registration.publisherOwnerId !== publisher &&
+      !(
+        publisher.startsWith("demo:") &&
+        registration.publisherOwnerId === "ja:seed"
+      ),
+  );
+  if (unauthorized)
+    return Response.json({ error: "无权审核其他企业的报名" }, { status: 403 });
+
+  const reviewNote =
+    body.note?.trim() ||
+    (body.decision === "approved" ? "企业确认报名通过" : "");
+  await env.DB.batch(
+    registrations.results.flatMap((registration) => [
+      env.DB.prepare(
+        "UPDATE activity_registrations SET status=?,review_note=?,reviewed_at=CURRENT_TIMESTAMP WHERE id=?",
+      ).bind(body.decision, reviewNote, registration.id),
+      env.DB.prepare(
+        "INSERT INTO audit_logs(actor_id,action,target_type,target_id) VALUES(?,?,'activity-registration',?)",
+      ).bind(publisher, `registration-${body.decision}`, registration.id),
+    ]),
+  );
+  await Promise.all(registrations.results.map((registration) => notify(registration.studentOwnerId, "registration-result", body.decision === "approved" ? "活动报名已通过" : "活动报名需要修改", `${registration.activityTitle}：${reviewNote}`, "/workspace?role=student&tab=activities")));
+  return Response.json({
+    ok: true,
+    status: body.decision,
+    updated: registrations.results.length,
+  });
 }
 
 export async function DELETE(request: Request) {
   await setup();
-  const student = await actor(request);
-  if (!student)
+  const identity = await getActor(request);
+  if (!identity)
     return Response.json({ error: "缺少报名身份" }, { status: 401 });
+  if (identity.role !== "student" && !identity.testMode)
+    return Response.json({ error: "仅学生账号可取消报名" }, { status: 403 });
+  const student = identity.id;
   const id = new URL(request.url).searchParams.get("activityId");
   if (!id) return Response.json({ error: "缺少活动" }, { status: 400 });
   const activityRows = await activities();
   const record = findActivity(activityRows, id);
+  const canonicalId = record?.id || id;
+  const existing = await env.DB.prepare(
+    "SELECT id,status FROM activity_registrations WHERE activity_id=? AND student_owner_id=?",
+  )
+    .bind(canonicalId, student)
+    .first<{ id: string; status: string }>();
+  if (!existing)
+    return Response.json({ error: "未找到该报名记录" }, { status: 404 });
+  if (existing.status === "approved")
+    return Response.json(
+      { error: "已通过的报名请联系活动发布方取消" },
+      { status: 409 },
+    );
   await env.DB.prepare(
     "DELETE FROM activity_registrations WHERE activity_id=? AND student_owner_id=?",
   )
-    .bind(record?.id || id, student)
+    .bind(canonicalId, student)
     .run();
+  await writeAudit(student, "cancel-registration", "activity-registration", existing.id);
   return Response.json({ ok: true });
 }

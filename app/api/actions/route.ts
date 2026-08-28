@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { headers } from "next/headers";
+import { getActor, writeAudit } from "../../../db/runtime";
 
 const setupStatements = [
   `CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('student','enterprise','admin')), status TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
@@ -11,15 +11,8 @@ const setupStatements = [
 ];
 
 async function setup(){await env.DB.batch(setupStatements.map(sql=>env.DB.prepare(sql)))}
-async function identity(request:Request){
-  const h=await headers(); const realId=h.get("oai-authenticated-user-id");
-  const local=new URL(request.url).hostname==="localhost"||new URL(request.url).hostname==="127.0.0.1";
-  const demo=request.headers.get("x-starlight-demo-id"); const demoId=demo&&/^[a-zA-Z0-9-]{8,80}$/.test(demo)?`demo:${demo}`:null;
-  return {id:realId??demoId??(local?"demo-preview-user":null),email:h.get("oai-authenticated-user-email")??"preview@ja.org.cn",name:"星光同学",local};
-}
-
 export async function GET(request:Request){
-  await setup(); const user=await identity(request); if(!user.id)return Response.json({signedIn:false,registrations:[]});
+  await setup(); const user=await getActor(request); if(!user)return Response.json({signedIn:false,registrations:[]},{status:401});
   const [regs,profile]=await env.DB.batch([
     env.DB.prepare("SELECT activity_id AS activityId,status,created_at AS createdAt FROM registrations WHERE user_id=? ORDER BY created_at DESC").bind(user.id),
     env.DB.prepare("SELECT id,email,name,role,status FROM users WHERE id=?").bind(user.id),
@@ -28,15 +21,14 @@ export async function GET(request:Request){
 }
 
 export async function POST(request:Request){
-  await setup(); const user=await identity(request); if(!user.id)return Response.json({error:"请先登录后继续"},{status:401});
+  await setup(); const user=await getActor(request); if(!user)return Response.json({error:"请先登录后继续"},{status:401});
+  if(user.role!=="student"&&!user.testMode)return Response.json({error:"仅学生账号可执行该操作"},{status:403});
   const body=await request.json() as {action?:string;targetId?:string;role?:string};
-  const safeRole=body.role==="enterprise"?"enterprise":"student";
-  await env.DB.prepare("INSERT INTO users(id,email,name,role,status) VALUES(?,?,?,?, 'active') ON CONFLICT(id) DO NOTHING").bind(user.id,user.email,user.name,safeRole).run();
   if(body.action==="register"&&body.targetId){
     await env.DB.prepare("INSERT INTO registrations(user_id,activity_id,status) VALUES(?,?,'registered') ON CONFLICT(user_id,activity_id) DO UPDATE SET status='registered'").bind(user.id,body.targetId).run();
   }else if(body.action==="cancel-registration"&&body.targetId){
     await env.DB.prepare("UPDATE registrations SET status='cancelled' WHERE user_id=? AND activity_id=?").bind(user.id,body.targetId).run();
   }else{return Response.json({error:"不支持的操作"},{status:400})}
-  await env.DB.prepare("INSERT INTO audit_logs(actor_id,action,target_type,target_id) VALUES(?,?,?,?)").bind(user.id,body.action,"activity",body.targetId??"").run();
+  await writeAudit(user.id,String(body.action||"unknown"),"activity",body.targetId??"");
   return Response.json({ok:true});
 }

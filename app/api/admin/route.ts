@@ -1,7 +1,8 @@
 import { env } from "cloudflare:workers";
-import { getChatGPTUser } from "../../chatgpt-auth";
+import { ensureCoreSchema, notify, requireAdmin } from "../../../db/runtime";
 
 async function setup() {
+  await ensureCoreSchema();
   await env.DB.batch([
     env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS workspace_records (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
@@ -35,32 +36,14 @@ async function setup() {
     );
   if (alters.length) await env.DB.batch(alters);
 }
-function allowed(email: string) {
-  const value =
-    (env as unknown as { JA_ADMIN_EMAILS?: string }).JA_ADMIN_EMAILS ?? "";
-  return value
-    .split(",")
-    .map((x) => x.trim().toLowerCase())
-    .filter(Boolean)
-    .includes(email.toLowerCase());
-}
-async function admin() {
-  const user = await getChatGPTUser();
-  if (user && allowed(user.email))
-    return { id: user.userId, email: user.email };
-  return {
-    id: "ja-public-test",
-    email: user?.email ?? "ja-testing@public.invalid",
-  };
-}
-export async function GET() {
+export async function GET(request: Request) {
   await setup();
-  const user = await admin();
-  if (!user.id)
+  const user = await requireAdmin(request);
+  if (!user)
     return Response.json({ error: "需要后台登录" }, { status: 401 });
-  const [records, logs, registrations] = await env.DB.batch([
+  const [records, logs, registrations, organizations] = await env.DB.batch([
     env.DB.prepare(
-      "SELECT id,owner_id AS ownerId,kind,payload,updated_at AS updatedAt FROM workspace_records ORDER BY updated_at DESC LIMIT 200",
+      "SELECT id,owner_id AS ownerId,kind,payload,version,updated_at AS updatedAt FROM workspace_records WHERE archived_at IS NULL ORDER BY updated_at DESC LIMIT 200",
     ),
     env.DB.prepare(
       "SELECT id,actor_id AS actorId,action,target_type AS targetType,target_id AS targetId,created_at AS createdAt FROM audit_logs ORDER BY created_at DESC LIMIT 200",
@@ -68,6 +51,7 @@ export async function GET() {
     env.DB.prepare(
       "SELECT id,activity_id AS activityId,activity_title AS activityTitle,answers,status,review_note AS reviewNote,reviewed_at AS reviewedAt,created_at AS createdAt FROM activity_registrations ORDER BY created_at DESC LIMIT 500",
     ),
+    env.DB.prepare("SELECT id,owner_id AS ownerId,name,credit_code AS creditCode,verification_status AS verificationStatus,verified_at AS verifiedAt,created_at AS createdAt,updated_at AS updatedAt FROM organizations ORDER BY updated_at DESC LIMIT 200"),
   ]);
   return Response.json({
     operator: user.email,
@@ -81,84 +65,157 @@ export async function GET() {
       answers: JSON.parse(String(r.answers)),
       status: r.status === "registered" ? "pending" : r.status,
     })),
+    organizations: organizations.results,
   });
 }
 export async function POST(request: Request) {
   await setup();
-  const user = await admin();
-  if (!user.id)
+  const user = await requireAdmin(request);
+  if (!user)
     return Response.json(
       { error: "需要后台登录或管理员权限" },
       { status: 401 },
     );
   const body = (await request.json()) as {
     id?: string;
+    ids?: string[];
+    action?: "configure" | "verify-organization";
+    organizationId?: string;
     decision?: "approved" | "rejected";
     reason?: string;
     sortOrder?: number | string;
     category?: string;
     featured?: boolean;
   };
-  if (!body.id || !body.decision)
+  if (body.action === "verify-organization") {
+    if (!body.organizationId || !["approved", "rejected"].includes(String(body.decision)))
+      return Response.json({ error: "缺少企业认证决定" }, { status: 400 });
+    if (body.decision === "rejected" && !body.reason?.trim())
+      return Response.json({ error: "退回企业认证时必须填写原因" }, { status: 400 });
+    const organization = await env.DB.prepare("SELECT owner_id AS ownerId,name FROM organizations WHERE id=?").bind(body.organizationId).first<{ ownerId: string; name: string }>();
+    if (!organization) return Response.json({ error: "企业认证申请不存在" }, { status: 404 });
+    const result = await env.DB.prepare("UPDATE organizations SET verification_status=?,verified_by=?,verified_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(body.decision === "approved" ? "verified" : "rejected", user.id, body.organizationId).run();
+    if (!result.meta.changes) return Response.json({ error: "企业认证申请不存在" }, { status: 404 });
+    await env.DB.prepare("INSERT INTO audit_logs(actor_id,action,target_type,target_id) VALUES(?,?,'organization',?)").bind(user.id, body.decision === "approved" ? "verify-organization" : "reject-organization", body.organizationId).run();
+    await notify(organization.ownerId, "organization-verification", body.decision === "approved" ? "企业主体认证已通过" : "企业主体认证需要补充材料", body.decision === "approved" ? `${organization.name} 已获得平台企业发布权限。` : String(body.reason || "请补充企业认证材料。"), "/workspace?role=enterprise&tab=profile");
+    return Response.json({ ok: true });
+  }
+  const ids = Array.from(
+    new Set(
+      (Array.isArray(body.ids) ? body.ids : body.id ? [body.id] : [])
+        .map((id) => String(id).trim())
+        .filter(Boolean),
+    ),
+  );
+  const configuring = body.action === "configure";
+  if (!ids.length || (!configuring && !body.decision))
     return Response.json({ error: "缺少审核信息" }, { status: 400 });
-  if (body.decision === "rejected" && !body.reason?.trim())
+  if (configuring && ids.length !== 1)
+    return Response.json({ error: "展示设置仅支持逐条保存" }, { status: 400 });
+  if (ids.length > 100)
+    return Response.json({ error: "单次最多审核 100 条内容" }, { status: 400 });
+  if (!configuring && body.decision === "rejected" && !body.reason?.trim())
     return Response.json({ error: "退回时必须填写修改意见" }, { status: 400 });
-  const row = await env.DB.prepare(
-    "SELECT kind,payload FROM workspace_records WHERE id=?",
+  const placeholders = ids.map(() => "?").join(",");
+  const result = await env.DB.prepare(
+    `SELECT id,owner_id AS ownerId,kind,payload FROM workspace_records WHERE archived_at IS NULL AND id IN (${placeholders})`,
   )
-    .bind(body.id)
-    .first();
-  if (!row) return Response.json({ error: "内容不存在" }, { status: 404 });
-  if (!["activity", "content"].includes(String(row.kind)))
+    .bind(...ids)
+    .all();
+  if (result.results.length !== ids.length)
+    return Response.json({ error: "部分内容不存在，请刷新审核队列" }, { status: 404 });
+  const rows = result.results.map((row) => ({
+    ...row,
+    id: String(row.id),
+    ownerId: String(row.ownerId || ""),
+    kind: String(row.kind),
+    current: JSON.parse(String(row.payload)) as Record<string, unknown>,
+  }));
+  const unsupported = rows.find(
+    (row) =>
+      configuring
+        ? !["job", "activity", "content"].includes(row.kind)
+        : !["activity", "content"].includes(row.kind) ||
+          (row.kind === "content" && row.ownerId.startsWith("ja:")),
+  );
+  if (unsupported)
     return Response.json(
-      { error: "当前 JA 测试端只审核活动和内容" },
+      { error: "JA 仅审核 JA 活动、企业活动和企业内容" },
       { status: 400 },
     );
-  const current = JSON.parse(String(row.payload));
-  const payload = {
-    ...current,
-    region: current.region || "湖南",
-    sortOrder: Number(body.sortOrder ?? current.sortOrder ?? 0) || 0,
-    featured: Boolean(body.featured ?? current.featured),
-    reviewStatus: body.decision,
-    reviewNote:
-      body.reason?.trim() ||
-      (body.decision === "approved" ? "信息完整，JA 审核通过" : ""),
-    reviewedAt: new Date().toISOString(),
-    reviewedBy: user.email,
-    status:
-      body.decision === "approved"
-        ? String(row.kind) === "job"
-          ? "招募中"
-          : "已发布"
-        : "已退回",
-  };
-  if (body.category) {
-    if (String(row.kind) === "job") payload.jobCategory = body.category;
-    else payload.category = body.category;
-  }
-  await env.DB.prepare(
-    "UPDATE workspace_records SET payload=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
-  )
-    .bind(JSON.stringify(payload), body.id)
-    .run();
-  await env.DB.prepare(
-    "INSERT INTO audit_logs(actor_id,action,target_type,target_id) VALUES(?,?,'review',?)",
-  )
-    .bind(user.id, body.decision, body.id)
-    .run();
-  return Response.json({ ok: true, reviewStatus: body.decision });
+  const alreadyReviewed = !configuring && rows.find(
+    (row) =>
+      row.current.reviewStatus && row.current.reviewStatus !== "pending",
+  );
+  if (alreadyReviewed)
+    return Response.json(
+      { error: "队列中包含已处理内容，请刷新后重试" },
+      { status: 409 },
+    );
+  const reviewedAt = new Date().toISOString();
+  const statements = rows.flatMap((row) => {
+    const single = rows.length === 1;
+    const payload: Record<string, unknown> = {
+      ...row.current,
+      region: row.current.region || "湖南",
+      sortOrder:
+        Number(single ? body.sortOrder ?? row.current.sortOrder ?? 0 : row.current.sortOrder ?? 0) || 0,
+      featured: single
+        ? Boolean(body.featured ?? row.current.featured)
+        : Boolean(row.current.featured),
+      reviewStatus: configuring ? row.current.reviewStatus : body.decision,
+      reviewNote: configuring
+        ? row.current.reviewNote
+        : body.reason?.trim() ||
+          (body.decision === "approved" ? "信息完整，JA 审核通过" : ""),
+      reviewedAt: configuring ? row.current.reviewedAt : reviewedAt,
+      reviewedBy: configuring ? row.current.reviewedBy : user.email,
+      status: configuring
+        ? row.current.status
+        : body.decision === "approved"
+          ? "已发布"
+          : "已退回",
+    };
+    if (single && body.category) {
+      if (row.kind === "job") payload.jobCategory = body.category;
+      else payload.category = body.category;
+    }
+    return [
+      env.DB.prepare(
+        "UPDATE workspace_records SET payload=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+      ).bind(JSON.stringify(payload), row.id),
+      env.DB.prepare(
+        "INSERT INTO audit_logs(actor_id,action,target_type,target_id) VALUES(?,?,?,?)",
+      ).bind(
+        user.id,
+        configuring
+          ? "configure-publication"
+          : rows.length > 1
+            ? `batch-${body.decision}`
+            : body.decision,
+        configuring ? `publication:${row.kind}` : `review:${row.kind}`,
+        row.id,
+      ),
+    ];
+  });
+  await env.DB.batch(statements);
+  return Response.json({
+    ok: true,
+    count: rows.length,
+    reviewStatus: configuring ? rows[0].current.reviewStatus : body.decision,
+  });
 }
 
 export async function PUT(request: Request) {
   await setup();
-  const user = await admin();
-  if (!user.id)
+  const user = await requireAdmin(request);
+  if (!user)
     return Response.json(
       { error: "需要后台登录或管理员权限" },
       { status: 401 },
     );
   const body = (await request.json()) as {
+    id?: string;
     kind?: "activity" | "content" | "blacklist";
     payload?: Record<string, unknown>;
   };
@@ -173,7 +230,16 @@ export async function PUT(request: Request) {
     !String(body.payload.summary || "").trim()
   )
     return Response.json({ error: "请填写标题与简介" }, { status: 400 });
-  const id = crypto.randomUUID();
+  const id = body.id && /^[a-zA-Z0-9-]{4,100}$/.test(body.id)
+    ? body.id
+    : crypto.randomUUID();
+  if (body.id) {
+    const existing = await env.DB.prepare(
+      "SELECT kind FROM workspace_records WHERE id=?",
+    ).bind(id).first<{ kind: string }>();
+    if (!existing || existing.kind !== "blacklist" || body.kind !== "blacklist")
+      return Response.json({ error: "只能更新已有诚信记录" }, { status: 403 });
+  }
   const now = new Date().toISOString();
   const needsInternalReview = body.kind === "activity";
   const payload = {
@@ -207,16 +273,18 @@ export async function PUT(request: Request) {
   if (json.length > 80000)
     return Response.json({ error: "内容过长" }, { status: 400 });
   await env.DB.prepare(
-    "INSERT INTO workspace_records(id,owner_id,kind,payload,updated_at) VALUES(?,?,?,?,CURRENT_TIMESTAMP)",
-  )
-    .bind(id, `ja:${user.id}`, body.kind, json)
-    .run();
+    "INSERT INTO workspace_records(id,owner_id,kind,payload,updated_at) VALUES(?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,updated_at=CURRENT_TIMESTAMP",
+  ).bind(id, `ja:${user.id}`, body.kind, json).run();
   await env.DB.prepare(
     "INSERT INTO audit_logs(actor_id,action,target_type,target_id) VALUES(?,?,?,?)",
   )
     .bind(
       user.id,
-      needsInternalReview ? "submit-ja-activity-review" : "direct-publish",
+      body.id
+        ? "update-integrity"
+        : needsInternalReview
+          ? "submit-ja-activity-review"
+          : "direct-publish",
       body.kind,
       id,
     )

@@ -1,4 +1,15 @@
-/* eslint-disable @next/next/no-html-link-for-pages, @next/next/no-img-element */
-import {contents} from "../data";
-const categories=["全部内容","技能成长","活动分享","企业曝光","职业探索","简历面试","公益实践"];
-export default function Content(){return <main className="public-page"><header className="public-nav"><a className="brand" href="/"><span>JA</span><b>Star Plan 星光计划</b></a><nav><a href="/opportunities">实习 / 项目机会</a><a href="/#events">成长活动</a><a className="active" href="/content">成长内容</a></nav><a className="button small" href="/workspace?role=student">进入平台</a></header><section className="public-hero content-hero"><p className="eyebrow">LEARNING CENTER</p><h1>把未知，变成<br/><em>可以行动的下一步。</em></h1><p>来自企业伙伴与专业导师的职业准备内容，围绕技能成长、活动分享、企业曝光和公益实践持续更新。</p></section><section className="public-list visual-content-list"><div className="topic-tabs">{categories.map((item,index)=>index===0?<b key={item}>{item}</b>:<span key={item}>{item}</span>)}</div><div className="public-media-grid">{contents.map(c=><article key={c.id}><div className="public-media-cover"><img src={c.cover} alt={c.title}/><span>{c.mediaType==="video"?"▶ 视频":"▤ 图文"}</span></div><small>{c.category} · {c.level} · {c.duration}</small><h2>{c.title}</h2><p>{c.summary}</p><a href="/workspace?role=student">打开内容 →</a></article>)}</div></section></main>}
+import ContentCatalog from "./ContentCatalog";
+import Link from "next/link";
+
+export default function Content() {
+  return (
+    <main className="public-page">
+      <header className="public-nav">
+        <Link className="brand" href="/"><span>JA</span><b>Star Plan 星光计划</b></Link>
+        <nav><Link href="/opportunities">实习 / 项目机会</Link><Link href="/#events">成长活动</Link><Link className="active" href="/content">成长内容</Link></nav>
+        <Link className="button small" href="/workspace?role=student">进入平台</Link>
+      </header>
+      <ContentCatalog />
+    </main>
+  );
+}

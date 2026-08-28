@@ -1,7 +1,20 @@
-/* eslint-disable @next/next/no-html-link-for-pages, @next/next/no-img-element */
-import type {Metadata} from "next";
-import {jobs} from "../../data";
+import type { Metadata } from "next";
+import { jobs } from "../../data";
+import DynamicJobDetail from "./DynamicJobDetail";
+import JobDetailView from "./JobDetailView";
 
-function findJob(id:string){return jobs.find(j=>j.id===id)||jobs[Number(id)-1]}
-export async function generateMetadata({params}:{params:Promise<{id:string}>}):Promise<Metadata>{const {id}=await params;const job=findJob(id);if(!job)return {title:"岗位已下线",description:"该岗位不存在或已经下线。",openGraph:{title:"岗位已下线",description:"该岗位不存在或已经下线。",images:[]},twitter:{title:"岗位已下线",description:"该岗位不存在或已经下线。",images:[]}};const title=`${job.company}｜${job.title}`;return {title,description:job.summary,openGraph:{title,description:job.summary,images:[]},twitter:{title,description:job.summary,images:[]}}}
-export default async function JobDetail({params}:{params:Promise<{id:string}>}){const {id}=await params;const job=findJob(id);if(!job)return <main className="detail-page"><a href="/opportunities">← 返回机会列表</a><h1>机会不存在或已下线</h1></main>;const subject=encodeURIComponent(`应聘${job.title}｜来自 JA Star Plan 星光计划`);return <main className="detail-page"><header><a className="brand" href="/"><span>JA</span><b>Star Plan 星光计划</b></a><a href="/opportunities">← 返回湖南机会列表</a></header><section className="detail-head direct"><div className="public-company-logo" style={{background:job.logoUrl?"white":job.color}}>{job.logoUrl?<img src={job.logoUrl} alt={`${job.company} logo`}/>:job.logo}</div><div><span className="status">{job.jobCategory}</span><h1>{job.company}</h1><h2>{job.title}</h2><p>{job.city} · {job.mode} · {job.duration}</p></div><a className="primary-btn" href={`mailto:${job.contactEmail}?subject=${subject}`}>通过邮箱投递简历</a></section><div className="detail-grid"><article><h2>机会简介</h2><p>{job.summary}</p><h2>职责 / 项目说明</h2><ol>{job.responsibilities.map(x=><li key={x}>{x}</li>)}</ol><h2>能力要求</h2><ul>{job.requirements.map(x=><li key={x}>{x}</li>)}</ul><h2>你将获得</h2><div className="benefits">{job.benefits.map(x=><span key={x}>✓ {x}</span>)}</div></article><aside><b>机会信息</b><p><span>公司</span>{job.company}</p><p><span>机会类别</span>{job.jobCategory}</p><p><span>所在区域</span>{job.city}</p><p><span>工作方式</span>{job.mode}</p><p><span>实践周期</span>{job.duration}</p><div className="detail-email"><small>简历接收邮箱</small><a href={`mailto:${job.contactEmail}?subject=${subject}`}>{job.contactEmail}</a></div><p className="privacy-note">请自行在邮件中附上简历。平台不读取邮件、不代投递，也不会提供企业与学生的站内聊天。</p></aside></div></main>}
+function findStaticJob(id: string) {
+  return jobs.find((job) => job.id === id) || jobs[Number(id) - 1];
+}
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const job = findStaticJob(id);
+  if (!job) return { title: "机会详情｜JA Star Plan", description: "查看企业发布的实习项目机会。" };
+  const title = `${job.company}｜${job.title}`;
+  return { title, description: job.summary, openGraph: { title, description: job.summary, images: [] }, twitter: { title, description: job.summary, images: [] } };
+}
+export default async function JobDetail({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const job = findStaticJob(id);
+  return job ? <JobDetailView job={job} /> : <DynamicJobDetail id={id} />;
+}
