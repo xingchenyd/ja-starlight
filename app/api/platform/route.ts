@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { ensureCoreSchema, getActor, writeAudit } from "../../../db/runtime";
+import { ensureCoreSchema, getActor, requireVerifiedEnterprise, writeAudit } from "../../../db/runtime";
 function clean(value: unknown) {
   const text = JSON.stringify(value);
   if (text.length > 80000) throw new Error("内容过长");
@@ -67,9 +67,8 @@ export async function POST(request: Request) {
   const isPublicRecord = ["job", "activity", "content"].includes(body.kind);
   const isDraft = isPublicRecord && payload.reviewStatus === "draft";
   if (isPublicRecord && !isDraft && !identity.testMode) {
-    const organization = await env.DB.prepare("SELECT verification_status AS verificationStatus FROM organizations WHERE owner_id=?").bind(owner).first<{ verificationStatus: string }>();
-    if (organization?.verificationStatus !== "verified")
-      return Response.json({ error: "企业资料通过 JA 主体认证后才能正式发布内容；你仍可保存草稿" }, { status: 403 });
+    const verification = await requireVerifiedEnterprise(request);
+    if (verification.response) return verification.response;
   }
 
   if (body.kind === "job") {

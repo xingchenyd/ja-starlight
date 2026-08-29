@@ -298,9 +298,7 @@ export default function PlatformApp({
         <div className="side-help contact-only">
           <a href="mailto:support@jachina.org">联系项目团队 →</a>
         </div>
-        <a className="back" href="/">
-          ← 返回主页
-        </a>
+        <button className="back" onClick={async () => { await fetch("/api/auth/logout", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ role }) }); location.assign("/"); }}>退出登录</button>
       </aside>
       <div className="work">
         <header className="topbar fixed-workspace-title">

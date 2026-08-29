@@ -15,7 +15,7 @@ export default function Home() {
       <nav className="nav shell">
         <a className="brand brand-official" href="#top" aria-label="JA 星光计划首页"><img src="/media/ja-china-logo.jpg" alt="JA China"/><b>Star Plan 星光计划</b></a>
         <div className="navlinks"><a href="#jobs">实习 / 项目机会</a><a href="#events">成长活动</a><a href="#content">成长内容</a></div>
-        <div className="actions"><a className="text-link" href="/workspace?role=enterprise">企业发布入口</a><a className="button small" href="/workspace?role=student">学生进入</a></div>
+        <div className="actions"><a className="text-link" href="/auth/enterprise">企业登录</a><a className="button small" href="/auth/student">学生登录</a></div>
       </nav>
 
       <section className="hero shell" id="top">

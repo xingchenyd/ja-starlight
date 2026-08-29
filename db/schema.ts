@@ -7,6 +7,31 @@ export const users = sqliteTable("users", {
   status: text("status").notNull().default("active"), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [index("idx_users_role_status").on(table.role, table.status)]);
+
+export const passwordCredentials = sqliteTable("password_credentials", {
+  userId: text("user_id").primaryKey(), algorithm: text("algorithm").notNull(), version: integer("version").notNull(),
+  iterations: integer("iterations").notNull(), salt: text("salt").notNull(), passwordHash: text("password_hash").notNull(),
+  passwordChangedAt: text("password_changed_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+export const authSessions = sqliteTable("auth_sessions", {
+  id: text("id").primaryKey(), subjectType: text("subject_type").notNull(), subjectId: text("subject_id").notNull(), tokenHash: text("token_hash").notNull(),
+  expiresAt: text("expires_at").notNull(), lastSeenAt: text("last_seen_at").notNull().default(sql`CURRENT_TIMESTAMP`), revokedAt: text("revoked_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [uniqueIndex("idx_auth_sessions_token").on(table.tokenHash), index("idx_auth_sessions_subject").on(table.subjectType, table.subjectId, table.expiresAt)]);
+export const passwordResetChallenges = sqliteTable("password_reset_challenges", {
+  id: text("id").primaryKey(), userId: text("user_id").notNull(), codeHash: text("code_hash").notNull(), proofHash: text("proof_hash"),
+  expiresAt: text("expires_at").notNull(), attempts: integer("attempts").notNull().default(0), verifiedAt: text("verified_at"), consumedAt: text("consumed_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("idx_password_reset_user").on(table.userId, table.createdAt)]);
+export const adminCredentials = sqliteTable("admin_credentials", {
+  id: text("id").primaryKey(), label: text("label").notNull(), keyPrefix: text("key_prefix").notNull(), secretHash: text("secret_hash").notNull(),
+  status: text("status").notNull().default("active"), lastUsedAt: text("last_used_at"), createdBy: text("created_by").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`), revokedAt: text("revoked_at"),
+}, (table) => [uniqueIndex("idx_admin_credentials_hash").on(table.secretHash)]);
+export const authRateLimits = sqliteTable("auth_rate_limits", {
+  scopeKey: text("scope_key").primaryKey(), attempts: integer("attempts").notNull().default(0), windowStartedAt: text("window_started_at").notNull(),
+  blockedUntil: text("blocked_until"), updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
 export const applications = sqliteTable("applications", {
   id: integer("id").primaryKey({ autoIncrement: true }), userId: text("user_id").notNull(),
   jobId: text("job_id").notNull(), status: text("status").notNull().default("submitted"),

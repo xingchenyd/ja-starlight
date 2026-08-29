@@ -29,6 +29,18 @@ test("public home renders JA Star Plan proposition and media carousel", async ()
   assert.match(html, /正在发生的成长故事/);
   assert.match(html, /ja-china-logo\.jpg/);
   assert.match(html, /实习 \/ 项目机会/);
+  assert.match(html, /\/auth\/student/);
+  assert.match(html, /\/auth\/enterprise/);
+});
+test("native account and JA key login pages render as complete branded flows", async () => {
+  const [student, enterprise, recovery, admin] = await Promise.all([
+    page("/auth/student"), page("/auth/enterprise"), page("/auth/forgot-password"), page("/ja-login"),
+  ]);
+  for (const response of [student, enterprise, recovery, admin]) assert.equal(response.status, 200);
+  assert.match(await student.text(), /学生空间/);
+  assert.match(await enterprise.text(), /企业工作台/);
+  assert.match(await recovery.text(), /找回密码/);
+  assert.match(await admin.text(), /管理密钥/);
 });
 test("student workspace uses formal student navigation without role switching", async () => {
   const response = await page("/workspace?role=student");

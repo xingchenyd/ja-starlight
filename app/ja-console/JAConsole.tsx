@@ -401,6 +401,8 @@ export default function JAConsole({ operator }: { operator: string }) {
               ? "互动管理"
             : tab === "integrity"
               ? "诚信管理"
+              : tab === "keys"
+                ? "密钥管理"
               : "审计日志";
   const description =
     tab === "pulse"
@@ -417,6 +419,8 @@ export default function JAConsole({ operator }: { operator: string }) {
               ? "集中回应学生对成长内容的提问，并处理不适合公开的评论。"
             : tab === "integrity"
               ? "记录虚假信息、失约或其他诚信风险，后续可接入账号限制。"
+              : tab === "keys"
+                ? "创建、停用与撤销 JA 管理密钥；新密钥仅在创建时显示一次。"
               : "记录后台的重要操作，便于追踪审核与发布过程。";
   return (
     <main className="ja-console platform v2 ja-platform">
@@ -471,11 +475,12 @@ export default function JAConsole({ operator }: { operator: string }) {
           >
             <span>◷</span>审计日志
           </button>
+          <button className={tab === "keys" ? "active" : ""} onClick={() => setTab("keys")}>
+            <span>⌁</span>密钥管理
+          </button>
         </nav>
         <div className="side-help"><b>安全后台</b><p>企业认证、内容审核和操作日志均按管理员身份记录。</p></div>
-        <a className="back" href="/signout-with-chatgpt?return_to=/">
-          退出后台
-        </a>
+        <button className="back" onClick={async () => { await fetch("/api/admin-auth/logout", { method: "POST" }); location.assign("/"); }}>退出后台</button>
       </aside>
       <div className="work">
         <header className="topbar">
@@ -550,6 +555,7 @@ export default function JAConsole({ operator }: { operator: string }) {
             {tab === "audit" && (
               <AuditLogDesk logs={logs} />
             )}
+            {tab === "keys" && <SecurityKeys onNotice={setNotice} />}
           </div>
         </section>
       </div>
@@ -569,6 +575,24 @@ export default function JAConsole({ operator }: { operator: string }) {
       )}
     </main>
   );
+}
+
+type AdminKeyItem = { id: string; label: string; key_prefix: string; status: string; last_used_at?: string | null; created_at: string };
+function SecurityKeys({ onNotice }: { onNotice: (message: string) => void }) {
+  const [items, setItems] = useState<AdminKeyItem[]>([]), [label, setLabel] = useState(""), [createdKey, setCreatedKey] = useState(""), [loading, setLoading] = useState(true);
+  const loadKeys = async () => { setLoading(true); const response = await fetch("/api/admin-auth/keys"); const data = await response.json(); setLoading(false); if (response.ok) setItems(data.keys || []); else onNotice(data.error || "密钥列表读取失败"); };
+  useEffect(() => {
+    let active = true;
+    fetch("/api/admin-auth/keys").then(async (response) => ({ response, data: await response.json() })).then(({ response, data }) => {
+      if (!active) return;
+      if (response.ok) setItems(data.keys || []);
+      setLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
+  const create = async () => { const response = await fetch("/api/admin-auth/keys", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ label }) }); const data = await response.json(); if (!response.ok) return onNotice(data.error || "密钥创建失败"); setCreatedKey(data.rawKey); setLabel(""); onNotice("新密钥已创建，请立即安全保存"); await loadKeys(); };
+  const act = async (id: string, action: "disable" | "restore" | "revoke") => { const response = await fetch(`/api/admin-auth/keys/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action }) }); const data = await response.json(); if (!response.ok) return onNotice(data.error || "密钥状态更新失败"); onNotice(action === "revoke" ? "密钥已永久撤销" : action === "disable" ? "密钥已停用" : "密钥已恢复"); await loadKeys(); };
+  return <section className="admin-key-console"><div className="admin-key-create"><div><small>CREATE ADMIN CREDENTIAL</small><h2>创建管理密钥</h2><p>为每位管理员单独命名，便于追踪审核操作和停用权限。</p></div><label>密钥名称<input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="例如：长沙项目负责人" maxLength={60}/></label><button onClick={create} disabled={label.trim().length < 2}>生成新密钥</button></div>{createdKey && <div className="admin-key-once" role="alert"><b>仅展示一次，请立即复制并保存</b><code>{createdKey}</code><button onClick={() => navigator.clipboard.writeText(createdKey)}>复制密钥</button></div>}<div className="admin-key-list"><header><b>现有密钥</b><span>{items.filter((item) => item.status === "active").length} 个有效</span></header>{loading ? <p>正在读取…</p> : items.map((item) => <article key={item.id}><div><span className={`key-state ${item.status}`}>{item.status === "active" ? "有效" : item.status === "disabled" ? "已停用" : "已撤销"}</span><h3>{item.label}</h3><code>{item.key_prefix}••••••</code><small>创建：{new Date(item.created_at).toLocaleString("zh-CN")} · 最近使用：{item.last_used_at ? new Date(item.last_used_at).toLocaleString("zh-CN") : "从未"}</small></div><div>{item.status === "active" && <button onClick={() => act(item.id, "disable")}>停用</button>}{item.status === "disabled" && <button onClick={() => act(item.id, "restore")}>恢复</button>}{item.status !== "revoked" && <button className="danger" onClick={() => confirm("撤销后无法恢复，确认继续？") && act(item.id, "revoke")}>撤销</button>}</div></article>)}</div></section>;
 }
 
 function OrganizationVerification({ items, onUpdated, onNotice }: { items: Organization[]; onUpdated: () => Promise<void>; onNotice: (message: string) => void }) {

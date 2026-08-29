@@ -1,0 +1,7 @@
+"use client";
+import { FormEvent, useState } from "react";
+export default function JALoginPanel() {
+  const [busy, setBusy] = useState(false), [error, setError] = useState(""), [show, setShow] = useState(false);
+  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setBusy(true); setError(""); const key = String(new FormData(event.currentTarget).get("key") || ""); try { const response = await fetch("/api/admin-auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key }) }); const result = await response.json() as { error?: string }; if (!response.ok) throw new Error(result.error || "密钥验证失败"); location.assign("/ja-console"); } catch (reason) { setError(reason instanceof Error ? reason.message : "密钥验证失败"); } finally { setBusy(false); } }
+  return <div className="auth-card ja-auth-card"><header><small>JA OPERATIONS</small><h2>运营后台</h2><p>仅限获授权的 JA 项目管理员</p></header><form onSubmit={submit}><label><span>管理密钥</span><div className="auth-password"><input name="key" type={show ? "text" : "password"} autoComplete="current-password" placeholder="输入完整管理密钥" minLength={24} required/><button type="button" onClick={() => setShow(!show)}>{show ? "隐藏" : "显示"}</button></div></label>{error && <p className="auth-error" role="alert">{error}</p>}<button className="auth-submit" disabled={busy}>{busy ? "正在验证…" : "验证密钥并进入"}</button></form><footer>管理操作全程记录审计日志 · 会话有效期 4 小时</footer></div>;
+}
