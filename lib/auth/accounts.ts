@@ -29,7 +29,7 @@ const passwordOf = (value: unknown) => {
   if (!validatePassword(password).valid) throw new AuthServiceError("WEAK_PASSWORD", "密码须为 8-20 位，仅使用英文字母、数字和符号，且不能包含空格");
   return password;
 };
-const credentialFrom = (row: { algorithm: string; version: number; iterations: number; salt: string; password_hash: string }): PasswordCredential => ({ algorithm: row.algorithm as "pbkdf2-sha256", version: row.version, iterations: row.iterations, salt: row.salt, hash: row.password_hash });
+const credentialFrom = (row: { algorithm: string; version: number; iterations: number; salt: string; password_hash: string }): PasswordCredential => ({ algorithm: row.algorithm as PasswordCredential["algorithm"], version: row.version, iterations: row.iterations, salt: row.salt, hash: row.password_hash });
 const secure = (request: Request) => new URL(request.url).protocol === "https:";
 
 async function rateLimit(db: AuthDatabase, request: Request, scope: string, identity: string, success = false) {

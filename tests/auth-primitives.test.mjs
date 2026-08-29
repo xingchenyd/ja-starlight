@@ -28,6 +28,13 @@ test("password and opaque-token hashing are deterministic only with their secret
   assert.equal(await hashOpaqueToken("token", "pepper"), await hashOpaqueToken("token", "pepper"));
 });
 
+test("password derivation splits work into runtime-compatible 100k rounds", async () => {
+  const credential = await hashPassword("Str0ng!Pass", "pepper-value", { iterations: 100_001 });
+  assert.equal(credential.algorithm, "pbkdf2-sha256-chain");
+  assert.equal(credential.iterations, 100_001);
+  assert.equal(await verifyPassword("Str0ng!Pass", "pepper-value", credential), true);
+});
+
 test("return paths stay inside this application", () => {
   assert.equal(safeReturnTo("/workspace?role=student"), "/workspace?role=student");
   assert.equal(safeReturnTo("https://evil.example/"), "/");

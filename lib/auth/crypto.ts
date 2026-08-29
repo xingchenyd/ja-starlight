@@ -1,5 +1,5 @@
 export type PasswordCredential = {
-  algorithm: "pbkdf2-sha256";
+  algorithm: "pbkdf2-sha256" | "pbkdf2-sha256-chain";
   version: number;
   iterations: number;
   salt: string;
@@ -41,13 +41,26 @@ export function validatePassword(value: unknown) {
 export async function hashPassword(password: string, pepper: string, options: { iterations?: number; salt?: string } = {}): Promise<PasswordCredential> {
   const iterations = options.iterations || 600_000;
   const salt = options.salt ? fromBase64url(options.salt) : crypto.getRandomValues(new Uint8Array(16));
-  const key = await crypto.subtle.importKey("raw", encoder.encode(`${password}\u0000${pepper}`), "PBKDF2", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", iterations, salt }, key, 256);
-  return { algorithm: "pbkdf2-sha256", version: 1, iterations, salt: base64url(salt), hash: base64url(new Uint8Array(bits)) };
+  let material = encoder.encode(`${password}\u0000${pepper}`), remaining = iterations, round = 0;
+  while (remaining > 0) {
+    const roundIterations = Math.min(100_000, remaining), roundSalt = new Uint8Array(salt.length + 4);
+    roundSalt.set(salt); new DataView(roundSalt.buffer).setUint32(salt.length, round);
+    const key = await crypto.subtle.importKey("raw", material, "PBKDF2", false, ["deriveBits"]);
+    material = new Uint8Array(await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", iterations: roundIterations, salt: roundSalt }, key, 256));
+    remaining -= roundIterations; round += 1;
+  }
+  return { algorithm: "pbkdf2-sha256-chain", version: 1, iterations, salt: base64url(salt), hash: base64url(material) };
 }
 
 export async function verifyPassword(password: string, pepper: string, credential: PasswordCredential) {
-  if (credential.algorithm !== "pbkdf2-sha256" || credential.version !== 1) return false;
+  if (credential.version !== 1 || credential.iterations < 10_000 || credential.iterations > 1_000_000) return false;
+  if (credential.algorithm === "pbkdf2-sha256") {
+    if (credential.iterations > 100_000) return false;
+    const salt = fromBase64url(credential.salt), key = await crypto.subtle.importKey("raw", encoder.encode(`${password}\u0000${pepper}`), "PBKDF2", false, ["deriveBits"]);
+    const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", iterations: credential.iterations, salt }, key, 256);
+    return secureEqual(base64url(new Uint8Array(bits)), credential.hash);
+  }
+  if (credential.algorithm !== "pbkdf2-sha256-chain") return false;
   const candidate = await hashPassword(password, pepper, { iterations: credential.iterations, salt: credential.salt });
   return secureEqual(candidate.hash, credential.hash);
 }
