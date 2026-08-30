@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { PageTransition, runViewTransition, type TransitionDirection } from "../components/motion";
 import { ToastProvider, useToast } from "../components/ui";
+import StudentOverviewView from "./student/StudentOverview";
+import { useStudentData, type StudentFavorite, type StudentPrivateData } from "./student/useStudentData";
 import {
   normalizeWorkspaceRoute,
   workspaceLocation,
@@ -211,10 +213,12 @@ function PlatformWorkspace({
     [tab, setActiveTab] = useState(
       () => normalizeWorkspaceRoute(initialRole, initialTab).tab,
     ),
+    [item, setItem] = useState(initialItem),
     [direction, setDirection] = useState<TransitionDirection>("none"),
     [records, setRecords] = useState<StoredRecord[]>([]),
     [catalog, setCatalog] = useState<StoredRecord[]>([]),
     [ready, setReady] = useState(false);
+  const studentPrivate = useStudentData(role === "student");
   const scrollPositions = useRef(new Map<string, number>());
   const navigationPending = useRef(false);
   const tabOrder = useMemo(() => nav[role].map(([id]) => id), [role]);
@@ -224,31 +228,35 @@ function PlatformWorkspace({
     [tabOrder],
   );
   const navigate = useCallback(
-    (nextTab: string) => {
+    (nextTab: string, nextItem?: string) => {
       const next = normalizeWorkspaceRoute(role, nextTab).tab;
-      if (next === tab) return;
+      if (next === tab && nextItem === item) return;
       scrollPositions.current.set(tab, window.scrollY);
       navigationPending.current = true;
       setDirection(directionFor(tab, next));
       runViewTransition(() => {
-        window.history.pushState({ role, tab: next }, "", workspacePath(role, next));
+        window.history.pushState({ role, tab: next, item: nextItem }, "", workspacePath(role, next, nextItem));
         setActiveTab(next);
+        setItem(nextItem);
       });
     },
-    [directionFor, role, tab],
+    [directionFor, item, role, tab],
   );
   useEffect(() => {
     const onPopState = () => {
       const next = workspaceLocation(window.location.pathname, window.location.search);
-      if (next.role !== role || next.tab === tab) return;
+      if (next.role !== role || (next.tab === tab && next.item === item)) return;
       scrollPositions.current.set(tab, window.scrollY);
       navigationPending.current = true;
       setDirection(directionFor(tab, next.tab));
-      runViewTransition(() => setActiveTab(next.tab));
+      runViewTransition(() => {
+        setActiveTab(next.tab);
+        setItem(next.item);
+      });
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [directionFor, role, tab]);
+  }, [directionFor, item, role, tab]);
   useEffect(() => {
     if (!navigationPending.current) return;
     navigationPending.current = false;
@@ -386,20 +394,25 @@ function PlatformWorkspace({
         </header>
         <main className="workspace">
           <PageTransition
-            identity={`${role}-${tab}`}
+            identity={`${role}-${tab}-${item || "root"}`}
             direction={direction}
             className="workspace-view page-transition"
           >
             {role === "student" ? (
               <StudentSpace
                 tab={tab}
-                initialItem={initialItem}
+                initialItem={item}
                 setTab={navigate}
                 records={records}
                 catalog={catalog}
                 save={save}
                 upload={upload}
                 flash={flash}
+                privateData={studentPrivate.data}
+                privateLoading={studentPrivate.loading}
+                privateError={studentPrivate.error}
+                reloadPrivateData={studentPrivate.reload}
+                removeFavorite={studentPrivate.removeFavorite}
               />
             ) : (
               <EnterpriseSpace
@@ -508,10 +521,15 @@ function StudentSpace({
   save,
   upload,
   flash,
+  privateData,
+  privateLoading,
+  privateError,
+  reloadPrivateData,
+  removeFavorite,
 }: {
   tab: string;
   initialItem?: string;
-  setTab: (s: string) => void;
+  setTab: (s: string, item?: string) => void;
   records: StoredRecord[];
   catalog: StoredRecord[];
   save: (
@@ -529,6 +547,11 @@ function StudentSpace({
     type: string;
   } | null>;
   flash: (s: string) => void;
+  privateData: StudentPrivateData;
+  privateLoading: boolean;
+  privateError: string;
+  reloadPrivateData: () => void;
+  removeFavorite: (favorite: StudentFavorite) => Promise<void>;
 }) {
   const customJobs = catalog
     .filter((r) => r.kind === "job")
@@ -544,12 +567,17 @@ function StudentSpace({
   const allContents = [...customContents, ...contents];
   if (tab === "overview")
     return (
-      <StudentOverview
-        setTab={setTab}
+      <StudentOverviewView
+        onNavigate={setTab}
         allJobs={allJobs}
         allActivities={allActivities}
         allContents={allContents}
         profile={records.find((record) => record.kind === "student-profile")}
+        privateData={privateData}
+        privateLoading={privateLoading}
+        privateError={privateError}
+        onReload={reloadPrivateData}
+        onRemoveFavorite={removeFavorite}
       />
     );
   if (tab === "opportunities")
@@ -564,201 +592,6 @@ function StudentSpace({
       save={save}
       upload={upload}
     />
-  );
-}
-
-function StudentOverview({
-  setTab,
-  allJobs,
-  allActivities,
-  allContents,
-  profile,
-}: {
-  setTab: (s: string) => void;
-  allJobs: Job[];
-  allActivities: Activity[];
-  allContents: ContentItem[];
-  profile?: StoredRecord;
-}) {
-  const sortedJobs = [...allJobs].sort((a, b) =>
-    String(b.publishedAt).localeCompare(String(a.publishedAt)),
-  );
-  const sortedActivities = [...allActivities].sort((a, b) =>
-    String(b.date).localeCompare(String(a.date)),
-  );
-  const sortedContents = [...allContents].sort(
-    (a, b) =>
-      Number((b as unknown as { sortOrder?: number }).sortOrder || 0) -
-      Number((a as unknown as { sortOrder?: number }).sortOrder || 0),
-  );
-  return (
-    <>
-      <Title eyebrow="OVERVIEW" title="总览" desc="" />
-      <section className="student-overview-grid">
-        <article className="overview-panel large">
-          <div className="panel-head">
-            <div>
-              <small>OPPORTUNITIES</small>
-              <h2>最新实习项目机会</h2>
-            </div>
-            <button onClick={() => setTab("opportunities")}>查看全部 →</button>
-          </div>
-          <div className="overview-job-stack">
-            {sortedJobs.slice(0, 5).map((j) => (
-              <button key={j.id} onClick={() => setTab("opportunities")}>
-                <Logo job={j} />
-                <span>
-                  <b>{j.company}</b>
-                  <strong>{j.title}</strong>
-                  <em>
-                    {j.city} · {j.duration} · {j.salary || "薪资面议"}
-                  </em>
-                </span>
-                <i>{j.jobCategory}</i>
-              </button>
-            ))}
-          </div>
-        </article>
-        <article className="overview-panel">
-          <div className="panel-head">
-            <div>
-              <small>ACTIVITIES</small>
-              <h2>成长活动</h2>
-            </div>
-            <button onClick={() => setTab("activities")}>查看全部 →</button>
-          </div>
-          {sortedActivities.slice(0, 3).map((a) => (
-            <button
-              className="overview-media-line"
-              key={a.id}
-              onClick={() => setTab("activities")}
-            >
-              <img src={a.cover} alt={a.title} />
-              <span>
-                <b>{a.title}</b>
-                <em>
-                  {a.publisher || "JA China"} · {a.date}
-                </em>
-              </span>
-            </button>
-          ))}
-        </article>
-        <article className="overview-panel">
-          <div className="panel-head">
-            <div>
-              <small>CONTENTS</small>
-              <h2>成长内容</h2>
-            </div>
-            <button onClick={() => setTab("content")}>查看全部 →</button>
-          </div>
-          {sortedContents.slice(0, 3).map((c) => (
-            <button
-              className="overview-media-line"
-              key={c.id}
-              onClick={() => setTab("content")}
-            >
-              <img src={c.cover} alt={c.title} />
-              <span>
-                <b>{c.title}</b>
-                <em>{c.duration}</em>
-              </span>
-            </button>
-          ))}
-        </article>
-        <GrowthTimelinePreview profile={profile} onOpen={() => setTab("profile")} />
-      </section>
-    </>
-  );
-}
-
-function GrowthTimelinePreview({
-  profile,
-  onOpen,
-}: {
-  profile?: StoredRecord;
-  onOpen: () => void;
-}) {
-  const [registrations, setRegistrations] = useState<RegistrationItem[]>([]);
-  useEffect(() => {
-    api("/api/registrations")
-      .then((response) => response.json())
-      .then((data) => setRegistrations(data.registrations || []))
-      .catch(() => setRegistrations([]));
-  }, []);
-  const manual = String(profile?.payload.timelineItems || "")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [date, , title, , result] = line.split("｜");
-      return [date || "待补充", title || "未命名经历", result || "待补充成果"];
-    });
-  const certified = registrations
-    .filter((item) => item.status === "approved")
-    .map((item) => [
-      new Date(item.reviewedAt || item.createdAt).toLocaleDateString("zh-CN").replaceAll("/", "."),
-      item.activityTitle,
-      item.reviewNote || "活动参与已由发布方确认",
-    ]);
-  const items = [...certified, ...manual]
-    .sort((a, b) => String(b[0]).localeCompare(String(a[0])))
-    .slice(0, 3);
-  return (
-    <section className="overview-panel growth-timeline-preview">
-      <div className="panel-head">
-        <div>
-          <small>GROWTH TIMELINE</small>
-          <h2>个人成长主页</h2>
-        </div>
-        <button onClick={onOpen}>查看完整时间轴 →</button>
-      </div>
-      <div>
-        {items.map(([date, title, result]) => (
-          <button key={title} onClick={onOpen}>
-            <time>{date}</time>
-            <span>
-              <b>{title}</b>
-              <em>{result}</em>
-            </span>
-          </button>
-        ))}
-        {items.length === 0 && (
-          <button className="timeline-preview-empty" onClick={onOpen}>
-            <span><b>开始建立成长时间轴</b><em>参加活动或手动添加经历后，会在这里形成真实记录。</em></span>
-          </button>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function GrowthMap({ onOpen }: { onOpen?: () => void }) {
-  const nodes = [
-    ["技能", "简历表达、数据分析、内容策划", "86%"],
-    ["思维", "问题拆解、商业判断、复盘意识", "72%"],
-    ["格局", "公益实践、团队协作、社会责任", "64%"],
-    ["成果", "项目作品、活动反馈、JA 认证", "78%"],
-  ];
-  return (
-    <section className="growth-map panel">
-      <div className="panel-head">
-        <div>
-          <small>GROWTH PROFILE</small>
-          <h2>个人成长主页</h2>
-        </div>
-        {onOpen && <button onClick={onOpen}>查看主页 →</button>}
-      </div>
-      <div className="growth-tree">
-        {nodes.map(([name, desc, score]) => (
-          <article key={name}>
-            <i style={{ height: score }} />
-            <b>{name}</b>
-            <p>{desc}</p>
-            <span>{score}</span>
-          </article>
-        ))}
-      </div>
-    </section>
   );
 }
 
