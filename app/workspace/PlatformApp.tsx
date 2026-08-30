@@ -4,12 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { PageTransition, runViewTransition, type TransitionDirection } from "../components/motion";
 import { ToastProvider, useToast } from "../components/ui";
 import StudentOverviewView from "./student/StudentOverview";
+import OpportunityBrowserView from "./student/OpportunityBrowser";
 import { useStudentData, type StudentFavorite, type StudentPrivateData } from "./student/useStudentData";
 import {
   normalizeWorkspaceRoute,
   workspaceLocation,
   workspacePath,
 } from "../../lib/ui/workspace-routes";
+import { mergeCatalogRecords } from "../../lib/catalog/public-catalog";
 import {
   activities,
   contents,
@@ -228,14 +230,21 @@ function PlatformWorkspace({
     [tabOrder],
   );
   const navigate = useCallback(
-    (nextTab: string, nextItem?: string) => {
+    (nextTab: string, nextItem?: string, preserveSearch = false) => {
       const next = normalizeWorkspaceRoute(role, nextTab).tab;
       if (next === tab && nextItem === item) return;
       scrollPositions.current.set(tab, window.scrollY);
       navigationPending.current = true;
       setDirection(directionFor(tab, next));
       runViewTransition(() => {
-        window.history.pushState({ role, tab: next, item: nextItem }, "", workspacePath(role, next, nextItem));
+        let target = workspacePath(role, next, nextItem);
+        if (preserveSearch && next === tab) {
+          const params = new URLSearchParams(window.location.search);
+          if (nextItem) params.set("item", nextItem); else params.delete("item");
+          const search = params.toString();
+          target = `${window.location.pathname}${search ? `?${search}` : ""}`;
+        }
+        window.history.pushState({ role, tab: next, item: nextItem }, "", target);
         setActiveTab(next);
         setItem(nextItem);
       });
@@ -413,6 +422,7 @@ function PlatformWorkspace({
                 privateError={studentPrivate.error}
                 reloadPrivateData={studentPrivate.reload}
                 removeFavorite={studentPrivate.removeFavorite}
+                toggleFavorite={studentPrivate.toggleFavorite}
               />
             ) : (
               <EnterpriseSpace
@@ -526,10 +536,11 @@ function StudentSpace({
   privateError,
   reloadPrivateData,
   removeFavorite,
+  toggleFavorite,
 }: {
   tab: string;
   initialItem?: string;
-  setTab: (s: string, item?: string) => void;
+  setTab: (s: string, item?: string, preserveSearch?: boolean) => void;
   records: StoredRecord[];
   catalog: StoredRecord[];
   save: (
@@ -552,6 +563,7 @@ function StudentSpace({
   privateError: string;
   reloadPrivateData: () => void;
   removeFavorite: (favorite: StudentFavorite) => Promise<void>;
+  toggleFavorite: (targetType: "job" | "activity" | "content", targetId: string, snapshot: Record<string, unknown>) => Promise<boolean>;
 }) {
   const customJobs = catalog
     .filter((r) => r.kind === "job")
@@ -562,7 +574,7 @@ function StudentSpace({
   const customContents = catalog
     .filter((r) => r.kind === "content")
     .map((r) => ({ ...r.payload, id: r.id }) as unknown as ContentItem);
-  const allJobs = [...customJobs, ...jobs];
+  const allJobs = mergeCatalogRecords<Job>(catalog, jobs, "job");
   const allActivities = [...customActivities, ...activities];
   const allContents = [...customContents, ...contents];
   if (tab === "overview")
@@ -581,7 +593,7 @@ function StudentSpace({
       />
     );
   if (tab === "opportunities")
-    return <OpportunityBrowser allJobs={allJobs} flash={flash} />;
+    return <OpportunityBrowserView allJobs={allJobs} initialItem={initialItem} favorites={privateData.favorites} onNavigate={setTab} onToggleFavorite={toggleFavorite} flash={flash} />;
   if (tab === "activities")
     return <ActivityExperience custom={customActivities} flash={flash} initialItem={initialItem} />;
   if (tab === "content")

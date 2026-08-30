@@ -119,5 +119,50 @@ export function useStudentData(enabled = true) {
     }));
   }, []);
 
-  return { data, loading, error, reload, removeFavorite, setData };
+  const toggleFavorite = useCallback(async (
+    targetType: StudentFavorite["targetType"],
+    targetId: string,
+    snapshot: Record<string, unknown>,
+  ) => {
+    const existing = data.favorites.find(
+      (item) => item.targetType === targetType && item.targetId === targetId && item.status !== "removed",
+    );
+    if (existing) {
+      setData((current) => ({ ...current, favorites: current.favorites.filter((item) => item.id !== existing.id) }));
+      try { await removeFavorite(existing); }
+      catch (error) {
+        setData((current) => ({ ...current, favorites: [existing, ...current.favorites] }));
+        throw error;
+      }
+      return false;
+    }
+    const optimistic: StudentFavorite = {
+      id: `pending:${targetType}:${targetId}`,
+      targetType,
+      targetId,
+      targetSnapshot: Object.fromEntries(Object.entries(snapshot).map(([key, value]) => [key, String(value ?? "")])),
+      status: "active",
+      createdAt: new Date().toISOString(),
+    };
+    setData((current) => ({ ...current, favorites: [optimistic, ...current.favorites] }));
+    try {
+      const response = await studentRequest("/api/student", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "favorite", targetType, targetId, snapshot }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "收藏失败");
+      setData((current) => ({
+        ...current,
+        favorites: current.favorites.map((item) => item.id === optimistic.id ? { ...item, id: payload.id || optimistic.id } : item),
+      }));
+      return true;
+    } catch (error) {
+      setData((current) => ({ ...current, favorites: current.favorites.filter((item) => item.id !== optimistic.id) }));
+      throw error;
+    }
+  }, [data.favorites, removeFavorite]);
+
+  return { data, loading, error, reload, removeFavorite, toggleFavorite, setData };
 }

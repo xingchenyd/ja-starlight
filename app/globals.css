@@ -5323,6 +5323,70 @@ footer .brand-official b {
   color: var(--text-secondary);
   line-height: 1.6;
 }
+.active-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -4px 0 16px;
+}
+.active-filter-chips button {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--ja-aqua) 32%, white);
+  border-radius: 999px;
+  background: var(--ja-ice-soft);
+  color: var(--ja-deep);
+  padding: 8px 12px;
+  font-weight: 800;
+}
+.active-filter-chips button span { color: var(--ja-teal); font-size: 18px; }
+.active-filter-chips button.clear-all { border-color: transparent; background: transparent; color: var(--text-secondary); }
+.favorite-button {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: white;
+  color: var(--ja-deep);
+  padding: 9px 14px;
+  font-weight: 850;
+}
+.favorite-button span { color: var(--ja-teal); font-size: 19px; }
+.favorite-button.active { border-color: var(--ja-yellow); background: color-mix(in srgb, var(--ja-yellow) 25%, white); }
+.favorite-button:disabled { cursor: wait; opacity: 0.68; }
+.job-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+.job-card-actions .detail-link { margin: 0; }
+.opportunity-detail-panel { display: grid; gap: 24px; }
+.opportunity-detail-panel > header { display: grid; grid-template-columns: 76px 1fr; gap: 16px; align-items: start; }
+.opportunity-detail-panel > header a { color: var(--ja-teal); font-size: 20px; font-weight: 900; }
+.opportunity-detail-panel > header h3 { margin: 6px 0; color: var(--ja-deep); font-size: 25px; }
+.opportunity-detail-panel > header p { margin: 0; color: var(--text-secondary); }
+.opportunity-detail-panel > section { padding: 19px; border-radius: 17px; background: var(--surface-muted); }
+.opportunity-detail-panel h4 { margin: 0 0 12px; color: var(--ja-deep); font-size: 18px; }
+.opportunity-detail-panel li { margin: 8px 0; color: var(--text-secondary); line-height: 1.65; }
+.opportunity-panel-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+.opportunity-panel-actions > button:not(.favorite-button) {
+  min-height: 42px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: white;
+  color: var(--ja-deep);
+  padding: 9px 14px;
+  font-weight: 850;
+}
 @media (prefers-reduced-motion: reduce) {
   .student-overview-stagger > .overview-panel,
   .student-overview-skeleton i { animation: none; }

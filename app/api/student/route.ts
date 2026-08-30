@@ -50,8 +50,9 @@ export async function POST(request: Request) {
     const id = crypto.randomUUID();
     await env.DB.prepare("INSERT INTO student_favorites(id,student_id,target_type,target_id,target_snapshot,status,created_at,updated_at) VALUES(?,?,?,?,?,'active',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(student_id,target_type,target_id) DO UPDATE SET target_snapshot=excluded.target_snapshot,status='active',updated_at=CURRENT_TIMESTAMP")
       .bind(id, student, targetType, targetId, cleanSnapshot(body.snapshot)).run();
+    const saved = await env.DB.prepare("SELECT id FROM student_favorites WHERE student_id=? AND target_type=? AND target_id=?").bind(student, targetType, targetId).first<{ id: string }>();
     await writeAudit(student, "favorite", targetType, targetId);
-    return Response.json({ ok: true, targetType, targetId });
+    return Response.json({ ok: true, id: saved?.id || id, targetType, targetId });
   }
 
   if (action === "set-reminder") {
