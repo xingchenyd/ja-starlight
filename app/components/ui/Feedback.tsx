@@ -21,20 +21,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const nextId = useRef(0);
   const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   const remaining = useRef(new Map<number, number>());
-  const startedAt = useRef(new Map<number, number>());
 
   const dismiss = useCallback((id: number) => {
     const timer = timers.current.get(id);
     if (timer) clearTimeout(timer);
     timers.current.delete(id);
     remaining.current.delete(id);
-    startedAt.current.delete(id);
     setNotices((value) => value.filter((notice) => notice.id !== id));
   }, []);
 
   const schedule = useCallback((id: number, delay: number) => {
     remaining.current.set(id, delay);
-    startedAt.current.set(id, Date.now());
     timers.current.set(id, setTimeout(() => dismiss(id), delay));
   }, [dismiss]);
 
@@ -50,8 +47,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     if (!timer) return;
     clearTimeout(timer);
     timers.current.delete(id);
-    const elapsed = Date.now() - (startedAt.current.get(id) || Date.now());
-    remaining.current.set(id, Math.max(300, (remaining.current.get(id) || 2600) - elapsed));
+    remaining.current.set(id, 1200);
   };
 
   const resume = (id: number) => {
@@ -119,4 +115,3 @@ export function Skeleton({ lines = 3, label = "正在读取内容" }: { lines?: 
     </div>
   );
 }
-

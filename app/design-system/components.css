@@ -112,8 +112,51 @@
 .ui-status-badge[data-tone="warning"] { color: #686616; background: color-mix(in srgb, var(--ja-yellow) 30%, white); }
 .ui-status-badge[data-tone="danger"] { color: var(--ja-danger); background: color-mix(in srgb, var(--ja-danger) 10%, white); }
 
+.ui-overlay-root {
+  position: fixed;
+  z-index: 300;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.ui-overlay-backdrop {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: rgba(17, 45, 54, 0.48);
+  backdrop-filter: blur(4px);
+  animation: motion-fade-in var(--motion-duration-standard) var(--motion-ease-enter) both;
+  cursor: default;
+}
+
+.ui-overlay-frame {
+  display: grid;
+  max-height: min(820px, calc(100vh - 48px));
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: var(--radius-panel);
+  color: var(--text-primary);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-panel);
+}
+
+.ui-dialog { width: min(640px, 100%); }
+.ui-panel { position: absolute; inset: 0 0 0 auto; width: min(720px, calc(100vw - 40px)); max-height: 100vh; border-radius: var(--radius-panel) 0 0 var(--radius-panel); }
+.ui-overlay-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 24px 26px 18px; border-bottom: 1px solid var(--border-subtle); }
+.ui-overlay-header h2 { margin: 0; font-size: 24px; }
+.ui-overlay-header p { margin: 6px 0 0; color: var(--text-secondary); line-height: 1.6; }
+.ui-overlay-close { display: grid; flex: 0 0 auto; width: 40px; height: 40px; place-items: center; border: 0; border-radius: 50%; color: var(--text-secondary); background: var(--surface-muted); font-size: 23px; cursor: pointer; }
+.ui-overlay-body { min-height: 0; overflow: auto; padding: 24px 26px; }
+.ui-overlay-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 26px 22px; border-top: 1px solid var(--border-subtle); }
+
 @media (prefers-reduced-motion: reduce) {
   .ui-spinner { animation-duration: 1.2s; }
   .ui-skeleton i { animation: none; }
+  .ui-overlay-backdrop { animation: none; backdrop-filter: none; }
 }
-
