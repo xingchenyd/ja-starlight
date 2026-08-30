@@ -112,6 +112,21 @@
 .ui-status-badge[data-tone="warning"] { color: #686616; background: color-mix(in srgb, var(--ja-yellow) 30%, white); }
 .ui-status-badge[data-tone="danger"] { color: var(--ja-danger); background: color-mix(in srgb, var(--ja-danger) 10%, white); }
 
+.platform .side nav button:focus-visible,
+.platform .notification-trigger:focus-visible,
+.platform .back:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.platform .side nav button[aria-current="page"] {
+  cursor: default;
+}
+
+.page-title[data-page-heading]:focus {
+  outline: none;
+}
+
 .ui-overlay-root {
   position: fixed;
   z-index: 300;

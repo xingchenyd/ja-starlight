@@ -5524,7 +5524,6 @@ footer .brand-official b {
 .ja-platform .page-title small {
   color: var(--workspace-teal);
 }
-.platform.v2 .workspace > *,
 .ja-view {
   animation: workspace-enter 0.46s cubic-bezier(0.22, 0.8, 0.3, 1) both;
 }
@@ -5532,12 +5531,10 @@ footer .brand-official b {
   from {
     opacity: 0;
     transform: translateY(12px);
-    filter: blur(2px);
   }
   to {
     opacity: 1;
     transform: none;
-    filter: none;
   }
 }
 .metric,
@@ -5726,7 +5723,6 @@ footer .brand-official b {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .platform.v2 .workspace > *,
   .ja-view {
     animation: none;
   }
@@ -6889,12 +6885,10 @@ footer .brand-official b {
   from {
     opacity: 0;
     transform: translateX(34px);
-    filter: blur(2px);
   }
   to {
     opacity: 1;
     transform: none;
-    filter: none;
   }
 }
 @media (max-width: 980px) {
@@ -8474,8 +8468,9 @@ footer .brand-official b {
   position: relative;
   z-index: 1;
 }
-.page-transition {
-  animation: soft-page-swap 0.54s cubic-bezier(0.2, 0.82, 0.2, 1) both;
+.workspace-view {
+  width: 100%;
+  min-width: 0;
 }
 .page-transition .page-title {
   animation: slide-in-left 0.42s cubic-bezier(0.22, 0.8, 0.3, 1) both;
@@ -8616,24 +8611,20 @@ footer .brand-official b {
   from {
     opacity: 0.72;
     transform: translateX(18px) scale(0.995);
-    filter: blur(3px);
   }
   to {
     opacity: 1;
     transform: none;
-    filter: none;
   }
 }
 @keyframes totem-card-in {
   from {
     opacity: 0;
     transform: translateX(42px) translateY(8px);
-    filter: blur(4px);
   }
   to {
     opacity: 1;
     transform: none;
-    filter: none;
   }
 }
 @keyframes ambient-sweep {

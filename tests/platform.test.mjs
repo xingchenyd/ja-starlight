@@ -43,7 +43,7 @@ test("native account and JA key login pages render as complete branded flows", a
   assert.match(await admin.text(), /管理密钥/);
 });
 test("student workspace uses formal student navigation without role switching", async () => {
-  const response = await page("/workspace?role=student");
+  const response = await page("/workspace/student/overview");
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /你好，张晨/);
@@ -82,7 +82,7 @@ test("opportunity route is a Hunan category-based direct-email opportunity", asy
 });
 test("enterprise workbench exposes operational tasks and publishing status", async () => {
   const [enterprise, content] = await Promise.all([
-    page("/workspace?role=enterprise"),
+    page("/workspace/enterprise/overview"),
     page("/content"),
   ]);
   assert.equal(enterprise.status, 200);
@@ -96,7 +96,7 @@ test("enterprise workbench exposes operational tasks and publishing status", asy
   assert.match(await content.text(), /成长内容/);
 });
 test("activity publishing and registration data entry points are present", async () => {
-  const response = await page("/workspace?role=enterprise&tab=activities");
+  const response = await page("/workspace/enterprise/activities");
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /报名数据/);
@@ -124,7 +124,7 @@ test("enterprise publisher supports drafts, validation and the correct review ow
   assert.match(platformApiSource, /无权修改该记录/);
 });
 test("enterprise can review and decide student registrations", async () => {
-  const response = await page("/workspace?role=enterprise&tab=registrations");
+  const response = await page("/workspace/enterprise/registrations");
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /page-transition/);
@@ -186,7 +186,7 @@ test("public opportunities navigate by category and never by city filters", asyn
   assert.doesNotMatch(html, /全部城市|北京|上海|深圳|立即申请|站内沟通/);
 });
 test("student opportunity filters use dual-ended salary slider", async () => {
-  const response = await page("/workspace?role=student&tab=opportunities");
+  const response = await page("/workspace/student/opportunities");
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /salary-dual-slider/);
@@ -195,7 +195,7 @@ test("student opportunity filters use dual-ended salary slider", async () => {
   assert.match(html, /500 元\/天/);
 });
 test("student activities use automatic carousel without signup fields in showcase", async () => {
-  const response = await page("/workspace?role=student&tab=activities");
+  const response = await page("/workspace/student/activities");
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /auto-showcase/);
@@ -203,7 +203,7 @@ test("student activities use automatic carousel without signup fields in showcas
   assert.doesNotMatch(html, /signup-fields-preview"><b>报名信息/);
 });
 test("growth profile focuses on resume and unified timeline", async () => {
-  const response = await page("/workspace?role=student&tab=profile");
+  const response = await page("/workspace/student/profile");
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /fixed-left-profile/);
@@ -231,7 +231,7 @@ test("student interactions are persistent and permission scoped", async () => {
 });
 test("enterprise and JA consoles expose real comment operations", async () => {
   const [enterprise, admin, workspaceSource] = await Promise.all([
-    page("/workspace?role=enterprise&tab=feedback"),
+    page("/workspace/enterprise/feedback"),
     page("/ja-console"),
     readFile(new URL("../app/workspace/PlatformApp.tsx", import.meta.url), "utf8"),
   ]);

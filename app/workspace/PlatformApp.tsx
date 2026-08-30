@@ -1,6 +1,13 @@
 /* eslint-disable @next/next/no-img-element, @next/next/no-html-link-for-pages, jsx-a11y/media-has-caption, @typescript-eslint/no-unused-vars */
 "use client";
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { PageTransition, runViewTransition, type TransitionDirection } from "../components/motion";
+import { ToastProvider, useToast } from "../components/ui";
+import {
+  normalizeWorkspaceRoute,
+  workspaceLocation,
+  workspacePath,
+} from "../../lib/ui/workspace-routes";
 import {
   activities,
   contents,
@@ -145,20 +152,20 @@ const starterBlocks: Record<"content" | "activity", RichBlock[]> = {
   ],
 };
 
-function getDemoId() {
-  let id = localStorage.getItem("starlight-demo-id");
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem("starlight-demo-id", id);
-  }
-  return id;
-}
 async function api(path: string, init: RequestInit = {}) {
-  const id = getDemoId();
-  const role = new URLSearchParams(window.location.search).get("role") === "enterprise" ? "enterprise" : "student";
+  const headers = new Headers(init.headers);
+  // Local preview pages have no persisted account session. The runtime accepts
+  // this role hint only for localhost; deployed environments always use the
+  // signed account session and ignore it.
+  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+    headers.set(
+      "x-starlight-role",
+      workspaceLocation(window.location.pathname, window.location.search).role,
+    );
+  }
   return fetch(path, {
     ...init,
-    headers: { ...(init.headers || {}), "x-starlight-demo-id": id, "x-starlight-role": role },
+    headers,
   });
 }
 function useDialogEscape(close: () => void) {
@@ -177,6 +184,20 @@ function useDialogEscape(close: () => void) {
 }
 
 export default function PlatformApp({
+  ...props
+}: {
+  initialRole: Role;
+  initialTab?: string;
+  initialItem?: string;
+}) {
+  return (
+    <ToastProvider>
+      <PlatformWorkspace {...props} />
+    </ToastProvider>
+  );
+}
+
+function PlatformWorkspace({
   initialRole,
   initialTab,
   initialItem,
@@ -185,12 +206,58 @@ export default function PlatformApp({
   initialTab?: string;
   initialItem?: string;
 }) {
+  const { show } = useToast();
   const [role] = useState<Role>(initialRole),
-    [tab, setTab] = useState(initialTab || "overview"),
+    [tab, setActiveTab] = useState(
+      () => normalizeWorkspaceRoute(initialRole, initialTab).tab,
+    ),
+    [direction, setDirection] = useState<TransitionDirection>("none"),
     [records, setRecords] = useState<StoredRecord[]>([]),
     [catalog, setCatalog] = useState<StoredRecord[]>([]),
-    [toast, setToast] = useState(""),
     [ready, setReady] = useState(false);
+  const scrollPositions = useRef(new Map<string, number>());
+  const navigationPending = useRef(false);
+  const tabOrder = useMemo(() => nav[role].map(([id]) => id), [role]);
+  const directionFor = useCallback(
+    (current: string, next: string): TransitionDirection =>
+      tabOrder.indexOf(next) >= tabOrder.indexOf(current) ? "forward" : "back",
+    [tabOrder],
+  );
+  const navigate = useCallback(
+    (nextTab: string) => {
+      const next = normalizeWorkspaceRoute(role, nextTab).tab;
+      if (next === tab) return;
+      scrollPositions.current.set(tab, window.scrollY);
+      navigationPending.current = true;
+      setDirection(directionFor(tab, next));
+      runViewTransition(() => {
+        window.history.pushState({ role, tab: next }, "", workspacePath(role, next));
+        setActiveTab(next);
+      });
+    },
+    [directionFor, role, tab],
+  );
+  useEffect(() => {
+    const onPopState = () => {
+      const next = workspaceLocation(window.location.pathname, window.location.search);
+      if (next.role !== role || next.tab === tab) return;
+      scrollPositions.current.set(tab, window.scrollY);
+      navigationPending.current = true;
+      setDirection(directionFor(tab, next.tab));
+      runViewTransition(() => setActiveTab(next.tab));
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [directionFor, role, tab]);
+  useEffect(() => {
+    if (!navigationPending.current) return;
+    navigationPending.current = false;
+    const frame = window.requestAnimationFrame(() => {
+      window.scrollTo({ top: scrollPositions.current.get(tab) || 0, behavior: "instant" });
+      document.querySelector<HTMLElement>("[data-page-heading]")?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [tab]);
   useEffect(() => {
     Promise.all([
       api("/api/platform").then((r) => r.json()),
@@ -203,10 +270,11 @@ export default function PlatformApp({
       })
       .catch(() => setReady(true));
   }, []);
-  const flash = (message: string) => {
-    setToast(message);
-    window.setTimeout(() => setToast(""), 2600);
-  };
+  const flash = useCallback(
+    (message: string) =>
+      show(message, /失败|错误|无权|请填写|请先/.test(message) ? "error" : "success"),
+    [show],
+  );
   const save = async (
     kind: string,
     payload: Record<string, unknown>,
@@ -288,7 +356,8 @@ export default function PlatformApp({
             <button
               key={id}
               className={tab === id ? "active" : ""}
-              onClick={() => setTab(id)}
+              aria-current={tab === id ? "page" : undefined}
+              onClick={() => navigate(id)}
             >
               <span>{glyph}</span>
               {label}
@@ -315,37 +384,37 @@ export default function PlatformApp({
             aria-label={ready ? "已同步" : "正在载入"}
           />
         </header>
-        <main key={`${role}-${tab}`} className="workspace page-transition">
-          {role === "student" ? (
-            <StudentSpace
-              tab={tab}
-              initialItem={initialItem}
-              setTab={setTab}
-              records={records}
-              catalog={catalog}
-              save={save}
-              upload={upload}
-              flash={flash}
-            />
-          ) : (
-            <EnterpriseSpace
-              tab={tab}
-              setTab={setTab}
-              records={records}
-              save={save}
-              remove={remove}
-              upload={upload}
-              flash={flash}
-            />
-          )}
+        <main className="workspace">
+          <PageTransition
+            identity={`${role}-${tab}`}
+            direction={direction}
+            className="workspace-view page-transition"
+          >
+            {role === "student" ? (
+              <StudentSpace
+                tab={tab}
+                initialItem={initialItem}
+                setTab={navigate}
+                records={records}
+                catalog={catalog}
+                save={save}
+                upload={upload}
+                flash={flash}
+              />
+            ) : (
+              <EnterpriseSpace
+                tab={tab}
+                setTab={navigate}
+                records={records}
+                save={save}
+                remove={remove}
+                upload={upload}
+                flash={flash}
+              />
+            )}
+          </PageTransition>
         </main>
       </div>
-      {toast && (
-        <div className="toast">
-          <span>✓</span>
-          {toast}
-        </div>
-      )}
     </div>
   );
 }
@@ -380,7 +449,7 @@ function Title({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="page-title">
+    <div className="page-title" data-page-heading tabIndex={-1}>
       <div>
         <small>{eyebrow}</small>
         <h1>{title}</h1>
