@@ -1,6 +1,12 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 import { useEffect, useState } from "react";
+import { useReducedMotion } from "./components/motion";
+import {
+  isPublicNow,
+  sortPublicRecords,
+  type PublicCatalogRecord,
+} from "../lib/catalog/public-catalog";
 
 type Slide = {
   image: string;
@@ -9,10 +15,8 @@ type Slide = {
   meta: string;
   href: string;
 };
-type CatalogRecord = {
-  id: string;
+type CatalogRecord = PublicCatalogRecord & {
   kind: "activity" | "content";
-  payload: Record<string, unknown>;
 };
 const fallbackSlides: Slide[] = [
   {
@@ -81,28 +85,33 @@ function fromCatalog(record: CatalogRecord): Slide | null {
 export default function HomeCarousel() {
   const [slides, setSlides] = useState<Slide[]>(fallbackSlides),
     [active, setActive] = useState(0),
-    [paused, setPaused] = useState(false);
+    [userPaused, setUserPaused] = useState(false),
+    [hovered, setHovered] = useState(false);
+  const reducedMotion = useReducedMotion();
+  const paused = reducedMotion || userPaused || hovered;
   useEffect(() => {
     let live = true;
-    fetch("/api/catalog")
+    fetch("/api/catalog?pageSize=100")
       .then((response) => response.json())
       .then((data) => {
         if (!live) return;
-        const published = (data.records || [])
+        const published = sortPublicRecords(
+          ((data.records || []) as CatalogRecord[]).filter(
+            (record) =>
+              (record.kind === "activity" || record.kind === "content") &&
+              isPublicNow(record.payload),
+          ),
+        )
           .filter(
-            (record: CatalogRecord) =>
+            (record): record is CatalogRecord =>
               record.kind === "activity" || record.kind === "content",
-          )
-          .sort(
-            (a: CatalogRecord, b: CatalogRecord) =>
-              Number(b.payload.featured) - Number(a.payload.featured) ||
-              Number(b.payload.sortOrder || 0) -
-                Number(a.payload.sortOrder || 0),
           )
           .map(fromCatalog)
           .filter(Boolean) as Slide[];
-        if (published.length)
-          setSlides([...published.slice(0, 5), ...fallbackSlides].slice(0, 8));
+        if (published.length) {
+          setSlides(published);
+          setActive(0);
+        }
       })
       .catch(() => {});
     return () => {
@@ -110,10 +119,10 @@ export default function HomeCarousel() {
     };
   }, []);
   useEffect(() => {
-    if (paused) return;
+    if (paused || slides.length < 2) return;
     const timer = window.setInterval(
       () => setActive((v) => (v + 1) % slides.length),
-      4800,
+      5000,
     );
     return () => window.clearInterval(timer);
   }, [paused, slides.length]);
@@ -123,8 +132,9 @@ export default function HomeCarousel() {
     <section
       className="story-stage shell"
       aria-label="JA 活动与成长内容轮播"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocusCapture={() => setUserPaused(true)}
     >
       <div className="story-heading">
         <div>
@@ -149,7 +159,15 @@ export default function HomeCarousel() {
               aria-hidden={active !== index}
               tabIndex={active === index ? 0 : -1}
             >
-              <img src={slide.image} alt={slide.title} />
+              <img
+                src={slide.image}
+                alt={slide.title}
+                onError={(event) => {
+                  if (!event.currentTarget.src.endsWith("ja-official-career-market.jpg")) {
+                    event.currentTarget.src = "/media/ja-official-career-market.jpg";
+                  }
+                }}
+              />
               <div className="story-shade" />
               <span className="story-number">
                 {String(index + 1).padStart(2, "0")}
@@ -169,18 +187,19 @@ export default function HomeCarousel() {
           <button onClick={() => move(-1)} aria-label="上一张">
             ←
           </button>
-          <div>
-            {slides.map((_, index) => (
-              <button
-                key={index}
-                className={active === index ? "active" : ""}
-                onClick={() => setActive(index)}
-                aria-label={`查看第 ${index + 1} 张`}
-              />
-            ))}
-          </div>
+          <span className="story-status" aria-live="polite">
+            {String(active + 1).padStart(2, "0")} / {String(slides.length).padStart(2, "0")}
+          </span>
           <button onClick={() => move(1)} aria-label="下一张">
             →
+          </button>
+          <button
+            className="story-pause"
+            onClick={() => setUserPaused((value) => !value)}
+            aria-label={userPaused ? "继续轮播" : "暂停轮播"}
+            title={userPaused ? "继续轮播" : "暂停轮播"}
+          >
+            {userPaused ? "▶" : "Ⅱ"}
           </button>
         </div>
       </div>

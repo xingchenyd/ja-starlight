@@ -4475,7 +4475,8 @@ footer .brand-official b {
 .story-track {
   height: clamp(420px, 53vw, 650px);
   display: flex;
-  transition: transform 0.75s cubic-bezier(0.22, 0.8, 0.2, 1);
+  transition: transform var(--motion-duration-story)
+    cubic-bezier(0.22, 0.8, 0.2, 1);
   will-change: transform;
 }
 .story-slide {
@@ -4577,21 +4578,24 @@ footer .brand-official b {
   color: white;
   font-size: 18px;
 }
-.story-controls > div {
-  display: flex;
-  gap: 7px;
+.story-status {
+  min-width: 76px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius: 999px;
+  background: rgba(36, 64, 77, 0.55);
+  color: white;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-align: center;
+  backdrop-filter: blur(10px);
 }
-.story-controls > div button {
-  width: 9px;
-  height: 9px;
-  border: 0;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.45);
-  padding: 0;
-}
-.story-controls > div button.active {
-  width: 30px;
-  background: #e8e24f;
+.story-controls > button.story-pause {
+  width: auto;
+  min-width: 44px;
+  padding: 0 14px;
 }
 
 /* Workspace clarity and cards */
