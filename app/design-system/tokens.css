@@ -1,0 +1,42 @@
+:root {
+  color-scheme: light;
+  --ja-deep: #24404d;
+  --ja-deep-strong: #173944;
+  --ja-aqua: #00b7c3;
+  --ja-teal: #078b9b;
+  --ja-ice: #c2edf0;
+  --ja-ice-soft: #eaf8f8;
+  --ja-green: #8ac53f;
+  --ja-yellow: #e9e63f;
+  --ja-pearl: #eef3f4;
+  --ja-cream: #f3f2b3;
+  --ja-danger: #f65f4e;
+
+  --text-primary: var(--ja-deep-strong);
+  --text-secondary: #557078;
+  --text-tertiary: #748a90;
+  --surface-page: #f4f8f7;
+  --surface-raised: #ffffff;
+  --surface-muted: #edf5f4;
+  --border-subtle: #cfdddd;
+  --border-strong: #9ebabc;
+
+  --radius-control: 12px;
+  --radius-card: 18px;
+  --radius-panel: 24px;
+  --shadow-card: 0 12px 34px rgba(36, 64, 77, 0.08);
+  --shadow-panel: 0 28px 72px rgba(23, 57, 68, 0.18);
+  --focus-ring: 0 0 0 3px rgba(0, 183, 195, 0.28);
+}
+
+::selection {
+  color: var(--ja-deep-strong);
+  background: color-mix(in srgb, var(--ja-yellow) 68%, white);
+}
+
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--ja-aqua);
+  outline-offset: 3px;
+  box-shadow: var(--focus-ring);
+}
+

@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "./design-system/tokens.css";
+@import "./design-system/motion.css";
 
 :root {
   --ja-red: #ec1c24;

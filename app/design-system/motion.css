@@ -1,0 +1,105 @@
+:root {
+  --motion-duration-instant: 0ms;
+  --motion-duration-micro: 90ms;
+  --motion-duration-quick: 140ms;
+  --motion-duration-standard: 220ms;
+  --motion-duration-panel: 280ms;
+  --motion-duration-page: 340ms;
+  --motion-duration-story: 600ms;
+  --motion-ease-enter: cubic-bezier(0, 0, 0.3, 1);
+  --motion-ease-standard: cubic-bezier(0.2, 0, 0.38, 0.9);
+  --motion-ease-exit: cubic-bezier(0.2, 0, 1, 0.9);
+}
+
+.motion-pressable {
+  transform: translateZ(0);
+  transition:
+    transform var(--motion-duration-micro) var(--motion-ease-standard),
+    color var(--motion-duration-quick) var(--motion-ease-standard),
+    background-color var(--motion-duration-quick) var(--motion-ease-standard),
+    border-color var(--motion-duration-quick) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-quick) var(--motion-ease-standard);
+}
+
+.motion-pressable:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.motion-pressable:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.motion-page-enter {
+  animation: motion-page-forward var(--motion-duration-page) var(--motion-ease-enter) both;
+}
+
+.motion-page-enter[data-direction="back"] {
+  animation-name: motion-page-back;
+}
+
+.motion-page-enter[data-direction="none"] {
+  animation-name: motion-fade-in;
+  animation-duration: var(--motion-duration-standard);
+}
+
+.motion-panel-enter {
+  animation: motion-panel-in var(--motion-duration-panel) var(--motion-ease-enter) both;
+}
+
+.motion-stagger > * {
+  animation: motion-item-in var(--motion-duration-standard) var(--motion-ease-enter) both;
+  animation-delay: min(calc(var(--motion-index, 0) * 40ms), 240ms);
+}
+
+@keyframes motion-page-forward {
+  from { opacity: 0; transform: translate3d(20px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes motion-page-back {
+  from { opacity: 0; transform: translate3d(-20px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes motion-panel-in {
+  from { opacity: 0; transform: translate3d(24px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes motion-item-in {
+  from { opacity: 0; transform: translate3d(16px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes motion-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-micro: 0ms;
+    --motion-duration-quick: 0ms;
+    --motion-duration-standard: 0ms;
+    --motion-duration-panel: 0ms;
+    --motion-duration-page: 0ms;
+    --motion-duration-story: 0ms;
+  }
+
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+  }
+
+  .motion-page-enter,
+  .motion-panel-enter,
+  .motion-stagger > * {
+    animation: none !important;
+  }
+
+  .motion-pressable,
+  .motion-pressable:hover,
+  .motion-pressable:active {
+    transform: none !important;
+  }
+}
+
