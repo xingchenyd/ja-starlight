@@ -5524,19 +5524,6 @@ footer .brand-official b {
 .ja-platform .page-title small {
   color: var(--workspace-teal);
 }
-.ja-view {
-  animation: workspace-enter 0.46s cubic-bezier(0.22, 0.8, 0.3, 1) both;
-}
-@keyframes workspace-enter {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
 .metric,
 .panel,
 .opportunity-list article,
@@ -5723,9 +5710,6 @@ footer .brand-official b {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ja-view {
-    animation: none;
-  }
   .platform.v2 .side nav button,
   .ja-platform .side nav button,
   .metric,

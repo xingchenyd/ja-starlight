@@ -56,7 +56,7 @@ test("student workspace uses formal student navigation without role switching", 
   );
 });
 test("JA console is directly accessible during testing", async () => {
-  const response = await page("/ja-console");
+  const response = await page("/ja-console/pulse");
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /湖南运营后台/);
@@ -232,7 +232,7 @@ test("student interactions are persistent and permission scoped", async () => {
 test("enterprise and JA consoles expose real comment operations", async () => {
   const [enterprise, admin, workspaceSource] = await Promise.all([
     page("/workspace/enterprise/feedback"),
-    page("/ja-console"),
+    page("/ja-console/feedback"),
     readFile(new URL("../app/workspace/PlatformApp.tsx", import.meta.url), "utf8"),
   ]);
   const enterpriseHtml = await enterprise.text();

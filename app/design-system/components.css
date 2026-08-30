@@ -127,6 +127,11 @@
   outline: none;
 }
 
+.ja-workspace-view {
+  width: 100%;
+  min-width: 0;
+}
+
 .ui-overlay-root {
   position: fixed;
   z-index: 300;

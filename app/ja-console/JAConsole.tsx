@@ -1,8 +1,16 @@
-/* eslint-disable @next/next/no-img-element, jsx-a11y/media-has-caption */
+/* eslint-disable @next/next/no-img-element, @next/next/no-html-link-for-pages, jsx-a11y/media-has-caption */
 "use client";
-import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RichBlock } from "../data";
+import { PageTransition, runViewTransition, type TransitionDirection } from "../components/motion";
+import { ToastProvider, useToast } from "../components/ui";
+import {
+  JA_TABS,
+  jaConsoleLocation,
+  jaConsolePath,
+  normalizeJATab,
+  type JATab,
+} from "../../lib/ui/ja-routes";
 
 type RecordItem = {
   id: string;
@@ -185,17 +193,84 @@ const adminStarterBlocks: Record<"activity" | "content", RichBlock[]> = {
   ],
 };
 
-export default function JAConsole({ operator }: { operator: string }) {
-  const [tab, setTab] = useState("pulse"),
+export default function JAConsole({
+  ...props
+}: {
+  operator: string;
+  initialTab?: string;
+}) {
+  return (
+    <ToastProvider>
+      <JAConsoleWorkspace {...props} />
+    </ToastProvider>
+  );
+}
+
+function JAConsoleWorkspace({
+  operator,
+  initialTab,
+}: {
+  operator: string;
+  initialTab?: string;
+}) {
+  const { show } = useToast();
+  const [tab, setActiveTab] = useState<JATab>(() => normalizeJATab(initialTab)),
+    [direction, setDirection] = useState<TransitionDirection>("none"),
     [records, setRecords] = useState<RecordItem[]>([]),
     [logs, setLogs] = useState<Log[]>([]),
     [registrations, setRegistrations] = useState<Registration[]>([]),
     [organizations, setOrganizations] = useState<Organization[]>([]),
-    [notice, setNotice] = useState(""),
     [selectedId, setSelectedId] = useState(""),
     [reason, setReason] = useState(""),
     [loading, setLoading] = useState(true),
     [loadError, setLoadError] = useState("");
+  const scrollPositions = useRef(new Map<JATab, number>());
+  const navigationPending = useRef(false);
+  const directionFor = useCallback(
+    (current: JATab, next: JATab): TransitionDirection =>
+      JA_TABS.indexOf(next) >= JA_TABS.indexOf(current) ? "forward" : "back",
+    [],
+  );
+  const navigate = useCallback(
+    (nextTab: string) => {
+      const next = normalizeJATab(nextTab);
+      if (next === tab) return;
+      scrollPositions.current.set(tab, window.scrollY);
+      navigationPending.current = true;
+      setDirection(directionFor(tab, next));
+      runViewTransition(() => {
+        window.history.pushState({ tab: next }, "", jaConsolePath(next));
+        setActiveTab(next);
+      });
+    },
+    [directionFor, tab],
+  );
+  useEffect(() => {
+    const onPopState = () => {
+      const next = jaConsoleLocation(window.location.pathname);
+      if (next === tab) return;
+      scrollPositions.current.set(tab, window.scrollY);
+      navigationPending.current = true;
+      setDirection(directionFor(tab, next));
+      runViewTransition(() => setActiveTab(next));
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [directionFor, tab]);
+  useEffect(() => {
+    if (!navigationPending.current) return;
+    navigationPending.current = false;
+    const frame = window.requestAnimationFrame(() => {
+      window.scrollTo({ top: scrollPositions.current.get(tab) || 0, behavior: "instant" });
+      document.querySelector<HTMLElement>("[data-page-heading]")?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [tab]);
+  const setNotice = useCallback(
+    (message: string) =>
+      show(message, /失败|错误|请填写|请先|必须/.test(message) ? "error" : "success"),
+    [show],
+  );
   const load = async () => {
     setLoading(true);
     setLoadError("");
@@ -422,62 +497,51 @@ export default function JAConsole({ operator }: { operator: string }) {
               : tab === "keys"
                 ? "创建、停用与撤销 JA 管理密钥；新密钥仅在创建时显示一次。"
               : "记录后台的重要操作，便于追踪审核与发布过程。";
+  const navigationItems: Array<{
+    id: JATab;
+    label: string;
+    glyph: string;
+    count?: number;
+  }> = [
+    { id: "pulse", label: "数据看板", glyph: "◈" },
+    { id: "review", label: "分区审核", glyph: "✓", count: pending.length },
+    {
+      id: "organizations",
+      label: "企业认证",
+      glyph: "◎",
+      count: organizations.filter(
+        (item) => item.verificationStatus === "pending",
+      ).length,
+    },
+    { id: "publish", label: "内容发布", glyph: "＋" },
+    { id: "records", label: "平台内容", glyph: "▱" },
+    { id: "feedback", label: "互动管理", glyph: "♡" },
+    { id: "integrity", label: "诚信管理", glyph: "!" },
+    { id: "audit", label: "审计日志", glyph: "◷" },
+    { id: "keys", label: "密钥管理", glyph: "⌁" },
+  ];
   return (
     <main className="ja-console platform v2 ja-platform">
       <aside className="side">
-        <Link href="/" className="side-brand official-side-brand">
+        <a href="/" className="side-brand official-side-brand">
           <img src="/media/ja-china-logo.jpg" alt="JA China" />
           <b>Star Plan</b>
-        </Link>
+        </a>
         <nav>
-          <button
-            className={tab === "pulse" ? "active" : ""}
-            onClick={() => setTab("pulse")}
-          >
-            <span>◈</span>数据看板
-          </button>
-          <button
-            className={tab === "review" ? "active" : ""}
-            onClick={() => setTab("review")}
-          >
-            <span>✓</span>分区审核 <i>{pending.length}</i>
-          </button>
-          <button className={tab === "organizations" ? "active" : ""} onClick={() => setTab("organizations")}>
-            <span>◎</span>企业认证 <i>{organizations.filter((item) => item.verificationStatus === "pending").length}</i>
-          </button>
-          <button
-            className={tab === "publish" ? "active" : ""}
-            onClick={() => setTab("publish")}
-          >
-            <span>＋</span>内容发布
-          </button>
-          <button
-            className={tab === "records" ? "active" : ""}
-            onClick={() => setTab("records")}
-          >
-            <span>▱</span>平台内容
-          </button>
-          <button
-            className={tab === "feedback" ? "active" : ""}
-            onClick={() => setTab("feedback")}
-          >
-            <span>♡</span>互动管理
-          </button>
-          <button
-            className={tab === "integrity" ? "active" : ""}
-            onClick={() => setTab("integrity")}
-          >
-            <span>!</span>诚信管理
-          </button>
-          <button
-            className={tab === "audit" ? "active" : ""}
-            onClick={() => setTab("audit")}
-          >
-            <span>◷</span>审计日志
-          </button>
-          <button className={tab === "keys" ? "active" : ""} onClick={() => setTab("keys")}>
-            <span>⌁</span>密钥管理
-          </button>
+          {navigationItems.map((item) => (
+            <button
+              key={item.id}
+              className={tab === item.id ? "active" : ""}
+              aria-current={tab === item.id ? "page" : undefined}
+              onClick={() => navigate(item.id)}
+            >
+              <span>{item.glyph}</span>
+              {item.label}
+              {typeof item.count === "number" && item.count > 0 ? (
+                <i>{item.count}</i>
+              ) : null}
+            </button>
+          ))}
         </nav>
         <div className="side-help"><b>安全后台</b><p>企业认证、内容审核和操作日志均按管理员身份记录。</p></div>
         <button className="back" onClick={async () => { await fetch("/api/admin-auth/logout", { method: "POST" }); location.assign("/"); }}>退出后台</button>
@@ -495,68 +559,73 @@ export default function JAConsole({ operator }: { operator: string }) {
           </div>
         </header>
         <section className="workspace ja-workspace">
-          <div className="page-title">
-            <div>
-              <small>JA HUNAN OPERATIONS</small>
-              <h1>{title}</h1>
-              <p>{description}</p>
-            </div>
-          </div>
-          <div className="ja-view" key={tab}>
-            {notice && <p className="admin-notice">{notice}</p>}
-            {tab === "pulse" && (
-              <AdminPulse records={records} registrations={registrations} logs={logs} />
-            )}{" "}
-            {tab === "review" && (
-              <ReviewOperationsDesk
-                queues={reviewQueues}
-                loading={loading}
-                error={loadError}
-                refresh={load}
-                onOpen={(id) => {
-                  setSelectedId(id);
-                  setReason("");
-                }}
-                onDecideMany={decideMany}
-              />
-            )}{" "}
-            {tab === "organizations" && <OrganizationVerification items={organizations} onUpdated={load} onNotice={setNotice} />}
-            {tab === "publish" && (
-              <AdminPublisher
-                onPublished={async (message) => {
-                  setNotice(message);
-                  await load();
-                }}
-              />
-            )}
-            {tab === "records" && (
-              <div className="admin-records records-view">
-                {publicRecords.map((r) => (
-                  <RecordCard
-                    key={r.id}
-                    item={r}
-                    onOpen={() => setSelectedId(r.id)}
-                  />
-                ))}
+          <PageTransition
+            identity={`ja-${tab}`}
+            direction={direction}
+            className="ja-workspace-view"
+          >
+            <div className="page-title" data-page-heading tabIndex={-1}>
+              <div>
+                <small>JA HUNAN OPERATIONS</small>
+                <h1>{title}</h1>
+                <p>{description}</p>
               </div>
-            )}
-            {tab === "feedback" && (
-              <JAFeedbackDesk onNotice={setNotice} />
-            )}
-            {tab === "integrity" && (
-              <IntegrityDesk
-                items={blacklist}
-                onSaved={async (message) => {
-                  setNotice(message);
-                  await load();
-                }}
-              />
-            )}
-            {tab === "audit" && (
-              <AuditLogDesk logs={logs} />
-            )}
-            {tab === "keys" && <SecurityKeys onNotice={setNotice} />}
-          </div>
+            </div>
+            <div className="ja-view">
+              {tab === "pulse" && (
+                <AdminPulse records={records} registrations={registrations} logs={logs} />
+              )}{" "}
+              {tab === "review" && (
+                <ReviewOperationsDesk
+                  queues={reviewQueues}
+                  loading={loading}
+                  error={loadError}
+                  refresh={load}
+                  onOpen={(id) => {
+                    setSelectedId(id);
+                    setReason("");
+                  }}
+                  onDecideMany={decideMany}
+                />
+              )}{" "}
+              {tab === "organizations" && <OrganizationVerification items={organizations} onUpdated={load} onNotice={setNotice} />}
+              {tab === "publish" && (
+                <AdminPublisher
+                  onPublished={async (message) => {
+                    setNotice(message);
+                    await load();
+                  }}
+                />
+              )}
+              {tab === "records" && (
+                <div className="admin-records records-view">
+                  {publicRecords.map((r) => (
+                    <RecordCard
+                      key={r.id}
+                      item={r}
+                      onOpen={() => setSelectedId(r.id)}
+                    />
+                  ))}
+                </div>
+              )}
+              {tab === "feedback" && (
+                <JAFeedbackDesk onNotice={setNotice} />
+              )}
+              {tab === "integrity" && (
+                <IntegrityDesk
+                  items={blacklist}
+                  onSaved={async (message) => {
+                    setNotice(message);
+                    await load();
+                  }}
+                />
+              )}
+              {tab === "audit" && (
+                <AuditLogDesk logs={logs} />
+              )}
+              {tab === "keys" && <SecurityKeys onNotice={setNotice} />}
+            </div>
+          </PageTransition>
         </section>
       </div>
       {selected && (
