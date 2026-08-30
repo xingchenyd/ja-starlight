@@ -1,5 +1,6 @@
 "use client";
 import { FormEvent, useMemo, useState } from "react";
+import { workspacePath } from "../../lib/ui/workspace-routes";
 
 type Role = "student" | "enterprise";
 const messages: Record<string, string> = { EMAIL_ALREADY_REGISTERED: "该邮箱已注册，请直接登录或找回密码。", INVALID_CREDENTIALS: "邮箱、密码或登录身份不正确。", WEAK_PASSWORD: "密码须为 8-20 位，含字母、数字和符号，且不能包含中文或空格。", TOO_MANY_ATTEMPTS: "尝试次数过多，请稍后再试。" };
@@ -14,7 +15,7 @@ export default function AuthPanel({ accountRole: role }: { accountRole: Role }) 
       const response = await fetch(`/api/auth/${mode}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password, role }) });
       const result = await response.json() as { code?: string; error?: string };
       if (!response.ok) throw new Error(messages[result.code || ""] || result.error || "暂时无法完成，请稍后再试。");
-      location.assign(`/workspace?role=${role}`);
+      location.assign(workspacePath(role, "overview"));
     } catch (reason) { setError(reason instanceof Error ? reason.message : "暂时无法完成，请稍后再试。"); }
     finally { setBusy(false); }
   }
