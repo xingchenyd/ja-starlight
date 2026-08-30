@@ -2,6 +2,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { jobs, type Job } from "../data";
+import { catalogFilterUrl, parseCatalogFilters } from "../../lib/catalog/catalog-url";
 
 type RecordItem = { id: string; kind: string; payload: Record<string, unknown> };
 const categories = [
@@ -61,6 +62,27 @@ export default function OpportunityCatalog({ initialQuery, initialCategory }: { 
       active = false;
     };
   }, []);
+  useEffect(() => {
+    const restoreFromUrl = () => {
+      const filters = parseCatalogFilters(window.location.search);
+      const nextCategory = categories.includes(filters.category) ? filters.category : "全部类别";
+      setQuery(filters.query);
+      setAppliedQuery(filters.query);
+      setCategory(nextCategory);
+    };
+    window.addEventListener("popstate", restoreFromUrl);
+    return () => window.removeEventListener("popstate", restoreFromUrl);
+  }, []);
+  useEffect(() => {
+    window.history.replaceState(
+      window.history.state,
+      "",
+      catalogFilterUrl(window.location.pathname, {
+        query: appliedQuery,
+        category: category === "全部类别" ? "" : category,
+      }),
+    );
+  }, [appliedQuery, category]);
   const list = useMemo(() => {
     const seen = new Set<string>();
     return [...catalog, ...jobs]

@@ -2,6 +2,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { contents, type ContentItem } from "../data";
+import { catalogFilterUrl, parseCatalogFilters } from "../../lib/catalog/catalog-url";
 
 type RecordItem = { id: string; kind: string; payload: Record<string, unknown> };
 const categories = ["全部内容", "技能成长", "活动分享", "企业曝光", "职业探索", "简历面试", "公益实践"];
@@ -25,11 +26,11 @@ function normalize(record: RecordItem): ContentItem {
   };
 }
 
-export default function ContentCatalog() {
+export default function ContentCatalog({ initialQuery, initialCategory }: { initialQuery: string; initialCategory: string }) {
   const [catalog, setCatalog] = useState<ContentItem[]>([]),
-    [category, setCategory] = useState("全部内容"),
-    [query, setQuery] = useState(""),
-    [appliedQuery, setAppliedQuery] = useState(""),
+    [category, setCategory] = useState(categories.includes(initialCategory) ? initialCategory : "全部内容"),
+    [query, setQuery] = useState(initialQuery),
+    [appliedQuery, setAppliedQuery] = useState(initialQuery),
     [loading, setLoading] = useState(true);
   useEffect(() => {
     let active = true;
@@ -45,6 +46,26 @@ export default function ContentCatalog() {
       active = false;
     };
   }, []);
+  useEffect(() => {
+    const restoreFromUrl = () => {
+      const filters = parseCatalogFilters(window.location.search);
+      setQuery(filters.query);
+      setAppliedQuery(filters.query);
+      setCategory(categories.includes(filters.category) ? filters.category : "全部内容");
+    };
+    window.addEventListener("popstate", restoreFromUrl);
+    return () => window.removeEventListener("popstate", restoreFromUrl);
+  }, []);
+  useEffect(() => {
+    window.history.replaceState(
+      window.history.state,
+      "",
+      catalogFilterUrl(window.location.pathname, {
+        query: appliedQuery,
+        category: category === "全部内容" ? "" : category,
+      }),
+    );
+  }, [appliedQuery, category]);
   const shown = useMemo(() => {
     const seen = new Set<string>();
     return [...catalog, ...contents].filter((content) => {

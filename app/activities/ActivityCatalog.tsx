@@ -4,13 +4,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { mergeCatalogRecords, type PublicCatalogRecord } from "../../lib/catalog/public-catalog";
 import { activities, type Activity } from "../data";
+import { catalogFilterUrl, parseCatalogFilters } from "../../lib/catalog/catalog-url";
 
 const categories = ["全部活动", "企业参访", "职业体验", "主题工作坊", "赛事路演", "志愿公益", "校园活动"];
 
-export default function ActivityCatalog() {
+export default function ActivityCatalog({ initialQuery, initialCategory }: { initialQuery: string; initialCategory: string }) {
   const [catalog, setCatalog] = useState<PublicCatalogRecord[]>([]);
-  const [category, setCategory] = useState("全部活动");
-  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState(categories.includes(initialCategory) ? initialCategory : "全部活动");
+  const [query, setQuery] = useState(initialQuery);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,6 +23,25 @@ export default function ActivityCatalog() {
       .finally(() => active && setLoading(false));
     return () => { active = false; };
   }, []);
+  useEffect(() => {
+    const restoreFromUrl = () => {
+      const filters = parseCatalogFilters(window.location.search);
+      setQuery(filters.query);
+      setCategory(categories.includes(filters.category) ? filters.category : "全部活动");
+    };
+    window.addEventListener("popstate", restoreFromUrl);
+    return () => window.removeEventListener("popstate", restoreFromUrl);
+  }, []);
+  useEffect(() => {
+    window.history.replaceState(
+      window.history.state,
+      "",
+      catalogFilterUrl(window.location.pathname, {
+        query,
+        category: category === "全部活动" ? "" : category,
+      }),
+    );
+  }, [query, category]);
 
   const shown = useMemo(() => {
     const all = mergeCatalogRecords<Activity>(catalog, activities, "activity");
