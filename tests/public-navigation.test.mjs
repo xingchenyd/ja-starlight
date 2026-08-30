@@ -44,3 +44,16 @@ test("public detail actions use canonical student workspace routes", async () =>
     assert.doesNotMatch(source, /workspace\?role=student/);
   }
 });
+
+test("all public navigation returns to the first-class activity directory", async () => {
+  for (const file of [
+    "../app/opportunities/page.tsx",
+    "../app/content/page.tsx",
+    "../app/activities/[id]/ActivityDetailView.tsx",
+    "../app/activities/[id]/DynamicActivityDetail.tsx",
+  ]) {
+    const source = await readFile(new URL(file, import.meta.url), "utf8");
+    assert.doesNotMatch(source, /\/#events/);
+    assert.match(source, /\/activities/);
+  }
+});

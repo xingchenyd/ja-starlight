@@ -1,6 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "./components/motion";
 import {
   isPublicNow,
@@ -86,9 +86,11 @@ export default function HomeCarousel() {
   const [slides, setSlides] = useState<Slide[]>(fallbackSlides),
     [active, setActive] = useState(0),
     [userPaused, setUserPaused] = useState(false),
+    [focusPaused, setFocusPaused] = useState(false),
     [hovered, setHovered] = useState(false);
   const reducedMotion = useReducedMotion();
-  const paused = reducedMotion || userPaused || hovered;
+  const paused = reducedMotion || userPaused || focusPaused || hovered;
+  const pointerActivation = useRef(false);
   useEffect(() => {
     let live = true;
     fetch("/api/catalog?pageSize=100")
@@ -134,7 +136,18 @@ export default function HomeCarousel() {
       aria-label="JA 活动与成长内容轮播"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      onFocusCapture={() => setUserPaused(true)}
+      onPointerDownCapture={() => {
+        pointerActivation.current = true;
+      }}
+      onPointerUpCapture={() => {
+        pointerActivation.current = false;
+      }}
+      onPointerCancelCapture={() => {
+        pointerActivation.current = false;
+      }}
+      onFocusCapture={() => {
+        if (!pointerActivation.current) setFocusPaused(true);
+      }}
     >
       <div className="story-heading">
         <div>
@@ -195,11 +208,15 @@ export default function HomeCarousel() {
           </button>
           <button
             className="story-pause"
-            onClick={() => setUserPaused((value) => !value)}
-            aria-label={userPaused ? "继续轮播" : "暂停轮播"}
-            title={userPaused ? "继续轮播" : "暂停轮播"}
+            onClick={() => {
+              const shouldResume = userPaused || focusPaused;
+              setUserPaused(!shouldResume);
+              setFocusPaused(false);
+            }}
+            aria-label={userPaused || focusPaused ? "继续轮播" : "暂停轮播"}
+            title={userPaused || focusPaused ? "继续轮播" : "暂停轮播"}
           >
-            {userPaused ? "▶" : "Ⅱ"}
+            {userPaused || focusPaused ? "▶" : "Ⅱ"}
           </button>
         </div>
       </div>
