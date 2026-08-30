@@ -164,5 +164,25 @@ export function useStudentData(enabled = true) {
     }
   }, [data.favorites, removeFavorite]);
 
-  return { data, loading, error, reload, removeFavorite, toggleFavorite, setData };
+  const setReminder = useCallback(async (sourceId: string, enabled: boolean) => {
+    const previous = data.calendar;
+    setData((current) => ({
+      ...current,
+      calendar: current.calendar.map((item) => item.sourceId === sourceId ? { ...item, reminderEnabled: enabled } : item),
+    }));
+    try {
+      const response = await studentRequest("/api/student", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "set-reminder", sourceId, enabled }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "提醒设置失败");
+    } catch (error) {
+      setData((current) => ({ ...current, calendar: previous }));
+      throw error;
+    }
+  }, [data.calendar]);
+
+  return { data, loading, error, reload, removeFavorite, toggleFavorite, setReminder, setData };
 }

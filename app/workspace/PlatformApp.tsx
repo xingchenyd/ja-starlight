@@ -5,6 +5,7 @@ import { PageTransition, runViewTransition, type TransitionDirection } from "../
 import { ToastProvider, useToast } from "../components/ui";
 import StudentOverviewView from "./student/StudentOverview";
 import OpportunityBrowserView from "./student/OpportunityBrowser";
+import ActivityExperienceView from "./student/ActivityExperience";
 import { useStudentData, type StudentFavorite, type StudentPrivateData } from "./student/useStudentData";
 import {
   normalizeWorkspaceRoute,
@@ -423,6 +424,7 @@ function PlatformWorkspace({
                 reloadPrivateData={studentPrivate.reload}
                 removeFavorite={studentPrivate.removeFavorite}
                 toggleFavorite={studentPrivate.toggleFavorite}
+                setReminder={studentPrivate.setReminder}
               />
             ) : (
               <EnterpriseSpace
@@ -537,6 +539,7 @@ function StudentSpace({
   reloadPrivateData,
   removeFavorite,
   toggleFavorite,
+  setReminder,
 }: {
   tab: string;
   initialItem?: string;
@@ -564,6 +567,7 @@ function StudentSpace({
   reloadPrivateData: () => void;
   removeFavorite: (favorite: StudentFavorite) => Promise<void>;
   toggleFavorite: (targetType: "job" | "activity" | "content", targetId: string, snapshot: Record<string, unknown>) => Promise<boolean>;
+  setReminder: (sourceId: string, enabled: boolean) => Promise<void>;
 }) {
   const customJobs = catalog
     .filter((r) => r.kind === "job")
@@ -575,7 +579,7 @@ function StudentSpace({
     .filter((r) => r.kind === "content")
     .map((r) => ({ ...r.payload, id: r.id }) as unknown as ContentItem);
   const allJobs = mergeCatalogRecords<Job>(catalog, jobs, "job");
-  const allActivities = [...customActivities, ...activities];
+  const allActivities = mergeCatalogRecords<Activity>(catalog, activities, "activity");
   const allContents = [...customContents, ...contents];
   if (tab === "overview")
     return (
@@ -595,7 +599,7 @@ function StudentSpace({
   if (tab === "opportunities")
     return <OpportunityBrowserView allJobs={allJobs} initialItem={initialItem} favorites={privateData.favorites} onNavigate={setTab} onToggleFavorite={toggleFavorite} flash={flash} />;
   if (tab === "activities")
-    return <ActivityExperience custom={customActivities} flash={flash} initialItem={initialItem} />;
+    return <ActivityExperienceView activities={allActivities} initialItem={initialItem} profile={records.find((record) => record.kind === "student-profile")?.payload || {}} favorites={privateData.favorites} calendar={privateData.calendar} onNavigate={setTab} onToggleFavorite={toggleFavorite} onToggleReminder={async (sourceId, enabled) => { try { await setReminder(sourceId, enabled); flash(enabled ? "活动提醒已开启" : "活动提醒已关闭"); } catch (error) { flash(error instanceof Error ? error.message : "提醒设置失败"); } }} onPrivateReload={reloadPrivateData} flash={flash} />;
   if (tab === "content")
     return <LearningCenter custom={customContents} flash={flash} initialItem={initialItem} />;
   return (

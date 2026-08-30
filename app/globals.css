@@ -2,6 +2,7 @@
 @import "./design-system/tokens.css";
 @import "./design-system/motion.css";
 @import "./design-system/components.css";
+@import "./workspace/student/student-activities.css";
 
 :root {
   --ja-red: #ec1c24;
