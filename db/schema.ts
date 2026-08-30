@@ -105,6 +105,27 @@ export const notifications = sqliteTable("notifications", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [index("idx_notifications_user_read").on(table.userId, table.readAt, table.createdAt)]);
 
+export const studentFavorites = sqliteTable("student_favorites", {
+  id: text("id").primaryKey(), studentId: text("student_id").notNull(), targetType: text("target_type").notNull(), targetId: text("target_id").notNull(),
+  targetSnapshot: text("target_snapshot").notNull().default("{}"), status: text("status").notNull().default("active"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`), updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [uniqueIndex("idx_student_favorites_identity").on(table.studentId, table.targetType, table.targetId), index("idx_student_favorites_created").on(table.studentId, table.createdAt)]);
+
+export const studentCalendarEvents = sqliteTable("student_calendar_events", {
+  id: text("id").primaryKey(), studentId: text("student_id").notNull(), sourceType: text("source_type").notNull().default("activity"), sourceId: text("source_id").notNull(),
+  title: text("title").notNull(), startAt: text("start_at"), endAt: text("end_at"), reminderAt: text("reminder_at"),
+  reminderEnabled: integer("reminder_enabled").notNull().default(1), status: text("status").notNull().default("active"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`), updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [uniqueIndex("idx_student_calendar_source").on(table.studentId, table.sourceType, table.sourceId), index("idx_student_calendar_upcoming").on(table.studentId, table.status, table.startAt)]);
+
+export const studentExperiences = sqliteTable("student_experiences", {
+  id: text("id").primaryKey(), studentId: text("student_id").notNull(), sourceType: text("source_type").notNull().default("manual"), sourceId: text("source_id"),
+  category: text("category").notNull(), title: text("title").notNull(), role: text("role").notNull().default(""), description: text("description").notNull().default(""),
+  output: text("output").notNull().default(""), evidenceUrl: text("evidence_url").notNull().default(""), evidenceAssetKey: text("evidence_asset_key").notNull().default(""),
+  occurredAt: text("occurred_at").notNull(), certified: integer("certified").notNull().default(0), isPublic: integer("is_public").notNull().default(1), sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`), updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [uniqueIndex("idx_student_experiences_source").on(table.studentId, table.sourceType, table.sourceId), index("idx_student_experiences_timeline").on(table.studentId, table.sortOrder, table.occurredAt)]);
+
 export const mediaAssets = sqliteTable("media_assets", {
   id: text("id").primaryKey(), ownerId: text("owner_id").notNull(), storageKey: text("storage_key").notNull(), originalName: text("original_name").notNull(),
   contentType: text("content_type").notNull(), size: integer("size").notNull(), purpose: text("purpose").notNull(), visibility: text("visibility").notNull(),

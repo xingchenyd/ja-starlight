@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { getActor, notify, writeAudit } from "../../../db/runtime";
+import { normalizeDateTime, reminderBefore } from "../../../lib/services/student";
 
 type ActivityRow = { id: string; ownerId: string; payload: string };
 type RegistrationRow = {
@@ -17,13 +18,16 @@ const setupSql = [
   "CREATE TABLE IF NOT EXISTS workspace_records (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, actor_id TEXT NOT NULL, action TEXT NOT NULL, target_type TEXT NOT NULL, target_id TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS activity_registrations (id TEXT PRIMARY KEY, activity_id TEXT NOT NULL, activity_title TEXT NOT NULL, student_owner_id TEXT NOT NULL, publisher_owner_id TEXT NOT NULL, answers TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', review_note TEXT NOT NULL DEFAULT '', reviewed_at TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+  "CREATE TABLE IF NOT EXISTS student_calendar_events (id TEXT PRIMARY KEY, student_id TEXT NOT NULL, source_type TEXT NOT NULL DEFAULT 'activity', source_id TEXT NOT NULL, title TEXT NOT NULL, start_at TEXT, end_at TEXT, reminder_at TEXT, reminder_enabled INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_activity_registration_student_activity ON activity_registrations(student_owner_id, activity_id)",
   "CREATE INDEX IF NOT EXISTS idx_activity_registration_publisher ON activity_registrations(publisher_owner_id, created_at)",
   "CREATE INDEX IF NOT EXISTS idx_activity_registration_activity ON activity_registrations(activity_id, created_at)",
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_student_calendar_source ON student_calendar_events(student_id,source_type,source_id)",
+  "CREATE INDEX IF NOT EXISTS idx_student_calendar_upcoming ON student_calendar_events(student_id,status,start_at)",
 ];
 
 async function setup() {
-  await env.DB.batch(setupSql.slice(0, 3).map((sql) => env.DB.prepare(sql)));
+  await env.DB.batch(setupSql.slice(0, 4).map((sql) => env.DB.prepare(sql)));
   const columns = await env.DB.prepare(
     "PRAGMA table_info(activity_registrations)",
   ).all();
@@ -41,8 +45,14 @@ async function setup() {
         "ALTER TABLE activity_registrations ADD COLUMN reviewed_at TEXT",
       ),
     );
+  if (!names.has("updated_at"))
+    alters.push(env.DB.prepare("ALTER TABLE activity_registrations ADD COLUMN updated_at TEXT"));
+  if (!names.has("cancelled_at"))
+    alters.push(env.DB.prepare("ALTER TABLE activity_registrations ADD COLUMN cancelled_at TEXT"));
+  if (!names.has("attendance_status"))
+    alters.push(env.DB.prepare("ALTER TABLE activity_registrations ADD COLUMN attendance_status TEXT NOT NULL DEFAULT 'unconfirmed'"));
   if (alters.length) await env.DB.batch(alters);
-  await env.DB.batch(setupSql.slice(3).map((sql) => env.DB.prepare(sql)));
+  await env.DB.batch(setupSql.slice(4).map((sql) => env.DB.prepare(sql)));
 }
 function cleanAnswers(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -135,6 +145,8 @@ export async function POST(request: Request) {
   const body = (await request.json()) as {
     activityId?: string;
     activityTitle?: string;
+    activityDate?: string;
+    activityEnd?: string;
     answers?: Record<string, string>;
   };
   if (
@@ -158,6 +170,8 @@ export async function POST(request: Request) {
   let publisher = "ja:seed";
   let canonicalActivityId = body.activityId;
   let canonicalTitle = String(body.activityTitle).trim().slice(0, 200);
+  let startAt = normalizeDateTime(body.activityDate);
+  let endAt = normalizeDateTime(body.activityEnd);
   if (record) {
     const payload = JSON.parse(String(record.payload));
     if (payload.reviewStatus !== "approved")
@@ -198,6 +212,8 @@ export async function POST(request: Request) {
     publisher = String(record.ownerId);
     canonicalActivityId = record.id;
     canonicalTitle = String(payload.title || canonicalTitle).slice(0, 200);
+    startAt = normalizeDateTime(payload.startAt || payload.date) || startAt;
+    endAt = normalizeDateTime(payload.endAt || payload.endDate) || endAt;
     const capacity = Number(payload.capacity || 0);
     if (capacity > 0) answerData.clean.__capacity = String(capacity);
   }
@@ -209,7 +225,7 @@ export async function POST(request: Request) {
   const id = previous ? String(previous.id) : crypto.randomUUID();
   if (previous)
     await env.DB.prepare(
-      "UPDATE activity_registrations SET activity_id=?,activity_title=?,publisher_owner_id=?,answers=?,status='pending',review_note='',reviewed_at=NULL,created_at=CURRENT_TIMESTAMP WHERE id=?",
+      "UPDATE activity_registrations SET activity_id=?,activity_title=?,publisher_owner_id=?,answers=?,status='pending',review_note='',reviewed_at=NULL,cancelled_at=NULL,updated_at=CURRENT_TIMESTAMP,created_at=CURRENT_TIMESTAMP WHERE id=?",
     )
       .bind(
         canonicalActivityId,
@@ -230,7 +246,9 @@ export async function POST(request: Request) {
       return Response.json({ error: "该活动报名名额已满" }, { status: 409 });
   }
   await writeAudit(student, "register", "activity", canonicalActivityId);
-  await notify(publisher, "new-registration", "收到新的活动报名", `${canonicalTitle} 有新的学生报名待确认。`, "/workspace?role=enterprise&tab=registrations");
+  await env.DB.prepare("INSERT INTO student_calendar_events(id,student_id,source_type,source_id,title,start_at,end_at,reminder_at,reminder_enabled,status,created_at,updated_at) VALUES(?,?,'activity',?,?,?,?,?,1,'active',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(student_id,source_type,source_id) DO UPDATE SET title=excluded.title,start_at=excluded.start_at,end_at=excluded.end_at,reminder_at=excluded.reminder_at,status='active',updated_at=CURRENT_TIMESTAMP")
+    .bind(crypto.randomUUID(), student, canonicalActivityId, canonicalTitle, startAt, endAt, reminderBefore(startAt, 24)).run();
+  await notify(publisher, "new-registration", "收到新的活动报名", `${canonicalTitle} 有新的学生报名待确认。`, "/workspace/enterprise/registrations");
   return Response.json({ ok: true, id, status: "pending" });
 }
 
@@ -301,7 +319,7 @@ export async function PATCH(request: Request) {
       ).bind(publisher, `registration-${body.decision}`, registration.id),
     ]),
   );
-  await Promise.all(registrations.results.map((registration) => notify(registration.studentOwnerId, "registration-result", body.decision === "approved" ? "活动报名已通过" : "活动报名需要修改", `${registration.activityTitle}：${reviewNote}`, "/workspace?role=student&tab=activities")));
+  await Promise.all(registrations.results.map((registration) => notify(registration.studentOwnerId, "registration-result", body.decision === "approved" ? "活动报名已通过" : "活动报名需要修改", `${registration.activityTitle}：${reviewNote}`, "/workspace/student/activities")));
   return Response.json({
     ok: true,
     status: body.decision,
@@ -335,10 +353,12 @@ export async function DELETE(request: Request) {
       { status: 409 },
     );
   await env.DB.prepare(
-    "DELETE FROM activity_registrations WHERE activity_id=? AND student_owner_id=?",
+    "UPDATE activity_registrations SET status='cancelled',cancelled_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE activity_id=? AND student_owner_id=?",
   )
     .bind(canonicalId, student)
     .run();
+  await env.DB.prepare("UPDATE student_calendar_events SET status='cancelled',updated_at=CURRENT_TIMESTAMP WHERE student_id=? AND source_type='activity' AND source_id=?")
+    .bind(student, canonicalId).run();
   await writeAudit(student, "cancel-registration", "activity-registration", existing.id);
   return Response.json({ ok: true });
 }

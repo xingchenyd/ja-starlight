@@ -1234,6 +1234,7 @@ function ActivityExperience({
       body: JSON.stringify({
         activityId: activity.id,
         activityTitle: activity.title,
+        activityDate: activity.date,
         answers,
       }),
     });
