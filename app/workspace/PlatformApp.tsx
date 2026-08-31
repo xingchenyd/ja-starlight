@@ -2306,21 +2306,16 @@ function PublisherFeedbackDesk({ flash }: { flash: (message: string) => void }) 
           ))}
         </div>
       )}
-      {selected && (
-        <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSelected(null)}>
-          <section className="dialog feedback-dialog" role="dialog" aria-modal="true" aria-label="评论处理">
-            <button className="dialog-close" aria-label="关闭评论处理" onClick={() => setSelected(null)}>×</button>
-            <small>COMMENT MANAGEMENT</small>
-            <h1>{selected.contentTitle}</h1>
-            <article><b>{selected.authorName}</b><p>{selected.body}</p><small>{new Date(selected.createdAt).toLocaleString("zh-CN")}</small></article>
-            <label>发布方回复<textarea rows={5} value={reply} onChange={(event) => setReply(event.target.value)} placeholder="回应问题、补充说明或给出下一步指引" /></label>
-            <div className="dialog-actions">
-              <button className="danger-text-btn" disabled={saving} onClick={() => act("delete")}>删除评论</button>
-              <button className="primary-btn" disabled={saving || reply.trim().length < 2} onClick={() => act("reply")}>{saving ? "正在处理…" : "发布回复"}</button>
-            </div>
-          </section>
-        </div>
-      )}
+      <SidePanel
+        open={Boolean(selected)}
+        title={selected?.contentTitle || "评论处理"}
+        description={selected ? `${selected.authorName} · ${new Date(selected.createdAt).toLocaleString("zh-CN")}` : undefined}
+        dirty={Boolean(selected && reply !== (selected.replyBody || ""))}
+        onClose={() => setSelected(null)}
+        footer={selected ? <div className="feedback-panel-actions"><button className="danger-text-btn" disabled={saving} onClick={() => act("delete")}>删除评论</button><button className="primary-btn" disabled={saving || reply.trim().length < 2} onClick={() => act("reply")}>{saving ? "正在处理…" : "发布回复"}</button></div> : null}
+      >
+        {selected ? <div className="feedback-panel-content"><article><b>{selected.authorName}</b><p>{selected.body}</p><small>{new Date(selected.createdAt).toLocaleString("zh-CN")}</small></article><label>发布方回复<textarea rows={7} value={reply} onChange={(event) => setReply(event.target.value)} placeholder="回应问题、补充说明或给出下一步指引" /></label></div> : null}
+      </SidePanel>
     </>
   );
 }
@@ -3170,7 +3165,6 @@ function RegistrationDetail({
     note: string,
   ) => Promise<void>;
 }) {
-  useDialogEscape(onClose);
   const [note, setNote] = useState(item.reviewNote || ""),
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
@@ -3185,11 +3179,8 @@ function RegistrationDetail({
   };
   const pending = item.status === "pending" || item.status === "registered";
   return (
-    <div className="dialog-backdrop">
-      <section className="dialog registration-detail">
-        <button className="dialog-close" aria-label="关闭报名详情" onClick={onClose}>
-          ×
-        </button>
+    <SidePanel open title={`${item.answers.name || "未填写姓名"} · 报名详情`} description={item.activityTitle} dirty={pending && Boolean(note !== (item.reviewNote || ""))} onClose={onClose}>
+      <div className="registration-detail registration-detail-panel">
         <header className="registration-detail-header">
           <span>{String(item.answers.name || "学生").slice(0, 1)}</span>
           <div>
@@ -3288,8 +3279,8 @@ function RegistrationDetail({
             )}
           </p>
         )}
-      </section>
-    </div>
+      </div>
+    </SidePanel>
   );
 }
 function registrationLabel(key: string) {
