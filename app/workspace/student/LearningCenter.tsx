@@ -43,7 +43,7 @@ export default function LearningCenter({ items, initialItem, favorites, onNaviga
   const open = (item: ContentItem) => onNavigate("content", item.id, true);
   const close = () => onNavigate("content", undefined, true);
   const favorite = async (item: ContentItem) => {
-    try { await onToggleFavorite("content", item.id, { title: item.title, publisher: item.publisher || "JA China", cover: item.cover, duration: item.duration }); }
+    try { await onToggleFavorite("content", item.id, { title: item.title, publisher: item.publisher || "星光计划", cover: item.cover, duration: item.duration }); }
     catch (error) { flash(error instanceof Error ? error.message : "收藏失败"); }
   };
   const isFavorite = (item: ContentItem) => favorites.some((favoriteItem) => favoriteItem.targetType === "content" && favoriteItem.targetId === item.id && favoriteItem.status !== "removed");
@@ -54,7 +54,7 @@ export default function LearningCenter({ items, initialItem, favorites, onNaviga
     <div className="refined-learning-grid">
       {shown.map((item) => <article key={item.id}>
         <button className="learning-card-cover" onClick={() => open(item)}>{item.coverType === "video" ? <video src={item.cover} muted playsInline /> : <img src={item.cover} alt={item.title} />}<span>{item.mediaType === "video" ? "▶ 视频" : "图文"}</span></button>
-        <div className="learning-card-body"><small>{item.publisher || "JA China"} · {item.category}</small><h2><button onClick={() => open(item)}>{item.title}</button></h2><p>{item.summary}</p><footer><span>{item.duration}</span><span>{item.level}</span>{item.tags?.slice(0, 2).map((tag) => <i key={tag}>{tag}</i>)}</footer></div>
+        <div className="learning-card-body"><small>{item.publisher || "星光计划"} · {item.category}</small><h2><button onClick={() => open(item)}>{item.title}</button></h2><p>{item.summary}</p><footer><span>{item.duration}</span><span>{item.level}</span>{item.tags?.slice(0, 2).map((tag) => <i key={tag}>{tag}</i>)}</footer></div>
         <div className="learning-card-actions"><FavoriteButton active={isFavorite(item)} onToggle={() => favorite(item)} /><button className="outline-btn" onClick={() => open(item)}>开始阅读</button></div>
       </article>)}
     </div>

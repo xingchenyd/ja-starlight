@@ -1,15 +1,15 @@
 /* eslint-disable @next/next/no-html-link-for-pages, @next/next/no-img-element */
 import type { Job } from "../../data";
+import { workspacePath } from "../../../lib/ui/workspace-routes";
 
 export default function JobDetailView({ job }: { job: Job }) {
-  const subject = encodeURIComponent(`应聘${job.title}｜来自 JA Star Plan 星光计划`);
   return (
     <main className="detail-page">
-      <header><a className="brand" href="/"><span>JA</span><b>Star Plan 星光计划</b></a><a href="/opportunities">← 返回机会列表</a></header>
+      <header><a className="brand" href="/"><span>星</span><b>星光计划</b></a><a href="/opportunities">← 返回机会列表</a></header>
       <section className="detail-head direct">
         <div className="public-company-logo" style={{ background: job.logoUrl ? "white" : job.color }}>{job.logoUrl ? <img src={job.logoUrl} alt={`${job.company} logo`} /> : job.logo}</div>
         <div><span className="status">{job.jobCategory}</span><h1><a href={`/companies/${encodeURIComponent(job.company)}`}>{job.company}</a></h1><h2>{job.title}</h2><p>{job.city} · {job.mode} · {job.duration}</p></div>
-        <a className="primary-btn" href={`mailto:${job.contactEmail}?subject=${subject}`}>通过邮箱投递简历</a>
+        <a className="primary-btn" href={workspacePath("student", "opportunities", job.id)}>生成简历与成长档案邮件</a>
       </section>
       <div className="detail-grid">
         <article>
@@ -20,7 +20,7 @@ export default function JobDetailView({ job }: { job: Job }) {
         </article>
         <aside>
           <b>机会信息</b><p><span>公司</span>{job.company}</p><p><span>机会类别</span>{job.jobCategory}</p><p><span>所在区域</span>{job.city}</p><p><span>工作方式</span>{job.mode}</p><p><span>实践周期</span>{job.duration}</p>
-          <div className="detail-email"><small>简历接收邮箱</small><a href={`mailto:${job.contactEmail}?subject=${subject}`}>{job.contactEmail}</a></div>
+          <div className="detail-email"><small>简历接收邮箱</small><a href={`mailto:${job.contactEmail}`}>{job.contactEmail}</a></div>
           <p className="privacy-note">请自行在邮件中附上简历。平台不读取邮件、不代投递，也不会提供企业与学生的站内聊天。</p>
         </aside>
       </div>

@@ -107,7 +107,7 @@ export async function GET(request: Request) {
   if (scope === "ja") {
     const admin = await requireAdmin(request);
     if (!admin)
-      return Response.json({ error: "需要 JA 后台权限" }, { status: 401 });
+      return Response.json({ error: "需要星光计划运营后台权限" }, { status: 401 });
     const rows = await env.DB.prepare(
       "SELECT id,activity_id AS activityId,activity_title AS activityTitle,student_owner_id AS studentOwnerId,publisher_owner_id AS publisherOwnerId,answers,status,review_note AS reviewNote,reviewed_at AS reviewedAt,created_at AS createdAt FROM activity_registrations WHERE publisher_owner_id LIKE 'ja:%' ORDER BY created_at DESC LIMIT 500",
     ).all();
@@ -337,7 +337,7 @@ export async function PATCH(request: Request) {
       : await getActor(request, "enterprise");
   if (!identity)
     return Response.json(
-      { error: reviewScope === "ja" ? "需要 JA 后台权限" : "缺少企业身份" },
+      { error: reviewScope === "ja" ? "需要星光计划运营后台权限" : "缺少企业身份" },
       { status: 401 },
     );
   if (reviewScope === "enterprise" && identity.role !== "enterprise")
@@ -385,7 +385,7 @@ export async function PATCH(request: Request) {
       {
         error:
           reviewScope === "ja"
-            ? "JA 只能审核 JA 发起活动的报名"
+            ? "星光计划只能审核星光计划发起活动的报名"
             : "无权审核其他发布方的报名",
       },
       { status: 403 },
@@ -395,7 +395,7 @@ export async function PATCH(request: Request) {
     body.note?.trim() ||
     (body.decision === "approved"
       ? reviewScope === "ja"
-        ? "JA 确认报名通过"
+        ? "星光计划确认报名通过"
         : "企业确认报名通过"
       : "");
   await env.DB.batch(

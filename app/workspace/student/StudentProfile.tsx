@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Dialog } from "../../components/ui";
 import GrowthTimeline from "./GrowthTimeline";
 import ResumePanel, { type StudentProfileForm } from "./ResumePanel";
+import StudentSharePanel from "./StudentSharePanel";
 import type { StudentExperience } from "./useStudentData";
 
 type ProfileRecord = { id: string; payload: Record<string, unknown> };
@@ -14,7 +15,7 @@ function profileFrom(record?: ProfileRecord): StudentProfileForm {
   return {
     name:String(value.name||"张晨"),school:String(value.school||"湖南大学"),major:String(value.major||"工商管理"),grade:String(value.grade||"2027届"),
     headline:String(value.headline||"关注产品运营、公益实践与青年发展"),bio:String(value.bio||"擅长把复杂问题整理为清晰行动方案，期待在真实项目中持续学习、协作和复盘。"),
-    skills:String(value.skills||"内容策划,用户研究,项目协作,数据整理"),awards:String(value.awards||"JA 简历工作坊优秀作品；校级创新挑战赛入围"),
+    skills:String(value.skills||"内容策划,用户研究,项目协作,数据整理"),awards:String(value.awards||"星光计划简历工作坊优秀作品；校级创新挑战赛入围"),
     phone:String(value.phone||""),email:String(value.email||""),resumeName:String(value.resumeName||""),resumeKey:String(value.resumeKey||""),resumeType:String(value.resumeType||""),resumeSize:Number(value.resumeSize||0),
   };
 }
@@ -37,6 +38,7 @@ export default function StudentProfile({ record, experiences, privateLoading, pr
       <aside className="fixed-profile-rail">
         <section className="student-identity-card"><span className="profile-avatar">{profile.name.slice(0,1)}</span><small>STUDENT PROFILE</small><h2>{profile.name}</h2><p>{profile.school} · {profile.major} · {profile.grade}</p><strong>{profile.headline}</strong><div>{skills.map((skill)=><span key={skill}>{skill}</span>)}</div><blockquote>{profile.bio}</blockquote></section>
         <ResumePanel profile={profile} upload={upload} save={save} flash={flash} />
+        <StudentSharePanel flash={flash} />
         <section className="profile-privacy-note"><b>资料可见性</b><p>完整简历、联系方式和设为私密的经历仅自己可见；企业只能看到你主动公开的成长主页内容。</p></section>
       </aside>
       <main className="growth-timeline-column"><GrowthTimeline experiences={experiences} loading={privateLoading} error={privateError} reload={reloadPrivateData} upload={upload} flash={flash} /></main>

@@ -15,6 +15,7 @@ import {
   workspacePath,
 } from "../../lib/ui/workspace-routes";
 import { mergeCatalogRecords } from "../../lib/catalog/public-catalog";
+import { buildPublishReadiness } from "../../lib/services/publish-readiness";
 import {
   activities,
   contents,
@@ -154,7 +155,7 @@ const starterBlocks: Record<"content" | "activity", RichBlock[]> = {
     {
       id: "b5",
       type: "text",
-      text: "活动结束后可根据完成情况形成 JA 认证经历、能力证据和项目成果。",
+      text: "活动结束后可根据完成情况形成星光计划认证经历、能力证据和项目成果。",
     },
   ],
 };
@@ -369,7 +370,7 @@ function PlatformWorkspace({
     <div className="platform v2">
       <aside className="side">
         <a href="/" className="side-brand official-side-brand">
-          <img src="/media/ja-china-logo.jpg" alt="JA China" />
+          <img src="/media/ja-china-logo.jpg" alt="星光计划" />
           <b>Star Plan</b>
         </a>
         <nav>
@@ -686,7 +687,7 @@ function OpportunityBrowser({
     flash(`招聘邮箱已复制：${email}`);
   };
   const mail = (j: Job) => {
-    window.location.href = `mailto:${j.contactEmail}?subject=${encodeURIComponent(`应聘${j.title}｜来自 JA 星光计划`)}&body=${encodeURIComponent(`您好，我希望申请贵公司的「${j.title}」岗位，简历见附件。\n\n姓名：\n学校：\n联系电话：`)}`;
+    window.location.href = `mailto:${j.contactEmail}?subject=${encodeURIComponent(`应聘${j.title}｜来自星光计划`)}&body=${encodeURIComponent(`您好，我希望申请贵公司的「${j.title}」岗位，简历见附件。\n\n姓名：\n学校：\n联系电话：`)}`;
   };
   const group = (name: string, summary: string, children: React.ReactNode) => (
     <section className={`filter-dropdown ${open === name ? "open" : ""}`}>
@@ -1156,7 +1157,7 @@ function ActivityExperience({
                   <span>{activity.category}</span>
                   <b>{activity.title}</b>
                   <small>
-                    {activity.publisher || "JA China"} · {activity.date}
+                    {activity.publisher || "星光计划"} · {activity.date}
                   </small>
                 </button>
               ))}
@@ -1164,7 +1165,7 @@ function ActivityExperience({
           </div>
           <aside className="activity-detail-side">
             <small>
-              {active.publisher || "JA China"} · {active.date}
+              {active.publisher || "星光计划"} · {active.date}
             </small>
             <h2>{active.title}</h2>
             <p>{active.summary}</p>
@@ -1229,7 +1230,7 @@ function ActivityExperience({
               <div className="activity-info">
                 <h2>{activity.title}</h2>
                 <small>
-                  {activity.publisher || "JA China"} · {activity.date}
+                  {activity.publisher || "星光计划"} · {activity.date}
                 </small>
                 <p>{activity.summary}</p>
                 <div className="activity-meta">
@@ -1336,7 +1337,7 @@ function ActivityRegistrationDialog({
             <h1>填写报名信息</h1>
             <p className="registration-lead">
               请按活动发布方要求填写。标有“必填”的项目必须完成，提交后企业活动负责人和
-              JA 后台均可查看。
+              星光计划运营后台均可查看。
             </p>
             <div className="registration-progress" aria-label="报名处理进度">
               <span className="done"><b>1</b>填写信息</span>
@@ -1556,7 +1557,7 @@ function LearningCenter({
               <span>{c.mediaType === "video" ? "视频" : "文章"}</span>
             </div>
             <small>
-              {c.publisher || "JA China"} · {c.category}
+              {c.publisher || "星光计划"} · {c.category}
             </small>
             <h2>{c.title}</h2>
             <p>{c.summary}</p>
@@ -1673,7 +1674,7 @@ function StudentProfile({
     ),
     skills: String(initial.skills || "内容策划,用户研究,项目协作,数据整理"),
     awards: String(
-      initial.awards || "JA 简历工作坊优秀作品；校级创新挑战赛入围",
+      initial.awards || "星光计划简历工作坊优秀作品；校级创新挑战赛入围",
     ),
     resumeName: String(initial.resumeName || ""),
     resumeKey: String(initial.resumeKey || ""),
@@ -1755,7 +1756,7 @@ function StudentProfile({
     {
       id: "tl-1",
       date: "2026.09.12",
-      type: "JA认证",
+      type: "星光计划认证",
       title: "未来职场开放日 · 智能制造专场",
       action: "完成企业参访、职业观察访谈和现场记录。",
       output: "输出《智能制造岗位观察卡》与 3 条岗位兴趣判断。",
@@ -1763,7 +1764,7 @@ function StudentProfile({
     {
       id: "tl-2",
       date: "2026.09.19",
-      type: "JA认证",
+      type: "星光计划认证",
       title: "第一份简历工作坊",
       action: "将校园经历拆解为任务、行动和结果。",
       output: "产出一版可投递简历，并获得导师反馈。",
@@ -1776,11 +1777,11 @@ function StudentProfile({
       date: new Date(item.reviewedAt || item.createdAt)
         .toLocaleDateString("zh-CN")
         .replaceAll("/", "."),
-      type: "JA认证",
+      type: "星光计划认证",
       title: item.activityTitle,
       action: "通过平台报名并完成活动参与确认。",
       output:
-        item.reviewNote || "活动记录已进入成长履历，等待 JA 补充认证评语。",
+        item.reviewNote || "活动记录已进入成长履历，等待星光计划补充认证评语。",
     }));
   const manual = form.timelineItems
     .split("\n")
@@ -1894,12 +1895,12 @@ function StudentProfile({
                 <small>TIMELINE</small>
                 <h2>完整成长时间轴</h2>
               </div>
-              <span>JA 认证高亮展示</span>
+              <span>星光计划认证高亮展示</span>
             </div>
             {timeline.map((item) => (
               <button
                 key={item.id}
-                className={`${active === item.id ? "active" : ""} ${item.type.includes("JA认证") ? "certified" : ""}`}
+                className={`${active === item.id ? "active" : ""} ${item.type.includes("星光计划认证") ? "certified" : ""}`}
                 onClick={() => setActive(item.id)}
               >
                 <time>{item.date}</time>
@@ -1912,9 +1913,9 @@ function StudentProfile({
               </button>
             ))}
             {activeItem && (
-              <article className={`timeline-detail-card ${activeItem.type.includes("JA认证") ? "certified" : ""}`}>
+              <article className={`timeline-detail-card ${activeItem.type.includes("星光计划认证") ? "certified" : ""}`}>
                 <div>
-                  <small>{activeItem.type.includes("JA认证") ? "JA VERIFIED EXPERIENCE" : "PERSONAL EXPERIENCE"}</small>
+                  <small>{activeItem.type.includes("星光计划认证") ? "STARLIGHT VERIFIED EXPERIENCE" : "PERSONAL EXPERIENCE"}</small>
                   <h3>{activeItem.title}</h3>
                   <p>{activeItem.action}</p>
                   <strong>{activeItem.output}</strong>
@@ -2144,7 +2145,7 @@ function EnterpriseSpace({
       <EnterprisePublisher
         kind="activity"
         title="成长活动"
-        desc="配置活动详情，明确报名所需字段和成长认证信息，提交后由 JA 审核。"
+        desc="配置活动详情，明确报名所需字段和成长认证信息，提交后由星光计划审核。"
         records={records.filter((r) => r.kind === "activity")}
         save={save}
         remove={remove}
@@ -2160,7 +2161,7 @@ function EnterpriseSpace({
       <EnterprisePublisher
         kind="content"
         title="成长内容"
-        desc="使用模块化编辑器发布文章或视频，提交后由 JA 审核。"
+        desc="使用模块化编辑器发布文章或视频，提交后由星光计划审核。"
         records={records.filter((r) => r.kind === "content")}
         save={save}
         remove={remove}
@@ -2425,7 +2426,7 @@ function EnterpriseOverview({
           </p>
         </div>
         <div className="workbench-welcome-art" aria-hidden="true">
-          <span>JA</span>
+          <span>星</span>
           <i />
           <b>STAR PLAN</b>
         </div>
@@ -2863,7 +2864,7 @@ function EnterpriseRegistrations() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `JA星光计划_活动报名数据_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `星光计划_活动报名数据_${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -3474,7 +3475,7 @@ function EnterprisePublisher({
         <p>
           {kind === "job"
             ? "机会完成校验后直接公开，学生通过企业邮箱投递简历。"
-            : "提交后进入 JA 审核，审核意见和公开状态会实时同步。"}
+            : "提交后进入星光计划审核，审核意见和公开状态会实时同步。"}
         </p>
       </div>
       {records.length === 0 ? (
@@ -3484,7 +3485,7 @@ function EnterprisePublisher({
           <p>
             {kind === "job"
               ? "创建后可直接进入学生端，发布前会检查岗位信息和投递邮箱。"
-              : "可以先保存草稿，确认无误后再提交 JA 审核。"}
+              : "可以先保存草稿，确认无误后再提交星光计划审核。"}
           </p>
           <button onClick={() => start()}>开始创建</button>
         </div>
@@ -3549,7 +3550,7 @@ function EnterprisePublisher({
                   </span>
                   {r.payload.reviewNote && (
                     <p className="review-note">
-                      <b>JA 审核意见：</b>
+                      <b>星光计划审核意见：</b>
                       {String(r.payload.reviewNote)}
                     </p>
                   )}
@@ -4392,6 +4393,7 @@ function PublishDialog({
       .filter(Boolean),
     registrationFields,
   };
+  const readiness = buildPublishReadiness(kind, { ...form, registrationFieldCount: registrationFields.length }, blocks);
   const steps =
     kind === "job"
       ? ["基础信息", "岗位详情", "预览"]
@@ -4427,7 +4429,7 @@ function PublishDialog({
         <div className="review-flow-strip">
           <span className="active">1 企业编辑与校验</span>
           <i>→</i>
-          <span>{kind === "job" ? "2 确认后直接发布" : "2 提交 JA 审核"}</span>
+          <span>{kind === "job" ? "2 确认后直接发布" : "2 提交星光计划审核"}</span>
           <i>→</i>
           <span>3 学生端公开展示</span>
         </div>
@@ -4911,29 +4913,15 @@ function PublishDialog({
                   <small>FINAL CHECK</small>
                   <h2>发布前确认</h2>
                   <div>
-                    <p className={form.title && form.summary ? "done" : ""}>
-                      <b>{form.title && form.summary ? "✓" : "1"}</b>
-                      标题与摘要完整
-                    </p>
-                    <p className={kind === "job" || form.cover ? "done" : ""}>
-                      <b>{kind === "job" || form.cover ? "✓" : "2"}</b>
-                      展示素材已准备
-                    </p>
-                    <p
-                      className={
-                        kind !== "content" || blocks.length >= 2 ? "done" : ""
-                      }
-                    >
-                      <b>
-                        {kind !== "content" || blocks.length >= 2 ? "✓" : "3"}
-                      </b>
-                      详细内容已编排
-                    </p>
+                    {readiness.map((item) => <p className={item.complete ? "done" : "pending"} key={item.label} title={item.detail}>
+                      <b aria-label={item.complete ? "已完成" : "未完成"}>{item.complete ? "✓" : "○"}</b>
+                      <span>{item.label}<small>{item.detail}</small></span>
+                    </p>)}
                   </div>
                   <p className="publish-readiness-note">
                     {kind === "job"
                       ? "确认发布后，机会将直接进入学生端；如需调整可随时返回编辑。"
-                      : "提交后进入 JA 审核。被退回时会保留全部内容和审核意见，可修改后再次提交。"}
+                      : "提交后进入星光计划审核。被退回时会保留全部内容和审核意见，可修改后再次提交。"}
                   </p>
                 </section>
               )}
@@ -4996,7 +4984,7 @@ function PublishDialog({
                   ? "正在提交…"
                   : kind === "job"
                     ? "确认并发布"
-                    : "提交 JA 审核"}
+                    : "提交星光计划审核"}
               </button>
             )}
           </div>

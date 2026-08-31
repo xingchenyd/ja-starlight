@@ -353,8 +353,8 @@ function JAConsoleWorkspace({
     () => [
       {
         key: "ja-activity",
-        title: "JA 发起的活动",
-        desc: "由 JA 后台创建的活动，内部确认后再进入学生端报名与展示。",
+        title: "星光计划发起的活动",
+        desc: "由星光计划运营后台创建的活动，内部确认后再进入学生端报名与展示。",
         items: pending.filter(
           (r) =>
             r.kind === "activity" && String(r.ownerId || "").startsWith("ja:"),
@@ -363,7 +363,7 @@ function JAConsoleWorkspace({
       {
         key: "enterprise-activity",
         title: "企业发布的活动",
-        desc: "企业提交的成长活动，由 JA 审核报名字段、封面、排序和公开范围。",
+        desc: "企业提交的成长活动，由星光计划审核报名字段、封面、排序和公开范围。",
         items: pending.filter(
           (r) =>
             r.kind === "activity" && !String(r.ownerId || "").startsWith("ja:"),
@@ -372,7 +372,7 @@ function JAConsoleWorkspace({
       {
         key: "enterprise-content",
         title: "企业发布的内容",
-        desc: "企业提交的文章、视频与企业曝光内容，由 JA 审核后公开。",
+        desc: "企业提交的文章、视频与企业曝光内容，由星光计划审核后公开。",
         items: pending.filter(
           (r) =>
             r.kind === "content" && !String(r.ownerId || "").startsWith("ja:"),
@@ -470,11 +470,11 @@ function JAConsoleWorkspace({
       : tab === "review"
         ? "分区审核"
         : tab === "registrations"
-          ? "JA 活动报名"
+          ? "星光计划活动报名"
         : tab === "organizations"
           ? "企业主体认证"
         : tab === "publish"
-          ? "JA 内容发布"
+          ? "星光计划内容发布"
           : tab === "records"
             ? "平台内容排序"
             : tab === "feedback"
@@ -488,13 +488,13 @@ function JAConsoleWorkspace({
     tab === "pulse"
       ? "用真实发布、报名和审核数据说明 Star Plan 的平台活性。"
       : tab === "review"
-        ? "只审核三类需要公开前确认的内容：JA 发起活动、企业发布活动、企业发布内容。"
+        ? "只审核三类需要公开前确认的内容：星光计划发起活动、企业发布活动、企业发布内容。"
         : tab === "registrations"
-          ? "只处理 JA 发起活动的学生报名；企业活动报名仍由对应企业处理。"
+          ? "只处理星光计划发起活动的学生报名；企业活动报名仍由对应企业处理。"
         : tab === "organizations"
           ? "核验企业主体名称和统一社会信用代码，通过后企业才能正式发布。"
         : tab === "publish"
-          ? "由 JA 创建活动、文章或视频；JA 活动会进入内部审核队列。"
+          ? "由星光计划创建活动、文章或视频；星光计划活动会进入内部审核队列。"
           : tab === "records"
             ? "集中查看已提交和已发布内容的状态、分类、推荐和排序。"
             : tab === "feedback"
@@ -502,7 +502,7 @@ function JAConsoleWorkspace({
             : tab === "integrity"
               ? "记录虚假信息、失约或其他诚信风险，后续可接入账号限制。"
               : tab === "keys"
-                ? "创建、停用与撤销 JA 管理密钥；新密钥仅在创建时显示一次。"
+                ? "创建、停用与撤销星光计划管理密钥；新密钥仅在创建时显示一次。"
               : "记录后台的重要操作，便于追踪审核与发布过程。";
   const navigationItems: Array<{
     id: JATab;
@@ -514,7 +514,7 @@ function JAConsoleWorkspace({
     { id: "review", label: "分区审核", glyph: "✓", count: pending.length },
     {
       id: "registrations",
-      label: "JA 活动报名",
+      label: "星光计划活动报名",
       glyph: "▤",
       count: registrations.filter((item) => item.status === "pending").length,
     },
@@ -537,7 +537,7 @@ function JAConsoleWorkspace({
     <main className="ja-console platform v2 ja-platform">
       <aside className="side">
         <a href="/" className="side-brand official-side-brand">
-          <img src="/media/ja-china-logo.jpg" alt="JA China" />
+          <img src="/media/ja-china-logo.jpg" alt="星光计划" />
           <b>Star Plan</b>
         </a>
         <nav>
@@ -562,13 +562,13 @@ function JAConsoleWorkspace({
       <div className="work">
         <header className="topbar">
           <div className="workspace-context">
-            <small>JA STAR PLAN OPERATIONS</small>
+            <small>星光计划运营</small>
             <b>湖南运营后台</b>
             <span>内容审核、排序与成长数据</span>
           </div>
           <div className="top-actions">
             <span className="operator-name">{operator}</span>
-            <div className="avatar">JA</div>
+            <div className="avatar">星</div>
           </div>
         </header>
         <section className="workspace ja-workspace">
@@ -579,7 +579,7 @@ function JAConsoleWorkspace({
           >
             <div className="page-title" data-page-heading tabIndex={-1}>
               <div>
-                <small>JA HUNAN OPERATIONS</small>
+                <small>星光计划运营</small>
                 <h1>{title}</h1>
                 <p>{description}</p>
               </div>
@@ -701,7 +701,7 @@ function OrganizationVerification({ items, onUpdated, onNotice }: { items: Organ
     <div className="category-nav">{[["pending","待核验"],["verified","已认证"],["rejected","已退回"],["all","全部"]].map(([value,label]) => <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{label}</button>)}</div>
     <div className="organization-list">{shown.map((item) => <button key={item.id} onClick={() => { setSelected(item); setReason(""); }}><span className={`org-state ${item.verificationStatus}`}>{item.verificationStatus === "verified" ? "已认证" : item.verificationStatus === "rejected" ? "已退回" : "待核验"}</span><div><h3>{item.name}</h3><p>统一社会信用代码：{item.creditCode || "未填写"}</p><small>更新于 {new Date(item.updatedAt).toLocaleString("zh-CN")}</small></div><b>查看资料 →</b></button>)}</div>
     {!shown.length && <div className="admin-empty">当前分类暂无企业认证申请。</div>}
-    {selected && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSelected(null)}><section className="dialog organization-dialog" role="dialog" aria-modal="true" aria-label={`${selected.name}企业认证`}><button className="dialog-close" aria-label="关闭企业认证" onClick={() => setSelected(null)}>×</button><small>ENTERPRISE DUE DILIGENCE</small><h1>{selected.name}</h1><div className="org-code"><span>统一社会信用代码</span><b>{selected.creditCode || "企业尚未填写"}</b></div><ul><li>核对企业主体名称与营业执照是否一致</li><li>核对联络人是否属于企业或获得正式授权</li><li>通过后，该企业发布的岗位可直接公开，活动与内容仍进入 JA 审核</li></ul><label>认证意见<textarea rows={4} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="退回时必须说明需补充的材料" /></label><div className="drawer-actions"><button disabled={saving} onClick={() => decide("rejected")}>退回补充</button><button className="approve" disabled={saving || !selected.creditCode} onClick={() => decide("approved")}>确认通过</button></div></section></div>}
+    {selected && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSelected(null)}><section className="dialog organization-dialog" role="dialog" aria-modal="true" aria-label={`${selected.name}企业认证`}><button className="dialog-close" aria-label="关闭企业认证" onClick={() => setSelected(null)}>×</button><small>ENTERPRISE DUE DILIGENCE</small><h1>{selected.name}</h1><div className="org-code"><span>统一社会信用代码</span><b>{selected.creditCode || "企业尚未填写"}</b></div><ul><li>核对企业主体名称与营业执照是否一致</li><li>核对联络人是否属于企业或获得正式授权</li><li>通过后，该企业发布的岗位可直接公开，活动与内容仍进入星光计划审核</li></ul><label>认证意见<textarea rows={4} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="退回时必须说明需补充的材料" /></label><div className="drawer-actions"><button disabled={saving} onClick={() => decide("rejected")}>退回补充</button><button className="approve" disabled={saving || !selected.creditCode} onClick={() => decide("approved")}>确认通过</button></div></section></div>}
   </>;
 }
 
@@ -969,8 +969,8 @@ function JARegistrationDesk({
       if (!response.ok) throw new Error(data.error || "报名审核失败");
       onNotice(
         decision === "approved"
-          ? `已通过 ${ids.length} 份 JA 活动报名`
-          : `已退回 ${ids.length} 份 JA 活动报名`,
+          ? `已通过 ${ids.length} 份星光计划活动报名`
+          : `已退回 ${ids.length} 份星光计划活动报名`,
       );
       setSelected(null);
       setSelectedIds([]);
@@ -1019,7 +1019,7 @@ function JARegistrationDesk({
     );
     const link = document.createElement("a");
     link.href = url;
-    link.download = `JA星光计划_JA活动报名_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `星光计划_活动报名_${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     onNotice(`已导出筛选结果，共 ${filtered.length} 条`);
@@ -1032,9 +1032,9 @@ function JARegistrationDesk({
     <>
       <section className="ja-registration-hero">
         <div>
-          <small>JA-OWNED ACTIVITY REGISTRATION</small>
+          <small>STARLIGHT ACTIVITY REGISTRATION</small>
           <h2>报名处理与成长认证</h2>
-          <p>通过后将自动写入学生成长时间轴并标记 JA 认证；企业活动不会出现在这里。</p>
+          <p>通过后将自动写入学生成长时间轴并标记星光计划认证；企业活动不会出现在这里。</p>
         </div>
         <button className="primary-btn" onClick={exportCsv}>导出筛选结果</button>
       </section>
@@ -1044,7 +1044,7 @@ function JARegistrationDesk({
         <span><small>已通过</small><b>{summary.approved}</b></span>
         <span><small>已退回</small><b>{summary.rejected}</b></span>
       </section>
-      <section className="registration-filterbar" aria-label="JA 活动报名筛选">
+      <section className="registration-filterbar" aria-label="星光计划活动报名筛选">
         <label className="registration-search">
           <span>搜索学生</span>
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="姓名、学校、电话或邮箱" />
@@ -1052,7 +1052,7 @@ function JARegistrationDesk({
         <label>
           <span>活动</span>
           <select value={activity} onChange={(event) => setActivity(event.target.value)}>
-            <option value="all">全部 JA 活动</option>
+            <option value="all">全部星光计划活动</option>
             {activities.map((name) => <option value={name} key={name}>{name}</option>)}
           </select>
         </label>
@@ -1076,7 +1076,7 @@ function JARegistrationDesk({
         </section>
       )}
       {!items.length ? (
-        <div className="admin-empty">JA 活动暂时没有学生报名。</div>
+        <div className="admin-empty">星光计划活动暂时没有学生报名。</div>
       ) : !filtered.length ? (
         <div className="admin-empty">没有符合当前筛选条件的报名。</div>
       ) : (
@@ -1111,7 +1111,7 @@ function JARegistrationDesk({
           <div className="registration-detail registration-detail-panel ja-registration-detail">
             <header className="registration-detail-header">
               <span>{String(selected.answers.name || "学").slice(0, 1)}</span>
-              <div><small>JA REGISTRATION REVIEW</small><h1>{selected.answers.name || "未填写姓名"}</h1><p>{selected.activityTitle}</p></div>
+              <div><small>STARLIGHT REGISTRATION REVIEW</small><h1>{selected.answers.name || "未填写姓名"}</h1><p>{selected.activityTitle}</p></div>
               <b className={`registration-state ${selected.status}`}>{selected.status === "approved" ? "已通过" : selected.status === "rejected" ? "已退回" : "待确认"}</b>
             </header>
             <section className="registration-answer-grid">
@@ -1122,7 +1122,7 @@ function JARegistrationDesk({
                 <label className="registration-review-note"><span>审核意见</span><textarea rows={4} value={note} onChange={(event) => setNote(event.target.value)} placeholder="通过时选填；退回时必须说明需要修改的内容" /></label>
                 <div className="registration-review-actions">
                   <button disabled={saving} onClick={() => decide([selected.id], "rejected", note)}>退回修改</button>
-                  <button className="approve" disabled={saving} onClick={() => decide([selected.id], "approved", note)}>通过并生成 JA 认证</button>
+                  <button className="approve" disabled={saving} onClick={() => decide([selected.id], "approved", note)}>通过并生成星光计划认证</button>
                 </div>
               </section>
             ) : (
@@ -1212,9 +1212,9 @@ function AdminPulse({
       </section>
       <section className="review-duty-strip">
         {[
-          ["JA 发起的活动", "JA 内部确认后公开"],
-          ["企业发布的活动", "JA 审核报名字段和活动信息"],
-          ["企业发布的内容", "JA 审核文章、视频和企业曝光"],
+          ["星光计划发起的活动", "星光计划内部确认后公开"],
+          ["企业发布的活动", "星光计划审核报名字段和活动信息"],
+          ["企业发布的内容", "星光计划审核文章、视频和企业曝光"],
         ].map(([name, text]) => (
           <article key={name}>
             <b>{name}</b>
@@ -1235,8 +1235,8 @@ function AuditLogDesk({ logs }: { logs: Log[] }) {
       "batch-approved": "批量通过",
       "batch-rejected": "批量退回",
       "configure-publication": "调整展示设置",
-      "submit-ja-activity-review": "提交 JA 活动审核",
-      "direct-publish": "JA 直接发布",
+      "submit-ja-activity-review": "提交星光计划活动审核",
+      "direct-publish": "星光计划直接发布",
       "comment-reply": "回复评论",
       "comment-delete": "删除评论",
     };
@@ -1268,7 +1268,7 @@ function AuditLogDesk({ logs }: { logs: Log[] }) {
     const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n");
     const link = document.createElement("a");
     link.href = URL.createObjectURL(new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" }));
-    link.download = `JA星光计划_审计日志_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `星光计划_审计日志_${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
   };
@@ -1648,7 +1648,7 @@ function AdminPublisher({
               .split("\n")
               .map((x) => x.trim())
               .filter(Boolean),
-            publisher: "JA China",
+            publisher: "星光计划",
           }
         : {
             ...base,
@@ -1656,7 +1656,7 @@ function AdminPublisher({
             level: "入门",
             mediaType: form.mediaType,
             tags: abilities,
-            publisher: "JA China",
+            publisher: "星光计划",
           };
     const response = await fetch("/api/admin", {
       method: "PUT",
@@ -1672,8 +1672,8 @@ function AdminPublisher({
     setForm((v) => ({ ...v, title: "", summary: "" }));
     await onPublished(
       kind === "activity"
-        ? "JA 活动已进入内部审核队列，通过后学生端可见"
-        : "JA 内容已直接发布，学生端刷新后即可看到",
+        ? "星光计划活动已进入内部审核队列，通过后学生端可见"
+        : "星光计划内容已直接发布，学生端刷新后即可看到",
     );
   };
   const registrationFields = [
@@ -1693,9 +1693,9 @@ function AdminPublisher({
     <section className="admin-publisher studio-admin-publisher">
       <div className="admin-publisher-intro">
         <small>DIRECT PUBLISH · CONTENT STUDIO</small>
-        <h2>由 JA 直接发布活动或成长内容</h2>
+        <h2>由星光计划直接发布活动或成长内容</h2>
         <p>
-          JA 可用结构化字段 +
+          星光计划可用结构化字段 +
           富媒体内容块发布活动、文章或视频。活动可设置报名表、议程、能力目标和首页推荐。
         </p>
       </div>
@@ -1935,7 +1935,7 @@ function AdminPublisher({
         {saving
           ? "正在发布…"
           : kind === "activity"
-            ? "提交 JA 内部审核 →"
+            ? "提交星光计划内部审核 →"
             : "立即发布到学生端 →"}
       </button>
     </section>
@@ -2023,7 +2023,7 @@ function JAFeedbackDesk({
       onNotice(data.error || "处理失败");
       return;
     }
-    onNotice(action === "reply" ? "JA 回复已同步到学生端" : "评论已删除");
+    onNotice(action === "reply" ? "星光计划回复已同步到学生端" : "评论已删除");
     setSelected(null);
     setReply("");
     await load();
@@ -2045,7 +2045,7 @@ function JAFeedbackDesk({
       {loading ? <div className="admin-empty">正在读取互动数据…</div> : error ? (
         <div className="admin-empty"><b>读取失败</b><p>{error}</p><button onClick={load}>重试</button></div>
       ) : shown.length === 0 ? (
-        <div className="admin-empty"><b>当前没有需要处理的评论</b><p>企业或 JA 发布内容下的学生留言会集中到这里。</p></div>
+        <div className="admin-empty"><b>当前没有需要处理的评论</b><p>企业或星光计划发布内容下的学生留言会集中到这里。</p></div>
       ) : (
         <div className="feedback-list">
           {shown.map((comment) => (
@@ -2058,11 +2058,11 @@ function JAFeedbackDesk({
       )}
       {selected && (
         <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSelected(null)}>
-          <section className="dialog feedback-dialog" role="dialog" aria-modal="true" aria-label="JA 评论处理">
+          <section className="dialog feedback-dialog" role="dialog" aria-modal="true" aria-label="星光计划评论处理">
             <button className="dialog-close" aria-label="关闭评论处理" onClick={() => setSelected(null)}>×</button>
-            <small>JA COMMENT OPERATIONS</small><h1>{selected.contentTitle}</h1>
+            <small>STARLIGHT COMMENT OPERATIONS</small><h1>{selected.contentTitle}</h1>
             <article><b>{selected.authorName}</b><p>{selected.body}</p><small>{new Date(selected.createdAt).toLocaleString("zh-CN")}</small></article>
-            <label>JA 项目团队回复<textarea rows={5} value={reply} onChange={(event) => setReply(event.target.value)} /></label>
+            <label>星光计划项目团队回复<textarea rows={5} value={reply} onChange={(event) => setReply(event.target.value)} /></label>
             <div className="dialog-actions"><button className="danger-text-btn" onClick={() => act("delete")}>删除评论</button><button className="primary-btn" disabled={saving || reply.trim().length < 2} onClick={() => act("reply")}>{saving ? "正在处理…" : "发布回复"}</button></div>
           </section>
         </div>
@@ -2304,7 +2304,7 @@ function ReviewDrawer({
         <span className={`review-risk ${risk.level}`}>
           {risk.level === "high" ? "高风险" : risk.level === "medium" ? "需核验" : "信息较完整"}
         </span>
-        <span>{isJaActivity ? "JA 内部审核" : "企业公开内容审核"}</span>
+        <span>{isJaActivity ? "星光计划内部审核" : "企业公开内容审核"}</span>
         <span>信息完整度 {risk.score}%</span>
       </div>
       <div className="review-meta">
@@ -2469,7 +2469,7 @@ function ReviewDrawer({
         </>
       )}
       <label>
-        JA 审核意见
+        星光计划审核意见
         <textarea
           rows={4}
           value={reason}
@@ -2489,7 +2489,7 @@ function ReviewDrawer({
               })
             }
           >
-            {isJaActivity ? "退回 JA 发布人员" : "退回企业修改"}
+            {isJaActivity ? "退回星光计划发布人员" : "退回企业修改"}
           </button>
           <button
             className="approve"

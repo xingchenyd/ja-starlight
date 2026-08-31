@@ -9,7 +9,7 @@ function findStaticJob(id: string) {
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
   const job = findStaticJob(id);
-  if (!job) return { title: "机会详情｜JA Star Plan", description: "查看企业发布的实习项目机会。" };
+  if (!job) return { title: "机会详情｜星光计划", description: "查看企业发布的实习项目机会。" };
   const title = `${job.company}｜${job.title}`;
   return { title, description: job.summary, openGraph: { title, description: job.summary, images: [] }, twitter: { title, description: job.summary, images: [] } };
 }

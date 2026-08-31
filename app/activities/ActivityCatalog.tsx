@@ -57,7 +57,7 @@ export default function ActivityCatalog({ initialQuery, initialCategory }: { ini
       <section className="public-hero activity-directory-hero">
         <p className="eyebrow">GROWTH ACTIVITIES</p>
         <h1>走进真实现场，<br /><em>让经历成为成长。</em></h1>
-        <p>浏览由 JA 与企业发布并通过审核的成长活动。</p>
+        <p>浏览由星光计划与企业发布并通过审核的成长活动。</p>
         <label className="public-directory-search">
           <span>搜索活动</span>
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="活动名称、发布方或关键词" />
@@ -74,7 +74,7 @@ export default function ActivityCatalog({ initialQuery, initialCategory }: { ini
           {shown.map((activity) => (
             <article key={activity.id}>
               <img src={activity.cover} alt={activity.title} loading="lazy" />
-              <div><small>{activity.publisher || "JA China"} · {activity.category}</small><h2>{activity.title}</h2><p>{activity.summary}</p><span>{activity.date} · {activity.place}</span></div>
+              <div><small>{activity.publisher || "星光计划"} · {activity.category}</small><h2>{activity.title}</h2><p>{activity.summary}</p><span>{activity.date} · {activity.place}</span></div>
               <a href={`/activities/${encodeURIComponent(activity.id)}`}>查看活动 →</a>
             </article>
           ))}

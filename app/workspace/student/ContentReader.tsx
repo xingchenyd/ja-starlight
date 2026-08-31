@@ -87,7 +87,7 @@ export default function ContentReader({ item, open, onClose, flash }: { item: Co
     } catch (error) { setComments(previous); flash(error instanceof Error ? error.message : "评论删除失败"); }
   };
 
-  return <Dialog open={open && Boolean(item)} title={item?.title || "成长内容"} description={item ? `${item.publisher || "JA China"} · ${item.category} · ${item.duration}` : undefined} onClose={onClose}>
+  return <Dialog open={open && Boolean(item)} title={item?.title || "成长内容"} description={item ? `${item.publisher || "星光计划"} · ${item.category} · ${item.duration}` : undefined} onClose={onClose}>
     {item ? <article className={`refined-content-reader reader-${item.mediaType}`}>
       {item.mediaType === "video" ? <section className="content-video-stage"><video controls preload="metadata" poster={item.cover}>{item.videoUrl ? <source src={item.videoUrl} /> : null}</video>{!item.videoUrl ? <span>视频文件由发布方上传后即可在此播放</span> : null}</section> : <img className="content-article-hero" src={item.cover} alt={item.title} />}
       <header><div className="content-reader-tags"><span>{item.mediaType === "video" ? "视频" : "图文"}</span><span>{item.level}</span>{item.tags?.map((tag) => <span key={tag}>{tag}</span>)}</div><p>{item.summary}</p></header>

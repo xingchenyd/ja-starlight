@@ -8,8 +8,8 @@ export async function ensureAuthSeeds(config: SeedConfig, db: Database) {
   const pepper = String(config.AUTH_PEPPER || "");
   if (!pepper) return;
   const accounts = [
-    { email: "student-demo@ja-starlight.test", role: "student", name: "张晨", password: config.AUTH_SEED_STUDENT_PASSWORD },
-    { email: "enterprise-demo@ja-starlight.test", role: "enterprise", name: "星光示范企业", password: config.AUTH_SEED_ENTERPRISE_PASSWORD },
+    { email: "student@starlight-hunan.cn", role: "student", name: "张晨", password: config.AUTH_SEED_STUDENT_PASSWORD },
+    { email: "enterprise@starlight-hunan.cn", role: "enterprise", name: "长沙星联数字科技有限公司", password: config.AUTH_SEED_ENTERPRISE_PASSWORD },
   ];
   for (const account of accounts) {
     if (!account.password || !validatePassword(account.password).valid) continue;

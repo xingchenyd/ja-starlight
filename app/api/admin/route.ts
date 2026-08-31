@@ -140,7 +140,7 @@ export async function POST(request: Request) {
   );
   if (unsupported)
     return Response.json(
-      { error: "JA 仅审核 JA 活动、企业活动和企业内容" },
+      { error: "星光计划仅审核星光计划活动、企业活动和企业内容" },
       { status: 400 },
     );
   const alreadyReviewed = !configuring && rows.find(
@@ -167,7 +167,7 @@ export async function POST(request: Request) {
       reviewNote: configuring
         ? row.current.reviewNote
         : body.reason?.trim() ||
-          (body.decision === "approved" ? "信息完整，JA 审核通过" : ""),
+          (body.decision === "approved" ? "信息完整，星光计划审核通过" : ""),
       reviewedAt: configuring ? row.current.reviewedAt : reviewedAt,
       reviewedBy: configuring ? row.current.reviewedBy : user.email,
       status: configuring
@@ -255,10 +255,10 @@ export async function PUT(request: Request) {
     reviewStatus: needsInternalReview ? "pending" : "approved",
     reviewNote:
       body.kind === "blacklist"
-        ? "JA 诚信记录"
+        ? "星光计划诚信记录"
         : needsInternalReview
-          ? "JA 发起活动，等待内部审核确认"
-          : "JA 后台直接发布",
+          ? "星光计划发起活动，等待内部审核确认"
+          : "星光计划运营后台直接发布",
     reviewedAt: needsInternalReview ? null : now,
     reviewedBy: user.email,
     submittedAt: now,

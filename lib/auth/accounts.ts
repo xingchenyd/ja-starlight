@@ -170,7 +170,7 @@ export async function listAdminKeys(db: AuthDatabase) {
 export async function createAdminKey(db: AuthDatabase, config: AuthConfig, label: unknown, actorId: string) {
   const safeLabel = String(label || "").trim().slice(0, 60);
   if (safeLabel.length < 2) throw new AuthServiceError("INVALID_KEY_LABEL", "请输入密钥名称");
-  const rawKey = `JA-STARLIGHT-${randomToken(24)}`, id = crypto.randomUUID();
+  const rawKey = `STARLIGHT-${randomToken(24)}`, id = crypto.randomUUID();
   await db.prepare("INSERT INTO admin_credentials(id,label,key_prefix,secret_hash,status,created_by) VALUES(?,?,?,?, 'active',?)").bind(id, safeLabel, rawKey.slice(0, 28), await hashOpaqueToken(rawKey, pepper(config)), actorId).run();
   return { id, label: safeLabel, prefix: rawKey.slice(0, 28), rawKey };
 }

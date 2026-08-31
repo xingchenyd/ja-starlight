@@ -16,7 +16,7 @@ test("branded reset mail adapter supports unavailable and Resend states", async 
   const source = await readFile(new URL("../lib/auth/mail.ts", import.meta.url), "utf8");
   assert.match(source, /MAIL_SERVICE_UNAVAILABLE/);
   assert.match(source, /api\.resend\.com\/emails/);
-  assert.match(source, /JA 星光计划/);
-  assert.match(source, /青年成就中国/);
+  assert.match(source, /星光计划/);
+  assert.match(source, /连接青年、企业与真实世界的成长机会/);
   assert.match(source, /10 分钟/);
 });

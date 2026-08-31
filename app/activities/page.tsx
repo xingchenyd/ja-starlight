@@ -6,7 +6,7 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
   return (
     <main className="public-page">
       <header className="public-nav">
-        <a className="brand" href="/"><span>JA</span><b>Star Plan 星光计划</b></a>
+        <a className="brand" href="/"><span>星</span><b>星光计划</b></a>
         <nav><a href="/opportunities">实习 / 项目机会</a><a href="/activities" className="active">成长活动</a><a href="/content">成长内容</a></nav>
         <a className="button small" href="/workspace/student/activities">学生空间</a>
       </header>

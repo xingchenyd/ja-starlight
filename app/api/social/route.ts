@@ -26,7 +26,7 @@ export async function GET(request: Request) {
   const scope = url.searchParams.get("scope");
   if (scope === "publisher" || scope === "ja") {
     if (scope === "ja" && !(await requireAdmin(request)))
-      return Response.json({ error: "需要 JA 管理员权限" }, { status: 403 });
+      return Response.json({ error: "需要星光计划管理员权限" }, { status: 403 });
     if (scope === "publisher" && (!user || (user.role !== "enterprise" && !user.testMode)))
       return Response.json({ error: "缺少企业身份" }, { status: 401 });
     const contentRows = scope === "ja"
@@ -196,7 +196,7 @@ export async function PATCH(request: Request) {
     return Response.json({ error: "缺少处理信息" }, { status: 400 });
   const jaActor = body.scope === "ja" ? await requireAdmin(request) : null;
   if (body.scope === "ja" && !jaActor)
-    return Response.json({ error: "需要 JA 管理员权限" }, { status: 403 });
+    return Response.json({ error: "需要星光计划管理员权限" }, { status: 403 });
   if (body.scope !== "ja" && (!user || (user.role !== "enterprise" && !user.testMode)))
     return Response.json({ error: "缺少发布方身份" }, { status: 401 });
   const comment = await env.DB.prepare(
@@ -218,7 +218,7 @@ export async function PATCH(request: Request) {
       return Response.json({ error: "回复需为 2—800 个字符" }, { status: 400 });
     await env.DB.prepare(
       "UPDATE content_comments SET reply_body=?,replied_by=?,replied_at=CURRENT_TIMESTAMP WHERE id=?",
-    ).bind(reply, body.scope === "ja" ? "JA 项目团队" : "内容发布方", comment.id).run();
+    ).bind(reply, body.scope === "ja" ? "星光计划项目团队" : "内容发布方", comment.id).run();
   } else {
     await env.DB.prepare(
       "UPDATE content_comments SET status='deleted' WHERE id=?",

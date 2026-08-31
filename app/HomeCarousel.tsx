@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
+
 import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "./components/motion";
 import {
@@ -7,6 +8,7 @@ import {
   sortPublicRecords,
   type PublicCatalogRecord,
 } from "../lib/catalog/public-catalog";
+import { getPublicCatalog } from "../lib/catalog/client-catalog";
 
 type Slide = {
   image: string;
@@ -15,9 +17,11 @@ type Slide = {
   meta: string;
   href: string;
 };
+
 type CatalogRecord = PublicCatalogRecord & {
   kind: "activity" | "content";
 };
+
 const fallbackSlides: Slide[] = [
   {
     image: "/media/ja-official-career-market.jpg",
@@ -36,7 +40,7 @@ const fallbackSlides: Slide[] = [
   {
     image: "/media/ja-official-coy-awards.jpg",
     eyebrow: "学生公司",
-    title: "JA 中国学生公司大赛：让成果被看见",
+    title: "星光计划学生公司大赛：让成果被看见",
     meta: "创新实践 · 团队协作",
     href: "/content/con-10",
   },
@@ -83,22 +87,22 @@ function fromCatalog(record: CatalogRecord): Slide | null {
 }
 
 export default function HomeCarousel() {
-  const [slides, setSlides] = useState<Slide[]>(fallbackSlides),
-    [active, setActive] = useState(0),
-    [userPaused, setUserPaused] = useState(false),
-    [focusPaused, setFocusPaused] = useState(false),
-    [hovered, setHovered] = useState(false);
+  const [slides, setSlides] = useState<Slide[]>(fallbackSlides);
+  const [active, setActive] = useState(0);
+  const [userPaused, setUserPaused] = useState(false);
+  const [focusPaused, setFocusPaused] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const reducedMotion = useReducedMotion();
   const paused = reducedMotion || userPaused || focusPaused || hovered;
   const pointerActivation = useRef(false);
+
   useEffect(() => {
     let live = true;
-    fetch("/api/catalog?pageSize=100")
-      .then((response) => response.json())
-      .then((data) => {
+    getPublicCatalog()
+      .then((records) => {
         if (!live) return;
         const published = sortPublicRecords(
-          ((data.records || []) as CatalogRecord[]).filter(
+          (records as CatalogRecord[]).filter(
             (record) =>
               (record.kind === "activity" || record.kind === "content") &&
               isPublicNow(record.payload),
@@ -120,20 +124,23 @@ export default function HomeCarousel() {
       live = false;
     };
   }, []);
+
   useEffect(() => {
     if (paused || slides.length < 2) return;
     const timer = window.setInterval(
-      () => setActive((v) => (v + 1) % slides.length),
-      5000,
+      () => setActive((value) => (value + 1) % slides.length),
+      6500,
     );
     return () => window.clearInterval(timer);
   }, [paused, slides.length]);
+
   const move = (delta: number) =>
-    setActive((v) => (v + delta + slides.length) % slides.length);
+    setActive((value) => (value + delta + slides.length) % slides.length);
+
   return (
-    <section
-      className="story-stage shell"
-      aria-label="JA 活动与成长内容轮播"
+    <div
+      className="cinema-stage"
+      aria-label="正在发生的成长故事"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onPointerDownCapture={() => {
@@ -148,78 +155,74 @@ export default function HomeCarousel() {
       onFocusCapture={() => {
         if (!pointerActivation.current) setFocusPaused(true);
       }}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setFocusPaused(false);
+        }
+      }}
     >
-      <div className="story-heading">
-        <div>
-          <p className="eyebrow">LIVE STORIES · STAR PLAN</p>
-          <h2>正在发生的成长故事</h2>
-        </div>
-        <p>
-          企业与 JA
-          审核发布的封面会原样出现在这里。推荐内容优先展示，左右切换，点击即可进入报名或阅读。
-        </p>
-      </div>
-      <div className="story-viewport">
-        <div
-          className="story-track"
-          style={{ transform: `translateX(-${active * 100}%)` }}
-        >
-          {slides.map((slide, index) => (
-            <a
-              className="story-slide"
-              href={slide.href}
-              key={`${slide.image}-${index}`}
-              aria-hidden={active !== index}
-              tabIndex={active === index ? 0 : -1}
-            >
-              <img
-                src={slide.image}
-                alt={slide.title}
-                onError={(event) => {
-                  if (!event.currentTarget.src.endsWith("ja-official-career-market.jpg")) {
-                    event.currentTarget.src = "/media/ja-official-career-market.jpg";
-                  }
-                }}
-              />
-              <div className="story-shade" />
-              <span className="story-number">
-                {String(index + 1).padStart(2, "0")}
-              </span>
-              <div className="story-caption">
-                <small>{slide.eyebrow}</small>
-                <h3>{slide.title}</h3>
-                <p>{slide.meta}</p>
-                <b>
-                  打开内容 <i>↗</i>
-                </b>
-              </div>
-            </a>
-          ))}
-        </div>
-        <div className="story-controls">
-          <button onClick={() => move(-1)} aria-label="上一张">
-            ←
-          </button>
-          <span className="story-status" aria-live="polite">
-            {String(active + 1).padStart(2, "0")} / {String(slides.length).padStart(2, "0")}
-          </span>
-          <button onClick={() => move(1)} aria-label="下一张">
-            →
-          </button>
-          <button
-            className="story-pause"
-            onClick={() => {
-              const shouldResume = userPaused || focusPaused;
-              setUserPaused(!shouldResume);
-              setFocusPaused(false);
-            }}
-            aria-label={userPaused || focusPaused ? "继续轮播" : "暂停轮播"}
-            title={userPaused || focusPaused ? "继续轮播" : "暂停轮播"}
+      <div
+        className="cinema-track"
+        style={{ transform: `translateX(-${active * 100}%)` }}
+      >
+        {slides.map((slide, index) => (
+          <a
+            className="cinema-slide"
+            href={slide.href}
+            key={`${slide.image}-${index}`}
+            aria-hidden={active !== index}
+            tabIndex={active === index ? 0 : -1}
           >
-            {userPaused || focusPaused ? "▶" : "Ⅱ"}
-          </button>
-        </div>
+            <img
+              src={slide.image}
+              alt={slide.title}
+              loading={index === 0 ? "eager" : "lazy"}
+              decoding="async"
+              onError={(event) => {
+                if (
+                  !event.currentTarget.src.endsWith(
+                    "ja-official-career-market.jpg",
+                  )
+                ) {
+                  event.currentTarget.src =
+                    "/media/ja-official-career-market.jpg";
+                }
+              }}
+            />
+            <span className="cinema-shade" />
+            <div className="cinema-caption">
+              <small>{slide.eyebrow}</small>
+              <h2>{slide.title}</h2>
+              <p>{slide.meta}</p>
+              <b>打开内容 ↗</b>
+            </div>
+          </a>
+        ))}
       </div>
-    </section>
+
+      <div className="cinema-controls">
+        <button onClick={() => move(-1)} aria-label="上一张">←</button>
+        <span aria-live="polite">
+          {String(active + 1).padStart(2, "0")} / {String(slides.length).padStart(2, "0")}
+        </span>
+        <button onClick={() => move(1)} aria-label="下一张">→</button>
+        <button
+          className="cinema-pause"
+          onClick={() => {
+            const shouldResume = userPaused || focusPaused;
+            setUserPaused(!shouldResume);
+            setFocusPaused(false);
+          }}
+          aria-label={userPaused || focusPaused ? "继续轮播" : "暂停轮播"}
+        >
+          {userPaused || focusPaused ? "▶" : "Ⅱ"}
+        </button>
+      </div>
+      <div className="cinema-progress" aria-hidden="true">
+        {slides.map((slide, index) => (
+          <i className={index === active ? "active" : ""} key={slide.href} />
+        ))}
+      </div>
+    </div>
   );
 }

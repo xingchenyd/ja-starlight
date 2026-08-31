@@ -53,7 +53,7 @@ function legacyTimeline(profile?: ProfileRecord) {
         title: title || "未命名经历",
         description: action || "",
         output: output || "待补充成果",
-        certified: type?.includes("JA认证") || false,
+        certified: type?.includes("星光计划认证") || false,
       };
     });
 }
@@ -149,7 +149,7 @@ export default function StudentOverview({
           {sortedActivities.slice(0, 3).map((activity) => (
             <DeepLink className="overview-media-line" key={activity.id} tab="activities" itemId={activity.id} onNavigate={onNavigate}>
               <img src={activity.cover} alt={activity.title} loading="lazy" />
-              <span><b>{activity.title}</b><em>{activity.publisher || "JA China"} · {activity.date}</em></span>
+              <span><b>{activity.title}</b><em>{activity.publisher || "星光计划"} · {activity.date}</em></span>
             </DeepLink>
           ))}
         </article>
@@ -158,7 +158,7 @@ export default function StudentOverview({
           {sortedContents.slice(0, 3).map((content) => (
             <DeepLink className="overview-media-line" key={content.id} tab="content" itemId={content.id} onNavigate={onNavigate}>
               <img src={content.cover} alt={content.title} loading="lazy" />
-              <span><b>{content.title}</b><em>{content.publisher || "JA China"} · {content.duration}</em></span>
+              <span><b>{content.title}</b><em>{content.publisher || "星光计划"} · {content.duration}</em></span>
             </DeepLink>
           ))}
         </article>
@@ -170,7 +170,7 @@ export default function StudentOverview({
             <div>{timeline.map((item) => (
               <DeepLink key={item.id} tab="profile" itemId={item.id} onNavigate={onNavigate}>
                 <time>{item.occurredAt ? new Date(item.occurredAt).toLocaleDateString("zh-CN") : "待补充"}</time>
-                <span><b>{item.title}</b>{item.certified ? <strong className="ja-certified-label">JA 认证</strong> : null}<em>{item.output || item.description || "待补充成果"}</em></span>
+                <span><b>{item.title}</b>{item.certified ? <strong className="ja-certified-label">星光计划认证</strong> : null}<em>{item.output || item.description || "待补充成果"}</em></span>
               </DeepLink>
             ))}</div>
           ) : (

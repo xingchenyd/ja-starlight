@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { getAccountActor, getAdminActor, type AuthConfig, type AuthDatabase } from "../lib/auth/accounts";
+import { ensureFormalPlatformData } from "../lib/platform/ensure-formal-data";
 
 export type PlatformRole = "student" | "enterprise" | "admin";
 export type PlatformActor = { id: string; email: string; name: string; role: PlatformRole; testMode: boolean };
@@ -18,10 +19,13 @@ const coreSchema = [
   "CREATE TABLE IF NOT EXISTS auth_sessions (id TEXT PRIMARY KEY, subject_type TEXT NOT NULL, subject_id TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, expires_at TEXT NOT NULL, last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, revoked_at TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS password_reset_challenges (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, code_hash TEXT NOT NULL, proof_hash TEXT, expires_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, verified_at TEXT, consumed_at TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS admin_credentials (id TEXT PRIMARY KEY, label TEXT NOT NULL, key_prefix TEXT NOT NULL, secret_hash TEXT NOT NULL UNIQUE, status TEXT NOT NULL DEFAULT 'active', last_used_at TEXT, created_by TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, revoked_at TEXT)",
+  "CREATE TABLE IF NOT EXISTS system_migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS auth_rate_limits (scope_key TEXT PRIMARY KEY, attempts INTEGER NOT NULL DEFAULT 0, window_started_at TEXT NOT NULL, blocked_until TEXT, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS student_favorites (id TEXT PRIMARY KEY, student_id TEXT NOT NULL, target_type TEXT NOT NULL, target_id TEXT NOT NULL, target_snapshot TEXT NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS student_calendar_events (id TEXT PRIMARY KEY, student_id TEXT NOT NULL, source_type TEXT NOT NULL DEFAULT 'activity', source_id TEXT NOT NULL, title TEXT NOT NULL, start_at TEXT, end_at TEXT, reminder_at TEXT, reminder_enabled INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS student_experiences (id TEXT PRIMARY KEY, student_id TEXT NOT NULL, source_type TEXT NOT NULL DEFAULT 'manual', source_id TEXT, category TEXT NOT NULL, title TEXT NOT NULL, role TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '', output TEXT NOT NULL DEFAULT '', evidence_url TEXT NOT NULL DEFAULT '', evidence_asset_key TEXT NOT NULL DEFAULT '', occurred_at TEXT NOT NULL, certified INTEGER NOT NULL DEFAULT 0, is_public INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+  "CREATE TABLE IF NOT EXISTS student_profile_shares (id TEXT PRIMARY KEY, student_id TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, status TEXT NOT NULL DEFAULT 'active', expires_at TEXT NOT NULL, revoked_at TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+  "CREATE TABLE IF NOT EXISTS activity_registrations (id TEXT PRIMARY KEY, activity_id TEXT NOT NULL, activity_title TEXT NOT NULL, student_owner_id TEXT NOT NULL, publisher_owner_id TEXT NOT NULL, answers TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', review_note TEXT NOT NULL DEFAULT '', reviewed_at TEXT, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, cancelled_at TEXT, attendance_status TEXT NOT NULL DEFAULT 'unconfirmed', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE INDEX IF NOT EXISTS idx_users_role_status ON users(role,status)",
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique ON users(lower(email))",
   "CREATE INDEX IF NOT EXISTS idx_workspace_owner_kind ON workspace_records(owner_id,kind,updated_at)",
@@ -41,6 +45,10 @@ const coreSchema = [
   "CREATE INDEX IF NOT EXISTS idx_student_calendar_upcoming ON student_calendar_events(student_id,status,start_at)",
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_student_experiences_source ON student_experiences(student_id,source_type,source_id)",
   "CREATE INDEX IF NOT EXISTS idx_student_experiences_timeline ON student_experiences(student_id,sort_order,occurred_at)",
+  "CREATE INDEX IF NOT EXISTS idx_student_profile_shares_student_status ON student_profile_shares(student_id,status,created_at)",
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_activity_registration_student_activity ON activity_registrations(student_owner_id,activity_id)",
+  "CREATE INDEX IF NOT EXISTS idx_activity_registration_publisher ON activity_registrations(publisher_owner_id,created_at)",
+  "CREATE INDEX IF NOT EXISTS idx_activity_registration_activity ON activity_registrations(activity_id,created_at)",
 ];
 
 export async function ensureCoreSchema() {
@@ -57,18 +65,36 @@ export async function ensureCoreSchema() {
   if (!names.has("archived_at")) alters.push(env.DB.prepare("ALTER TABLE workspace_records ADD COLUMN archived_at TEXT"));
   if (!names.has("published_at")) alters.push(env.DB.prepare("ALTER TABLE workspace_records ADD COLUMN published_at TEXT"));
   if (alters.length) await env.DB.batch(alters);
+  await ensureFormalPlatformData(env.DB);
+  const brandMigration = await env.DB.prepare("SELECT id FROM system_migrations WHERE id='brand-starlight-20260831'").first();
+  if (!brandMigration) {
+    await env.DB.batch([
+      env.DB.prepare("UPDATE workspace_records SET payload=replace(replace(replace(payload,'JA 星光计划','星光计划'),'JA China','星光计划'),'JA','星光计划') WHERE payload LIKE '%JA%'"),
+      env.DB.prepare("UPDATE activity_registrations SET activity_title=replace(activity_title,'JA','星光计划'),review_note=replace(review_note,'JA','星光计划') WHERE activity_title LIKE '%JA%' OR review_note LIKE '%JA%'"),
+      env.DB.prepare("UPDATE student_experiences SET title=replace(title,'JA','星光计划'),description=replace(description,'JA','星光计划'),output=replace(output,'JA','星光计划') WHERE title LIKE '%JA%' OR description LIKE '%JA%' OR output LIKE '%JA%'"),
+      env.DB.prepare("UPDATE notifications SET title=replace(title,'JA','星光计划'),body=replace(body,'JA','星光计划') WHERE title LIKE '%JA%' OR body LIKE '%JA%'"),
+      env.DB.prepare("INSERT INTO system_migrations(id) VALUES('brand-starlight-20260831')"),
+    ]);
+  }
+  const copySpacingMigration = await env.DB.prepare("SELECT id FROM system_migrations WHERE id='copy-spacing-20260831'").first();
+  if (!copySpacingMigration) {
+    await env.DB.batch([
+      env.DB.prepare("UPDATE workspace_records SET payload=replace(replace(payload,'形成 星光计划','形成星光计划'),'一段 星光计划','一段星光计划') WHERE payload LIKE '% 星光计划%'"),
+      env.DB.prepare("INSERT INTO system_migrations(id) VALUES('copy-spacing-20260831')"),
+    ]);
+  }
 }
 
 export function isTestRequest(request: Request) {
   const hostname = new URL(request.url).hostname;
-  return hostname === "localhost" || hostname === "127.0.0.1" || String((env as unknown as { STARLIGHT_TEST_MODE?: string }).STARLIGHT_TEST_MODE || "") === "true";
+  return hostname.endsWith(".test") || String((env as unknown as { STARLIGHT_TEST_MODE?: string }).STARLIGHT_TEST_MODE || "") === "true";
 }
 export async function getActor(request: Request, desiredRole?: PlatformRole): Promise<PlatformActor | null> {
   const testMode = isTestRequest(request);
   if (testMode) {
     const requested = desiredRole || (request.headers.get("x-starlight-role") as PlatformRole | null) || "student";
     const role: PlatformRole = ["student", "enterprise", "admin"].includes(requested) ? requested : "student";
-    return { id: `demo:${role}`, email: `${role}@local.invalid`, name: role === "admin" ? "JA 本地测试管理员" : role === "enterprise" ? "星光示范企业" : "张晨", role, testMode: true };
+    return { id: `demo:${role}`, email: `${role}@local.invalid`, name: role === "admin" ? "星光计划运营管理员" : role === "enterprise" ? "长沙星联数字科技有限公司" : "张晨", role, testMode: true };
   }
   await ensureCoreSchema();
   const db = env.DB as unknown as AuthDatabase, config = env as unknown as AuthConfig;
@@ -92,7 +118,7 @@ export async function requireVerifiedEnterprise(request: Request) {
   if (!actor || actor.role !== "enterprise") return { actor: null, response: Response.json({ error: "请使用企业账号登录" }, { status: actor ? 403 : 401 }) };
   if (actor.testMode) return { actor, response: null };
   const organization = await env.DB.prepare("SELECT verification_status AS status FROM organizations WHERE owner_id=?").bind(actor.id).first<{ status: string }>();
-  if (organization?.status !== "verified") return { actor: null, response: Response.json({ error: "企业资料通过 JA 主体认证后才能正式发布；你仍可保存草稿" }, { status: 403 }) };
+  if (organization?.status !== "verified") return { actor: null, response: Response.json({ error: "企业资料通过星光计划主体认证后才能正式发布；你仍可保存草稿" }, { status: 403 }) };
   return { actor, response: null };
 }
 export async function writeAudit(actorId: string, action: string, targetType: string, targetId: string) {

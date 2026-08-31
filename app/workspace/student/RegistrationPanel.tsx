@@ -100,7 +100,7 @@ export default function RegistrationPanel({
     <SidePanel
       open={open && Boolean(activity)}
       title={activity?.title || "活动详情"}
-      description={activity ? `${activity.publisher || "JA China"} · ${activity.date} · ${activity.place}` : undefined}
+      description={activity ? `${activity.publisher || "星光计划"} · ${activity.date} · ${activity.place}` : undefined}
       dirty={!readOnly && Object.values(answers).some(Boolean) && !registration}
       onClose={onClose}
       footer={activity ? (

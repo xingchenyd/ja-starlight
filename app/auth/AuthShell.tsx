@@ -2,6 +2,28 @@ import type { ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
-export default function AuthShell({ eyebrow, title, description, children }: { eyebrow: string; title: string; description: string; children: ReactNode }) {
-  return <main className="auth-page"><section className="auth-visual" aria-label="JA 星光计划活动现场"><Image src="/media/ja-official-career-market.jpg" alt="JA 青年成长活动" fill sizes="(max-width: 880px) 100vw, 55vw" priority/><div className="auth-visual-shade"/><Link className="auth-logo" href="/"><Image src="/media/ja-china-logo.jpg" alt="JA China" width={58} height={58}/><span><b>Star Plan 星光计划</b><small>JA CHINA · HUNAN</small></span></Link><div className="auth-story"><span>{eyebrow}</span><h1>{title}</h1><p>{description}</p><div><i/><i/><i/></div></div></section><section className="auth-stage"><Link className="auth-back" href="/">← 返回首页</Link>{children}<p className="auth-legal">登录或注册即表示你同意<Link href="/terms">平台使用规则</Link>和<Link href="/privacy">隐私政策</Link></p></section></main>;
+export type AuthStory = { image: string; eyebrow: string; title: string; description: string };
+
+export default function AuthShell({ eyebrow, title, description, stories, children }: { eyebrow: string; title: string; description: string; stories?: AuthStory[]; children: ReactNode }) {
+  const items = stories?.length ? stories : [{ image: "/media/ja-official-career-market.jpg", eyebrow, title, description }];
+  return <main className="auth-page">
+    <section className="auth-visual" aria-label="星光计划成长故事">
+      <div className="auth-story-track">
+        {items.map((story, index) => <article className="auth-story-slide" key={`${story.image}-${story.title}`}>
+          <Image src={story.image} alt={story.title} fill sizes="(max-width: 880px) 100vw, 55vw" priority={index === 0}/>
+          <div className="auth-visual-shade"/>
+          <div className="auth-story">
+            <span>{story.eyebrow}</span><h1>{story.title}</h1><p>{story.description}</p>
+            <div aria-label={`第 ${index + 1} 张，共 ${items.length} 张`}>{items.map((_, marker) => <i className={marker === index ? "active" : ""} key={marker}/>)}</div>
+          </div>
+        </article>)}
+      </div>
+      <Link className="auth-logo" href="/"><Image src="/media/ja-china-logo.jpg" alt="星光计划" width={58} height={58}/><span><b>星光计划</b><small>STARLIGHT · HUNAN</small></span></Link>
+      {items.length > 1 ? <span className="auth-swipe-hint">← 左右滑动浏览 →</span> : null}
+    </section>
+    <section className="auth-stage">
+      <Link className="auth-back" href="/">← 返回首页</Link>{children}
+      <p className="auth-legal">登录或注册即表示你同意<Link href="/terms">平台使用规则</Link>和<Link href="/privacy">隐私政策</Link></p>
+    </section>
+  </main>;
 }

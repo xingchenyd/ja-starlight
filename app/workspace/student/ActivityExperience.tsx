@@ -101,7 +101,7 @@ export default function ActivityExperience({
     return true;
   };
   const favorite = async (activity: Activity) => {
-    try { await onToggleFavorite("activity", activity.id, { title: activity.title, publisher: activity.publisher || "JA China", cover: activity.cover, date: activity.date }); }
+    try { await onToggleFavorite("activity", activity.id, { title: activity.title, publisher: activity.publisher || "星光计划", cover: activity.cover, date: activity.date }); }
     catch (error) { flash(error instanceof Error ? error.message : "收藏失败"); }
   };
   const isFavorite = (activity: Activity) => favorites.some((item) => item.targetType === "activity" && item.targetId === activity.id && item.status !== "removed");
@@ -117,7 +117,7 @@ export default function ActivityExperience({
         <section className="refined-activity-showcase" onMouseEnter={() => setInteracting(true)} onMouseLeave={() => setInteracting(false)} onFocusCapture={() => setInteracting(true)} onBlurCapture={() => setInteracting(false)}>
           <div className="activity-stage">
             <div className="activity-stage-track" style={{ transform: `translateX(-${activeIndex * 100}%)` }}>
-              {list.map((activity) => <button key={activity.id} onClick={() => open(activity)}><img src={activity.cover} alt={activity.title} /><span><em>{activity.category}</em><b>{activity.title}</b><small>{activity.publisher || "JA China"} · {activity.date}</small></span></button>)}
+              {list.map((activity) => <button key={activity.id} onClick={() => open(activity)}><img src={activity.cover} alt={activity.title} /><span><em>{activity.category}</em><b>{activity.title}</b><small>{activity.publisher || "星光计划"} · {activity.date}</small></span></button>)}
             </div>
             <div className="activity-stage-controls">
               <button aria-label="上一项活动" onClick={() => setActiveIndex((activeIndex - 1 + list.length) % list.length)}>←</button>
@@ -127,18 +127,18 @@ export default function ActivityExperience({
             </div>
           </div>
           <aside className="activity-stage-summary">
-            <small>{active.publisher || "JA China"} · {active.date}</small>
+            <small>{active.publisher || "星光计划"} · {active.date}</small>
             <h2>{active.title}</h2><p>{active.summary}</p>
             <div className="activity-fact-row"><span>{active.place}</span><span>{active.registered} / {active.capacity} 人</span><span>{active.status}</span></div>
             <div className="activity-stage-actions"><FavoriteButton active={isFavorite(active)} onToggle={() => favorite(active)} /><button className="primary-btn" onClick={() => open(active)}>{stateText(active)}</button></div>
           </aside>
         </section>
       ) : <section className="activity-empty-state"><h2>暂无可报名活动</h2><p>新活动通过审核后会显示在这里。</p></section>}
-      <div className="activity-directory-heading"><div><small>ALL ACTIVITIES</small><h2>全部活动</h2></div><span>按 JA 运营排序及日期展示</span></div>
+      <div className="activity-directory-heading"><div><small>ALL ACTIVITIES</small><h2>全部活动</h2></div><span>按星光计划运营排序及日期展示</span></div>
       <div className="refined-activity-feed">
         {list.map((activity) => <article key={activity.id}>
           <button className="activity-feed-cover" onClick={() => open(activity)}><img src={activity.cover} alt={activity.title} /><span>{activity.category}</span></button>
-          <div><small>{activity.publisher || "JA China"} · {activity.date}</small><h2><button onClick={() => open(activity)}>{activity.title}</button></h2><p>{activity.summary}</p><div className="activity-fact-row"><span>{activity.place}</span><span>{activity.registered} / {activity.capacity} 人</span><span>{activity.status}</span></div></div>
+          <div><small>{activity.publisher || "星光计划"} · {activity.date}</small><h2><button onClick={() => open(activity)}>{activity.title}</button></h2><p>{activity.summary}</p><div className="activity-fact-row"><span>{activity.place}</span><span>{activity.registered} / {activity.capacity} 人</span><span>{activity.status}</span></div></div>
           <div className="activity-row-actions"><FavoriteButton active={isFavorite(activity)} onToggle={() => favorite(activity)} /><button className="outline-btn" onClick={() => open(activity)}>{stateText(activity)}</button></div>
         </article>)}
       </div>

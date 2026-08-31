@@ -32,6 +32,10 @@ export const authRateLimits = sqliteTable("auth_rate_limits", {
   scopeKey: text("scope_key").primaryKey(), attempts: integer("attempts").notNull().default(0), windowStartedAt: text("window_started_at").notNull(),
   blockedUntil: text("blocked_until"), updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+export const systemMigrations = sqliteTable("system_migrations", {
+  id: text("id").primaryKey(),
+  appliedAt: text("applied_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
 export const applications = sqliteTable("applications", {
   id: integer("id").primaryKey({ autoIncrement: true }), userId: text("user_id").notNull(),
   jobId: text("job_id").notNull(), status: text("status").notNull().default("submitted"),
@@ -125,6 +129,12 @@ export const studentExperiences = sqliteTable("student_experiences", {
   occurredAt: text("occurred_at").notNull(), certified: integer("certified").notNull().default(0), isPublic: integer("is_public").notNull().default(1), sortOrder: integer("sort_order").notNull().default(0),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`), updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [uniqueIndex("idx_student_experiences_source").on(table.studentId, table.sourceType, table.sourceId), index("idx_student_experiences_timeline").on(table.studentId, table.sortOrder, table.occurredAt)]);
+
+export const studentProfileShares = sqliteTable("student_profile_shares", {
+  id: text("id").primaryKey(), studentId: text("student_id").notNull(), tokenHash: text("token_hash").notNull(),
+  status: text("status").notNull().default("active"), expiresAt: text("expires_at").notNull(),
+  revokedAt: text("revoked_at"), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [uniqueIndex("idx_student_profile_shares_token").on(table.tokenHash), index("idx_student_profile_shares_student_status").on(table.studentId, table.status, table.createdAt)]);
 
 export const mediaAssets = sqliteTable("media_assets", {
   id: text("id").primaryKey(), ownerId: text("owner_id").notNull(), storageKey: text("storage_key").notNull(), originalName: text("original_name").notNull(),

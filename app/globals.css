@@ -5,8 +5,10 @@
 @import "./workspace/student/student-activities.css";
 @import "./workspace/student/student-content.css";
 @import "./workspace/student/student-profile.css";
+@import "./workspace/student/student-share.css";
 @import "./workspace/enterprise/enterprise-workspace.css";
 @import "./ja-console/ja-governance.css";
+@import "./home-experience.css";
 
 :root {
   --ja-red: #ec1c24;
@@ -1701,11 +1703,15 @@ footer small {
   min-height: 100vh;
   display: grid;
   grid-template-columns: minmax(420px, 1.06fr) minmax(460px, .94fr);
+  overflow-x: clip;
   color: #173f49;
   background: #f4f8f7;
 }
 .auth-visual { position: relative; min-height: 100vh; overflow: hidden; background: #123f4a; }
-.auth-visual > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; animation: auth-kenburns 18s ease-in-out infinite alternate; }
+.auth-story-track { display: flex; width: 100%; height: 100vh; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; touch-action: pan-x pan-y; }
+.auth-story-track::-webkit-scrollbar { display: none; }
+.auth-story-slide { position: relative; flex: 0 0 100%; width: 100%; min-width: 0; height: 100%; scroll-snap-align: start; scroll-snap-stop: always; overflow: hidden; }
+.auth-story-slide > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; animation: auth-kenburns 18s ease-in-out infinite alternate; }
 .auth-visual-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(8,48,59,.32), rgba(5,45,56,.16) 38%, rgba(8,48,59,.88)); }
 .auth-logo { position: absolute; z-index: 2; top: 38px; left: 42px; display: flex; gap: 13px; align-items: center; color: white; text-decoration: none; }
 .auth-logo > img { width: 58px; height: 58px; padding: 5px; object-fit: contain; border-radius: 15px; background: rgba(255,255,255,.94); box-shadow: 0 12px 34px rgba(0,0,0,.18); }
@@ -1718,7 +1724,8 @@ footer small {
 .auth-story p { max-width: 540px; margin: 0; color: #d7eeee; font-size: 16px; line-height: 1.8; }
 .auth-story div { display: flex; gap: 7px; margin-top: 28px; }
 .auth-story i { display: block; width: 7px; height: 7px; border-radius: 10px; background: rgba(255,255,255,.55); }
-.auth-story i:first-child { width: 32px; background: #e8e24f; }
+.auth-story i.active { width: 32px; background: #e8e24f; }
+.auth-swipe-hint { position: absolute; z-index: 3; right: 6%; bottom: 4%; border: 1px solid rgba(255,255,255,.28); border-radius: 999px; padding: 8px 12px; color: #fff; background: rgba(8,48,59,.34); backdrop-filter: blur(8px); font-size: 11px; font-weight: 850; letter-spacing: .06em; pointer-events: none; }
 .auth-stage { position: relative; display: grid; place-items: center; align-content: center; min-height: 100vh; padding: 72px 8%; background: radial-gradient(circle at 88% 8%, rgba(185,233,232,.54), transparent 30%), linear-gradient(145deg,#f8fbfa,#eaf3f0); }
 .auth-stage::before { content: ""; position: absolute; right: 5%; bottom: 7%; width: 240px; height: 240px; opacity: .045; background: url('/media/ja-china-logo.jpg') center/contain no-repeat; mix-blend-mode: multiply; pointer-events: none; }
 .auth-back { position: absolute; top: 32px; right: 7%; color: #527078; font-size: 13px; font-weight: 800; text-decoration: none; }
@@ -1762,10 +1769,11 @@ footer small {
 @keyframes auth-kenburns { to { transform: scale(1.06) translate3d(-1%,1%,0); } }
 @keyframes auth-slide-in { from { opacity: 0; transform: translateX(34px); } to { opacity: 1; transform: none; } }
 @keyframes auth-rise { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .auth-visual > img, .auth-card, .auth-story { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .auth-story-slide > img, .auth-card, .auth-story { animation: none; } }
 @media (max-width: 880px) {
   .auth-page { grid-template-columns: 1fr; }
   .auth-visual { min-height: 280px; }
+  .auth-story-track { height: 280px; }
   .auth-logo { top: 24px; left: 24px; }
   .auth-story { bottom: 28px; }
   .auth-story h1 { margin: 8px 0; font-size: 30px; }
@@ -10679,6 +10687,17 @@ button.recent-publishing-row:hover {
   border-radius: 50%;
   background: #e8eeee;
   font-size: 11px;
+}
+.publish-readiness > div p > span {
+  display: grid;
+  gap: 3px;
+  font-weight: 850;
+}
+.publish-readiness > div p > span small {
+  color: #71868b;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.45;
 }
 .publish-readiness > div p.done {
   color: #126b53;

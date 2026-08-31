@@ -7,13 +7,14 @@ workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
 const { default: worker } = await import(workerUrl.href);
 const env = {
   ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
+  STARLIGHT_TEST_MODE: "true",
 };
 const ctx = { waitUntil() {}, passThroughOnException() {} };
 
 async function page(path) {
   return worker.fetch(
-    new Request(`http://localhost${path}`, {
-      headers: { accept: "text/html" },
+    new Request(`http://starlight.test${path}`, {
+      headers: { accept: "text/html", host: "starlight.test" },
     }),
     env,
     ctx,
@@ -55,14 +56,14 @@ test("student workspace uses formal student navigation without role switching", 
     /学生端|企业端|平台使用提示|JA 管理端体验|JA 管理端/,
   );
 });
-test("JA console is directly accessible during testing", async () => {
+test("operations console is directly accessible only in explicit test mode", async () => {
   const response = await page("/ja-console/pulse");
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /湖南运营后台/);
-  assert.match(html, /JA 本地测试管理员/);
+  assert.match(html, /星光计划运营管理员/);
   assert.match(html, /分区审核/);
-  assert.match(html, /JA 发起的活动/);
+  assert.match(html, /星光计划发起的活动/);
   assert.match(html, /企业发布的活动/);
   assert.match(html, /企业发布的内容/);
   assert.match(html, /诚信管理/);
@@ -149,7 +150,7 @@ test("JA review ownership and enterprise registration export are separated", asy
     ),
   ]);
   assert.match(adminSource, /admin-review-lanes/);
-  assert.match(adminSource, /JA 发起的活动/);
+  assert.match(adminSource, /星光计划发起的活动/);
   assert.match(adminSource, /企业发布的活动/);
   assert.match(adminSource, /企业发布的内容/);
   assert.doesNotMatch(adminSource, /RegistrationTable/);
@@ -256,7 +257,7 @@ test("JA publication operations support risk checks, batch review and display co
   assert.match(adminSource, /导出当前结果/);
   assert.match(adminApiSource, /configure-publication/);
   assert.match(adminApiSource, /单次最多审核 100 条内容/);
-  assert.match(adminApiSource, /JA 仅审核 JA 活动、企业活动和企业内容/);
+  assert.match(adminApiSource, /星光计划仅审核星光计划活动、企业活动和企业内容/);
 });
 test("commercial profile and private resume flows are explicit", async () => {
   const [workspaceSource, platformApiSource, fileApiSource] = await Promise.all([

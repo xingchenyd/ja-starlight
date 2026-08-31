@@ -8,7 +8,7 @@ test("home story carousel is controllable, complete and reduced-motion aware", a
     "utf8",
   );
 
-  assert.match(source, /5000/);
+  assert.match(source, /6500/);
   assert.match(source, /暂停轮播/);
   assert.match(source, /继续轮播/);
   assert.match(source, /useReducedMotion/);

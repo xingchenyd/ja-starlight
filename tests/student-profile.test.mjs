@@ -20,7 +20,7 @@ test("resume panel accepts private PDF files and has extraction confirmation fal
 
 test("growth timeline merges certified and manual experience with safe controls", async () => {
   const source = await read("../app/workspace/student/GrowthTimeline.tsx");
-  assert.match(source, /JA 认证/);
+  assert.match(source, /星光计划认证/);
   assert.match(source, /save-experience/);
   assert.match(source, /reorder-experiences/);
   assert.match(source, /set-experience-visibility/);

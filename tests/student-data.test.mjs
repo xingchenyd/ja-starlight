@@ -23,7 +23,7 @@ test("student migration creates favorites, calendar and structured experiences",
     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'student_%' ORDER BY name")
     .all()
     .map((row) => row.name);
-  assert.deepEqual(tables, ["student_calendar_events", "student_experiences", "student_favorites"]);
+  assert.deepEqual(tables, ["student_calendar_events", "student_experiences", "student_favorites", "student_profile_shares"]);
   database.close();
 });
 

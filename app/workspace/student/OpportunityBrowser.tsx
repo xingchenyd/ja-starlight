@@ -12,6 +12,8 @@ import {
   type StudentOpportunityFilters,
 } from "../../../lib/catalog/student-opportunity-url";
 import type { StudentFavorite } from "./useStudentData";
+import { studentRequest } from "./useStudentData";
+import { buildApplicationMailBody } from "../../../lib/services/student-share";
 
 const jobCategories = ["全部类别", "产品运营", "技术研发", "数据分析", "品牌内容", "智能制造", "金融与商业", "项目实践", "公益实践"];
 const degreeOptions = ["全部学历", "高中", "大专", "本科", "硕士", "博士"];
@@ -126,7 +128,15 @@ export default function OpportunityBrowser({
     }
     flash(`招聘邮箱已复制：${email}`);
   };
-  const mailHref = (job: Job) => `mailto:${job.contactEmail}?subject=${encodeURIComponent(`应聘${job.title}｜来自 JA 星光计划`)}&body=${encodeURIComponent(`您好，我希望申请贵公司的「${job.title}」岗位，简历见附件。\n\n姓名：\n学校：\n联系电话：`)}`;
+  const composeApplication = async (job: Job) => {
+    try {
+      const response = await studentRequest("/api/student/share", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ days: 30 }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "成长档案链接生成失败");
+      const subject = encodeURIComponent(`应聘${job.title}｜来自星光计划`);
+      window.location.href = `mailto:${job.contactEmail}?subject=${subject}&body=${encodeURIComponent(buildApplicationMailBody(job.title, data.url))}`;
+    } catch (error) { flash(error instanceof Error ? error.message : "暂时无法生成投递邮件"); }
+  };
 
   return (
     <>
@@ -149,13 +159,13 @@ export default function OpportunityBrowser({
           <article key={job.id}>
             <div className="student-job-main"><JobLogo job={job} large /><div><a className="company-name-link" href={`/companies/${encodeURIComponent(job.company)}`}>{job.company}</a><h3>{job.title}</h3><p>{job.summary}</p><small>{job.city || "长沙"} · {job.duration} · 发布于 {job.publishedAt} · {job.salary || "薪资面议"}</small></div><StatusBadge tone={job.status === "即将截止" ? "warning" : "success"}>{job.status}</StatusBadge></div>
             <div className="student-job-tags"><span>{job.jobCategory}</span><span>{job.degree || "学历不限"}</span><span>{job.industry || "行业不限"}</span></div>
-            <div className="email-strip"><div><small>简历投递邮箱</small><a href={`mailto:${job.contactEmail}`}>{job.contactEmail}</a></div><button onClick={() => copy(job.contactEmail)}>复制邮箱</button><a className="primary-btn" href={mailHref(job)}>写邮件</a></div>
+            <div className="email-strip"><div><small>简历投递邮箱</small><a href={`mailto:${job.contactEmail}`}>{job.contactEmail}</a></div><button onClick={() => copy(job.contactEmail)}>复制邮箱</button><button className="primary-btn" onClick={() => composeApplication(job)}>发送简历与成长档案</button></div>
             <div className="job-card-actions"><FavoriteButton active={isFavorite(job)} onToggle={() => toggleFavorite(job)} /><button className="detail-link" onClick={() => onNavigate("opportunities", job.id, true)}>查看职责、要求与项目说明 →</button></div>
           </article>
         ))}
         {!shown.length ? <section className="opportunity-empty"><b>暂时没有匹配的机会</b><p>可以放宽薪资区间或清空部分分类条件后再查看。</p><button className="primary-btn" onClick={reset}>查看全部机会</button></section> : null}
       </div>
-      <SidePanel open={Boolean(selected)} title={selected ? `${selected.company} · ${selected.title}` : "机会详情"} description={selected?.summary} onClose={() => onNavigate("opportunities", undefined, true)} footer={selected ? <div className="opportunity-panel-actions"><FavoriteButton active={isFavorite(selected)} onToggle={() => toggleFavorite(selected)} /><button onClick={() => copy(selected.contactEmail)}>复制邮箱</button><a className="primary-btn" href={mailHref(selected)}>发送简历邮件</a></div> : null}>
+      <SidePanel open={Boolean(selected)} title={selected ? `${selected.company} · ${selected.title}` : "机会详情"} description={selected?.summary} onClose={() => onNavigate("opportunities", undefined, true)} footer={selected ? <div className="opportunity-panel-actions"><FavoriteButton active={isFavorite(selected)} onToggle={() => toggleFavorite(selected)} /><button onClick={() => copy(selected.contactEmail)}>复制邮箱</button><button className="primary-btn" onClick={() => composeApplication(selected)}>发送简历与成长档案</button></div> : null}>
         {selected ? <div className="opportunity-detail-panel"><header><JobLogo job={selected} large /><div><a href={`/companies/${encodeURIComponent(selected.company)}`}>{selected.company}</a><h3>{selected.title}</h3><p>{selected.city} · {selected.mode} · {selected.duration} · {selected.salary || "薪资面议"}</p></div></header><section><h4>岗位职责</h4><ol>{selected.responsibilities.map((item) => <li key={item}>{item}</li>)}</ol></section><section><h4>能力要求</h4><ul>{selected.requirements.map((item) => <li key={item}>{item}</li>)}</ul></section><section><h4>你将获得</h4><div className="benefits">{selected.benefits.map((item) => <span key={item}>✓ {item}</span>)}</div></section></div> : <p>机会不存在或已下线。</p>}
       </SidePanel>
     </>

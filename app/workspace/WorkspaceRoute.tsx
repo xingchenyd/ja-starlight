@@ -13,16 +13,16 @@ export default async function WorkspaceRoute({ role, tab, item }: { role: string
   const request = new Request(`${protocol}://${host}${workspacePath(route.role, route.tab, item)}`, {
     headers: { cookie: h.get("cookie") || "" },
   });
-  const actor = local
-    ? { id: `demo:${route.role}`, email: `${route.role}@local.invalid`, name: route.role === "enterprise" ? "星光示范企业" : "张晨", role: route.role, testMode: true }
+  const actor = host.endsWith(".test")
+    ? { id: `test:${route.role}`, email: "", name: route.role === "enterprise" ? "长沙星联数字科技有限公司" : "张晨", role: route.role, testMode: true }
     : await (await import("../../db/runtime")).getActor(request, route.role);
 
   if (!actor) {
     const returnTo = workspacePath(route.role, route.tab, item);
     return (
       <main className="workspace-gate">
-        <Image src="/media/ja-china-logo.jpg" alt="JA China" width={104} height={104}/>
-        <small>JA STAR PLAN</small>
+        <Image src="/media/ja-china-logo.jpg" alt="星光计划" width={104} height={104}/>
+        <small>星光计划</small>
         <h1>登录后进入{route.role === "enterprise" ? "企业工作台" : "学生空间"}</h1>
         <p>公开机会、活动和成长内容无需登录；保存资料、报名和发布内容需要账号确认。</p>
         <a href={`/auth/${route.role}?returnTo=${encodeURIComponent(returnTo)}`}>邮箱登录 / 注册</a>
@@ -44,4 +44,3 @@ export default async function WorkspaceRoute({ role, tab, item }: { role: string
 
   return <PlatformApp initialRole={route.role} initialTab={route.tab} initialItem={item}/>;
 }
-

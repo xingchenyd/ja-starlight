@@ -21,7 +21,7 @@ test("JA console exposes a dedicated registration operations module", async () =
   ]);
 
   assert.equal(routes.jaConsolePath("registrations"), "/ja-console/registrations");
-  assert.match(consoleSource, /JA 活动报名/);
+  assert.match(consoleSource, /星光计划活动报名/);
   assert.match(consoleSource, /function JARegistrationDesk/);
   assert.match(consoleSource, /导出筛选结果/);
   assert.match(consoleSource, /批量通过/);

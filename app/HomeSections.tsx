@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { mergeCatalogRecords, type PublicCatalogRecord } from "../lib/catalog/public-catalog";
+import { getPublicCatalog } from "../lib/catalog/client-catalog";
 import { activities, contents, jobs, type Activity, type ContentItem, type Job } from "./data";
 
 export default function HomeSections() {
@@ -10,9 +11,8 @@ export default function HomeSections() {
 
   useEffect(() => {
     let active = true;
-    fetch("/api/catalog?pageSize=100")
-      .then((response) => response.json())
-      .then((data) => active && setCatalog(data.records || []))
+    getPublicCatalog()
+      .then((records) => active && setCatalog(records))
       .catch(() => {});
     return () => {
       active = false;
@@ -33,12 +33,19 @@ export default function HomeSections() {
   );
 
   return (
-    <section className="home-sections shell">
+    <section className="home-sections home-live-sections shell" aria-labelledby="home-live-title">
+      <header className="home-live-intro">
+        <div>
+          <p className="eyebrow">NOW ON STAR PLAN</p>
+          <h2 id="home-live-title">现在，机会正在发生。</h2>
+        </div>
+        <p><i /> 以下内容来自企业与星光计划的正式发布，并随审核结果实时更新。</p>
+      </header>
       <div className="home-section-head" id="jobs">
         <div><small>OPPORTUNITIES</small><h2>实习项目机会</h2></div>
         <a href="/opportunities">查看全部 →</a>
       </div>
-      <div className="home-job-list">
+      <div className="home-job-list" aria-label="最新实习项目机会">
         {publicJobs.map((job) => (
           <article key={job.id}>
             <div className="home-company-mark" style={{ background: job.logoUrl ? "white" : job.color }}>
@@ -59,13 +66,13 @@ export default function HomeSections() {
         <div><small>ACTIVITIES</small><h2>成长活动</h2></div>
         <a href="/activities">查看全部 →</a>
       </div>
-      <div className="home-card-row">
+      <div className="home-card-row" aria-label="最新成长活动">
         {publicActivities.map((activity) => (
           <a href={`/activities/${encodeURIComponent(activity.id)}`} key={activity.id}>
             <img src={activity.cover} alt={activity.title} loading="lazy" />
             <span>{activity.category}</span>
             <h3>{activity.title}</h3>
-            <small>{activity.publisher || "JA China"} · {activity.date}</small>
+            <small>{activity.publisher || "星光计划"} · {activity.date}</small>
           </a>
         ))}
       </div>
@@ -74,7 +81,7 @@ export default function HomeSections() {
         <div><small>CONTENTS</small><h2>成长内容</h2></div>
         <a href="/content">查看全部 →</a>
       </div>
-      <div className="home-card-row content-row">
+      <div className="home-card-row content-row" aria-label="最新成长内容">
         {publicContents.map((content) => (
           <a href={`/content/${encodeURIComponent(content.id)}`} key={content.id}>
             <img src={content.cover} alt={content.title} loading="lazy" />

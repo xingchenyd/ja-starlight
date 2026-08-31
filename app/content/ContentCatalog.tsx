@@ -20,7 +20,7 @@ function normalize(record: RecordItem): ContentItem {
     category: String(payload.category || "职业探索"),
     duration: String(payload.duration || "预计 10 分钟"),
     level: String(payload.level || "通用"),
-    publisher: String(payload.publisher || payload.company || "JA China"),
+    publisher: String(payload.publisher || payload.company || "星光计划"),
     tags: Array.isArray(payload.tags) ? payload.tags.map(String) : [],
     bodyBlocks: Array.isArray(payload.bodyBlocks) ? payload.bodyBlocks as ContentItem["bodyBlocks"] : [],
   };
@@ -81,7 +81,7 @@ export default function ContentCatalog({ initialQuery, initialCategory }: { init
       <section className="public-hero content-hero">
         <p className="eyebrow">LEARNING CENTER</p>
         <h1>把未知，变成<br /><em>可以行动的下一步。</em></h1>
-        <p>由 JA 与企业发布的文章、视频和活动复盘，审核通过后统一进入公开目录。</p>
+        <p>由星光计划与企业发布的文章、视频和活动复盘，审核通过后统一进入公开目录。</p>
         <form onSubmit={(event) => { event.preventDefault(); setAppliedQuery(query.trim()); }}>
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索主题、发布方或能力关键词" />
           <button type="submit">搜索</button>
@@ -99,7 +99,7 @@ export default function ContentCatalog({ initialQuery, initialCategory }: { init
                 {content.coverType === "video" ? <video src={content.cover} muted playsInline /> : <img src={content.cover} alt={content.title} />}
                 <span>{content.mediaType === "video" ? "▶ 视频" : "▤ 图文"}</span>
               </div>
-              <small>{content.publisher || "JA China"} · {content.category} · {content.duration}</small>
+              <small>{content.publisher || "星光计划"} · {content.category} · {content.duration}</small>
               <h2>{content.title}</h2><p>{content.summary}</p>
               <a href={`/content/${encodeURIComponent(content.id)}`}>打开内容 →</a>
             </article>
