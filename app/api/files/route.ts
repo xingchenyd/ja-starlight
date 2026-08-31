@@ -10,10 +10,10 @@ export async function POST(request: Request) {
   if (!actor) return Response.json({ error: "请先登录后上传文件" }, { status: 401 });
   const form = await request.formData(), file = form.get("file"), purpose = String(form.get("purpose") || "media");
   if (!(file instanceof File)) return Response.json({ error: "请选择文件" }, { status: 400 });
-  const allowed = purpose === "resume" ? documents : [...documents, ...media];
+  const allowed = purpose === "resume" ? ["application/pdf"] : [...documents, ...media];
   const max = file.type.startsWith("video/") ? 100 * 1024 * 1024 : purpose === "resume" ? 20 * 1024 * 1024 : 15 * 1024 * 1024;
   if (file.size > max) return Response.json({ error: `文件不能超过 ${Math.round(max / 1024 / 1024)}MB` }, { status: 413 });
-  if (!allowed.includes(file.type)) return Response.json({ error: purpose === "resume" ? "简历仅支持 PDF 或 DOCX" : "支持 JPG、PNG、WebP、MP4、WebM、PDF 或 DOCX" }, { status: 415 });
+  if (!allowed.includes(file.type)) return Response.json({ error: purpose === "resume" ? "简历仅支持 PDF" : "支持 JPG、PNG、WebP、MP4、WebM、PDF 或 DOCX" }, { status: 415 });
   const folder = purpose === "resume" ? "resumes" : "media", id = crypto.randomUUID();
   const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120) || "asset";
   const key = `${folder}/${actor.id}/${id}-${cleanName}`, visibility = purpose === "resume" ? "private" : "public";

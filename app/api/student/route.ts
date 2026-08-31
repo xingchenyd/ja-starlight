@@ -93,6 +93,17 @@ export async function POST(request: Request) {
     return Response.json({ ok: true });
   }
 
+  if (action === "set-experience-visibility") {
+    const id = cleanIdentifier(body.id);
+    if (!id) return Response.json({ error: "经历标识不正确" }, { status: 400 });
+    const visible = body.isPublic === false ? 0 : 1;
+    const result = await env.DB.prepare("UPDATE student_experiences SET is_public=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND student_id=?")
+      .bind(visible, id, student).run();
+    if (!result.meta.changes) return Response.json({ error: "经历不存在或无权修改" }, { status: 404 });
+    await writeAudit(student, visible ? "publish-experience" : "hide-experience", "student-experience", id);
+    return Response.json({ ok: true, isPublic: Boolean(visible) });
+  }
+
   return Response.json({ error: "不支持的学生数据操作" }, { status: 400 });
 }
 

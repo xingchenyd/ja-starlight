@@ -49,7 +49,7 @@ export function cleanExperience(input: Record<string, unknown>) {
     role: String(input.role || "").trim().slice(0, 100),
     description: String(input.description || "").trim().slice(0, 2000),
     output: String(input.output || "").trim().slice(0, 1000),
-    evidenceUrl: /^https?:\/\//.test(String(input.evidenceUrl || ""))
+    evidenceUrl: /^(https?:\/\/|\/api\/files\?key=)/.test(String(input.evidenceUrl || ""))
       ? String(input.evidenceUrl).slice(0, 500)
       : "",
     evidenceAssetKey: String(input.evidenceAssetKey || "").trim().slice(0, 500),

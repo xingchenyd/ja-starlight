@@ -7,6 +7,7 @@ import StudentOverviewView from "./student/StudentOverview";
 import OpportunityBrowserView from "./student/OpportunityBrowser";
 import ActivityExperienceView from "./student/ActivityExperience";
 import LearningCenterView from "./student/LearningCenter";
+import StudentProfileView from "./student/StudentProfile";
 import { useStudentData, type StudentFavorite, type StudentPrivateData } from "./student/useStudentData";
 import {
   normalizeWorkspaceRoute,
@@ -354,6 +355,7 @@ function PlatformWorkspace({
       key: string;
       name: string;
       type: string;
+      size?: number;
     };
   };
   const studentName = String(
@@ -604,10 +606,15 @@ function StudentSpace({
   if (tab === "content")
     return <LearningCenterView items={allContents} initialItem={initialItem} favorites={privateData.favorites} onNavigate={setTab} onToggleFavorite={toggleFavorite} flash={flash} />;
   return (
-    <StudentProfile
+    <StudentProfileView
       record={records.find((r) => r.kind === "student-profile")}
-      save={save}
+      experiences={privateData.experiences}
+      privateLoading={privateLoading}
+      privateError={privateError}
+      reloadPrivateData={reloadPrivateData}
+      saveRecord={(payload, id) => save("student-profile", payload, id)}
       upload={upload}
+      flash={flash}
     />
   );
 }

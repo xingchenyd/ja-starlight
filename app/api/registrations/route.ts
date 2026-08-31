@@ -19,15 +19,17 @@ const setupSql = [
   "CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, actor_id TEXT NOT NULL, action TEXT NOT NULL, target_type TEXT NOT NULL, target_id TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS activity_registrations (id TEXT PRIMARY KEY, activity_id TEXT NOT NULL, activity_title TEXT NOT NULL, student_owner_id TEXT NOT NULL, publisher_owner_id TEXT NOT NULL, answers TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', review_note TEXT NOT NULL DEFAULT '', reviewed_at TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS student_calendar_events (id TEXT PRIMARY KEY, student_id TEXT NOT NULL, source_type TEXT NOT NULL DEFAULT 'activity', source_id TEXT NOT NULL, title TEXT NOT NULL, start_at TEXT, end_at TEXT, reminder_at TEXT, reminder_enabled INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+  "CREATE TABLE IF NOT EXISTS student_experiences (id TEXT PRIMARY KEY, student_id TEXT NOT NULL, source_type TEXT NOT NULL DEFAULT 'manual', source_id TEXT, category TEXT NOT NULL, title TEXT NOT NULL, role TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '', output TEXT NOT NULL DEFAULT '', evidence_url TEXT NOT NULL DEFAULT '', evidence_asset_key TEXT NOT NULL DEFAULT '', occurred_at TEXT NOT NULL, certified INTEGER NOT NULL DEFAULT 0, is_public INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_activity_registration_student_activity ON activity_registrations(student_owner_id, activity_id)",
   "CREATE INDEX IF NOT EXISTS idx_activity_registration_publisher ON activity_registrations(publisher_owner_id, created_at)",
   "CREATE INDEX IF NOT EXISTS idx_activity_registration_activity ON activity_registrations(activity_id, created_at)",
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_student_calendar_source ON student_calendar_events(student_id,source_type,source_id)",
   "CREATE INDEX IF NOT EXISTS idx_student_calendar_upcoming ON student_calendar_events(student_id,status,start_at)",
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_student_experiences_source ON student_experiences(student_id,source_type,source_id)",
 ];
 
 async function setup() {
-  await env.DB.batch(setupSql.slice(0, 4).map((sql) => env.DB.prepare(sql)));
+  await env.DB.batch(setupSql.slice(0, 5).map((sql) => env.DB.prepare(sql)));
   const columns = await env.DB.prepare(
     "PRAGMA table_info(activity_registrations)",
   ).all();
@@ -52,7 +54,7 @@ async function setup() {
   if (!names.has("attendance_status"))
     alters.push(env.DB.prepare("ALTER TABLE activity_registrations ADD COLUMN attendance_status TEXT NOT NULL DEFAULT 'unconfirmed'"));
   if (alters.length) await env.DB.batch(alters);
-  await env.DB.batch(setupSql.slice(4).map((sql) => env.DB.prepare(sql)));
+  await env.DB.batch(setupSql.slice(5).map((sql) => env.DB.prepare(sql)));
 }
 function cleanAnswers(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -319,6 +321,15 @@ export async function PATCH(request: Request) {
       ).bind(publisher, `registration-${body.decision}`, registration.id),
     ]),
   );
+  if (body.decision === "approved") {
+    await env.DB.batch(
+      registrations.results.map((registration, index) =>
+        env.DB.prepare(
+          "INSERT INTO student_experiences(id,student_id,source_type,source_id,category,title,role,description,output,occurred_at,certified,is_public,sort_order,created_at,updated_at) VALUES(?,?,'platform',?,'成长活动',?,'参与者','通过平台报名并由活动发布方确认。',?,CURRENT_TIMESTAMP,1,1,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(student_id,source_type,source_id) DO UPDATE SET title=excluded.title,output=excluded.output,certified=1,updated_at=CURRENT_TIMESTAMP",
+        ).bind(crypto.randomUUID(), registration.studentOwnerId, registration.id, registration.activityTitle, reviewNote || "已完成活动报名确认", 1000 + index),
+      ),
+    );
+  }
   await Promise.all(registrations.results.map((registration) => notify(registration.studentOwnerId, "registration-result", body.decision === "approved" ? "活动报名已通过" : "活动报名需要修改", `${registration.activityTitle}：${reviewNote}`, "/workspace/student/activities")));
   return Response.json({
     ok: true,
