@@ -198,19 +198,20 @@ test("student activities use automatic carousel without signup fields in showcas
   const response = await page("/workspace/student/activities");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /auto-showcase/);
-  assert.match(html, /auto-track/);
+  assert.match(html, /refined-activity-showcase/);
+  assert.match(html, /activity-stage-track/);
+  assert.match(html, /暂停轮播/);
   assert.doesNotMatch(html, /signup-fields-preview"><b>报名信息/);
 });
 test("growth profile focuses on resume and unified timeline", async () => {
   const response = await page("/workspace/student/profile");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /fixed-left-profile/);
-  assert.match(html, /profile-scroll-pane/);
-  assert.match(html, /手动添加成长经历/);
-  assert.match(html, /添加到时间轴/);
-  assert.match(html, /JA 认证高亮展示/);
+  assert.match(html, /fixed-profile-rail/);
+  assert.match(html, /growth-timeline-column/);
+  assert.match(html, /添加经历/);
+  assert.match(html, /成长时间轴/);
+  assert.match(html, /PRIVATE RESUME/);
   assert.doesNotMatch(
     html,
     /学习与活动反馈|<h2>项目经历<\/h2>|timeline-spotlight/,
