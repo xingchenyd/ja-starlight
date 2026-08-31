@@ -11,13 +11,15 @@ export async function GET(request: Request) {
   const identity = await getActor(request);
   if (!identity) return Response.json({ records: [], signedIn: false }, { status: 401 });
   const id = identity.id;
-  const kind = new URL(request.url).searchParams.get("kind");
+  const params = new URL(request.url).searchParams;
+  const kind = params.get("kind");
+  const archived = params.get("archived") === "1";
   const query = kind
     ? env.DB.prepare(
-        "SELECT id,kind,payload,version,updated_at AS updatedAt FROM workspace_records WHERE owner_id=? AND kind=? AND archived_at IS NULL ORDER BY updated_at DESC",
+        `SELECT id,kind,payload,version,archived_at AS archivedAt,updated_at AS updatedAt FROM workspace_records WHERE owner_id=? AND kind=? AND archived_at IS ${archived ? "NOT NULL" : "NULL"} ORDER BY updated_at DESC`,
       ).bind(id, kind)
     : env.DB.prepare(
-        "SELECT id,kind,payload,version,updated_at AS updatedAt FROM workspace_records WHERE owner_id=? AND archived_at IS NULL ORDER BY updated_at DESC",
+        `SELECT id,kind,payload,version,archived_at AS archivedAt,updated_at AS updatedAt FROM workspace_records WHERE owner_id=? AND archived_at IS ${archived ? "NOT NULL" : "NULL"} ORDER BY updated_at DESC`,
       ).bind(id);
   const rows = await query.all();
   return Response.json({

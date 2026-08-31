@@ -2,7 +2,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { PageTransition, runViewTransition, type TransitionDirection } from "../components/motion";
-import { ToastProvider, useToast } from "../components/ui";
+import { SidePanel, ToastProvider, useToast } from "../components/ui";
 import StudentOverviewView from "./student/StudentOverview";
 import OpportunityBrowserView from "./student/OpportunityBrowser";
 import ActivityExperienceView from "./student/ActivityExperience";
@@ -432,6 +432,7 @@ function PlatformWorkspace({
             ) : (
               <EnterpriseSpace
                 tab={tab}
+                initialItem={item}
                 setTab={navigate}
                 records={records}
                 save={save}
@@ -2090,6 +2091,7 @@ function StudentProfile({
 
 function EnterpriseSpace({
   tab,
+  initialItem,
   setTab,
   records,
   save,
@@ -2098,7 +2100,8 @@ function EnterpriseSpace({
   flash,
 }: {
   tab: string;
-  setTab: (s: string) => void;
+  initialItem?: string;
+  setTab: (s: string, item?: string, preserveSearch?: boolean) => void;
   records: StoredRecord[];
   save: (
     k: string,
@@ -2131,6 +2134,9 @@ function EnterpriseSpace({
         remove={remove}
         upload={upload}
         flash={flash}
+        initialItem={initialItem}
+        tab={tab}
+        onNavigate={setTab}
       />
     );
   if (tab === "activities")
@@ -2144,6 +2150,9 @@ function EnterpriseSpace({
         remove={remove}
         upload={upload}
         flash={flash}
+        initialItem={initialItem}
+        tab={tab}
+        onNavigate={setTab}
       />
     );
   if (tab === "content")
@@ -2157,6 +2166,9 @@ function EnterpriseSpace({
         remove={remove}
         upload={upload}
         flash={flash}
+        initialItem={initialItem}
+        tab={tab}
+        onNavigate={setTab}
       />
     );
   if (tab === "feedback") return <PublisherFeedbackDesk flash={flash} />;
@@ -2318,7 +2330,7 @@ function EnterpriseOverview({
   setTab,
 }: {
   records: StoredRecord[];
-  setTab: (tab: string) => void;
+  setTab: (tab: string, item?: string, preserveSearch?: boolean) => void;
 }) {
   const [registrations, setRegistrations] = useState<RegistrationItem[]>([]),
     [registrationReady, setRegistrationReady] = useState(false);
@@ -2373,14 +2385,14 @@ function EnterpriseOverview({
       return { label: "需修改", className: "rejected" };
     return { label: "审核中", className: "pending" };
   };
-  const openRecord = (record: StoredRecord) =>
-    setTab(
-      record.kind === "job"
+  const openRecord = (record: StoredRecord) => {
+    const targetTab = record.kind === "job"
         ? "positions"
         : record.kind === "activity"
           ? "activities"
-          : "content",
-    );
+          : "content";
+    setTab(targetTab, record.id);
+  };
 
   return (
     <>
@@ -3297,14 +3309,19 @@ function registrationLabel(key: string) {
 
 function EnterprisePublisher({
   kind,
+  tab,
   title,
   desc,
   records,
   save,
   remove,
   upload,
+  flash,
+  initialItem,
+  onNavigate,
 }: {
   kind: "job" | "activity" | "content";
+  tab: string;
   title: string;
   desc: string;
   records: StoredRecord[];
@@ -3324,14 +3341,24 @@ function EnterprisePublisher({
     type: string;
   } | null>;
   flash: (s: string) => void;
+  initialItem?: string;
+  onNavigate: (tab: string, item?: string, preserveSearch?: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false),
-    [edit, setEdit] = useState<StoredRecord | undefined>(),
+  const [creating, setCreating] = useState(false),
+    [archiveOpen, setArchiveOpen] = useState(false),
+    [archiveLoading, setArchiveLoading] = useState(false),
+    [archivedRecords, setArchivedRecords] = useState<StoredRecord[]>([]),
     [status, setStatus] = useState("全部状态"),
     [query, setQuery] = useState("");
-  const start = (r?: StoredRecord) => {
-    setEdit(r);
-    setOpen(true);
+  const edit = records.find((record) => record.id === initialItem);
+  const open = creating || Boolean(edit);
+  const start = (record?: StoredRecord) => {
+    if (record) onNavigate(tab, record.id, true);
+    else setCreating(true);
+  };
+  const close = () => {
+    if (edit) onNavigate(tab, undefined, true);
+    setCreating(false);
   };
   const statusCounts = {
     all: records.length,
@@ -3363,11 +3390,37 @@ function EnterprisePublisher({
   const safeRemove = async (record: StoredRecord) => {
     if (
       !window.confirm(
-        `确认删除“${String(record.payload.title || "未命名内容")}”？删除后无法恢复。`,
+        `确认将“${String(record.payload.title || "未命名内容")}”移入归档？`,
       )
     )
       return;
     await remove(record.id);
+  };
+  const duplicate = async (record: StoredRecord) => {
+    const { id: _recordId, ...payload } = record.payload;
+    const copied = await save(kind, {
+      ...payload,
+      title: `${String(record.payload.title || "未命名")}（副本）`,
+      reviewStatus: "draft",
+      status: "草稿",
+      featured: false,
+    });
+    if (copied) flash("已复制为草稿，可继续编辑");
+  };
+  const openArchive = async () => {
+    setArchiveOpen(true);
+    setArchiveLoading(true);
+    const response = await api(`/api/platform?kind=${encodeURIComponent(kind)}&archived=1`);
+    const payload = await response.json();
+    setArchivedRecords(response.ok ? payload.records || [] : []);
+    setArchiveLoading(false);
+    if (!response.ok) flash(payload.error || "归档读取失败");
+  };
+  const restore = async (record: StoredRecord) => {
+    const restored = await save(kind, record.payload, record.id);
+    if (!restored) return;
+    setArchivedRecords((current) => current.filter((item) => item.id !== record.id));
+    flash("已恢复到发布中心");
   };
   const objectName =
     kind === "job" ? "机会" : kind === "activity" ? "活动" : "内容";
@@ -3378,9 +3431,7 @@ function EnterprisePublisher({
         title={title}
         desc={desc}
         action={
-          <button className="primary-btn" onClick={() => start()}>
-            ＋ 新建{objectName}
-          </button>
+          <div className="publisher-title-actions"><button className="outline-btn" onClick={openArchive}>归档</button><button className="primary-btn" onClick={() => start()}>＋ 新建{objectName}</button></div>
         }
       />
       <section className="publisher-summary" aria-label="发布内容统计">
@@ -3519,8 +3570,9 @@ function EnterprisePublisher({
                       ? "继续编辑"
                       : "查看与编辑"}
                 </button>
+                <button className="quiet-btn" onClick={() => duplicate(r)}>复制为草稿</button>
                 <button className="danger-link" onClick={() => safeRemove(r)}>
-                  删除
+                  移入归档
                 </button>
               </article>
             );
@@ -3533,9 +3585,12 @@ function EnterprisePublisher({
           record={edit}
           save={save}
           upload={upload}
-          onClose={() => setOpen(false)}
+          onClose={close}
         />
       )}
+      <SidePanel open={archiveOpen} title={`${objectName}归档`} description="归档内容不会出现在学生端，可恢复到发布中心继续管理。" onClose={() => setArchiveOpen(false)}>
+        {archiveLoading ? <div className="admin-empty">正在读取归档…</div> : archivedRecords.length ? <div className="publisher-archive-list">{archivedRecords.map((record) => <article key={record.id}><div><b>{String(record.payload.title || "未命名")}</b><small>{record.updatedAt ? new Date(record.updatedAt).toLocaleString("zh-CN") : ""}</small></div><button className="outline-btn" onClick={() => restore(record)}>恢复到发布中心</button></article>)}</div> : <div className="admin-empty"><b>归档为空</b><p>移入归档的内容会显示在这里。</p></div>}
+      </SidePanel>
     </>
   );
 }
