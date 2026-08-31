@@ -6,6 +6,7 @@ import { ToastProvider, useToast } from "../components/ui";
 import StudentOverviewView from "./student/StudentOverview";
 import OpportunityBrowserView from "./student/OpportunityBrowser";
 import ActivityExperienceView from "./student/ActivityExperience";
+import LearningCenterView from "./student/LearningCenter";
 import { useStudentData, type StudentFavorite, type StudentPrivateData } from "./student/useStudentData";
 import {
   normalizeWorkspaceRoute,
@@ -580,7 +581,7 @@ function StudentSpace({
     .map((r) => ({ ...r.payload, id: r.id }) as unknown as ContentItem);
   const allJobs = mergeCatalogRecords<Job>(catalog, jobs, "job");
   const allActivities = mergeCatalogRecords<Activity>(catalog, activities, "activity");
-  const allContents = [...customContents, ...contents];
+  const allContents = mergeCatalogRecords<ContentItem>(catalog, contents, "content");
   if (tab === "overview")
     return (
       <StudentOverviewView
@@ -601,7 +602,7 @@ function StudentSpace({
   if (tab === "activities")
     return <ActivityExperienceView activities={allActivities} initialItem={initialItem} profile={records.find((record) => record.kind === "student-profile")?.payload || {}} favorites={privateData.favorites} calendar={privateData.calendar} onNavigate={setTab} onToggleFavorite={toggleFavorite} onToggleReminder={async (sourceId, enabled) => { try { await setReminder(sourceId, enabled); flash(enabled ? "活动提醒已开启" : "活动提醒已关闭"); } catch (error) { flash(error instanceof Error ? error.message : "提醒设置失败"); } }} onPrivateReload={reloadPrivateData} flash={flash} />;
   if (tab === "content")
-    return <LearningCenter custom={customContents} flash={flash} initialItem={initialItem} />;
+    return <LearningCenterView items={allContents} initialItem={initialItem} favorites={privateData.favorites} onNavigate={setTab} onToggleFavorite={toggleFavorite} flash={flash} />;
   return (
     <StudentProfile
       record={records.find((r) => r.kind === "student-profile")}
