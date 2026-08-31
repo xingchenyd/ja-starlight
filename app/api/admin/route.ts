@@ -49,7 +49,7 @@ export async function GET(request: Request) {
       "SELECT id,actor_id AS actorId,action,target_type AS targetType,target_id AS targetId,created_at AS createdAt FROM audit_logs ORDER BY created_at DESC LIMIT 200",
     ),
     env.DB.prepare(
-      "SELECT id,activity_id AS activityId,activity_title AS activityTitle,answers,status,review_note AS reviewNote,reviewed_at AS reviewedAt,created_at AS createdAt FROM activity_registrations ORDER BY created_at DESC LIMIT 500",
+      "SELECT id,activity_id AS activityId,activity_title AS activityTitle,student_owner_id AS studentOwnerId,publisher_owner_id AS publisherOwnerId,answers,status,review_note AS reviewNote,reviewed_at AS reviewedAt,created_at AS createdAt FROM activity_registrations WHERE publisher_owner_id LIKE 'ja:%' ORDER BY created_at DESC LIMIT 500",
     ),
     env.DB.prepare("SELECT id,owner_id AS ownerId,name,credit_code AS creditCode,verification_status AS verificationStatus,verified_at AS verifiedAt,created_at AS createdAt,updated_at AS updatedAt FROM organizations ORDER BY updated_at DESC LIMIT 200"),
   ]);

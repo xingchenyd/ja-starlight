@@ -1,6 +1,12 @@
 import { env } from "cloudflare:workers";
-import { getActor, notify, writeAudit } from "../../../db/runtime";
+import { activities as seedActivities } from "../../data";
+import { getActor, notify, requireAdmin, writeAudit } from "../../../db/runtime";
 import { normalizeDateTime, reminderBefore } from "../../../lib/services/student";
+import {
+  canReviewRegistration,
+  registrationReviewScope,
+  type RegistrationReviewScope,
+} from "../../../lib/services/registration-governance";
 
 type ActivityRow = { id: string; ownerId: string; payload: string };
 type RegistrationRow = {
@@ -8,6 +14,7 @@ type RegistrationRow = {
   activityId: string;
   activityTitle: string;
   publisherOwnerId?: string;
+  studentOwnerId?: string;
   answers: string;
   status: string;
   reviewNote?: string;
@@ -96,34 +103,42 @@ function findActivity(rows: ActivityRow[], activityId: string) {
 
 export async function GET(request: Request) {
   await setup();
-  const identity = await getActor(request);
-  if (!identity) return Response.json({ registrations: [] }, { status: 401 });
-  const owner = identity.id;
   const scope = new URL(request.url).searchParams.get("scope");
-  if (scope === "publisher") {
-    if (identity.role !== "enterprise" && !identity.testMode)
-      return Response.json({ error: "仅企业账号可查看报名数据" }, { status: 403 });
-    const demo = owner.startsWith("demo:");
-    const registrationRows = demo
-      ? await env.DB.prepare(
-          "SELECT id,activity_id AS activityId,activity_title AS activityTitle,publisher_owner_id AS publisherOwnerId,answers,status,review_note AS reviewNote,reviewed_at AS reviewedAt,created_at AS createdAt FROM activity_registrations WHERE publisher_owner_id=? OR publisher_owner_id='ja:seed' ORDER BY created_at DESC LIMIT 500",
-        )
-          .bind(owner)
-          .all()
-      : await env.DB.prepare(
-          "SELECT id,activity_id AS activityId,activity_title AS activityTitle,publisher_owner_id AS publisherOwnerId,answers,status,review_note AS reviewNote,reviewed_at AS reviewedAt,created_at AS createdAt FROM activity_registrations WHERE publisher_owner_id=? ORDER BY created_at DESC LIMIT 500",
-        )
-          .bind(owner)
-          .all();
+  if (scope === "ja") {
+    const admin = await requireAdmin(request);
+    if (!admin)
+      return Response.json({ error: "需要 JA 后台权限" }, { status: 401 });
+    const rows = await env.DB.prepare(
+      "SELECT id,activity_id AS activityId,activity_title AS activityTitle,student_owner_id AS studentOwnerId,publisher_owner_id AS publisherOwnerId,answers,status,review_note AS reviewNote,reviewed_at AS reviewedAt,created_at AS createdAt FROM activity_registrations WHERE publisher_owner_id LIKE 'ja:%' ORDER BY created_at DESC LIMIT 500",
+    ).all();
     return Response.json({
-      registrations: (registrationRows.results as unknown as RegistrationRow[])
-        .map(parseRegistration)
-        .map((row) => ({
-          ...row,
-          demoSeed: row.publisherOwnerId === "ja:seed",
-        })),
+      registrations: (rows.results as unknown as RegistrationRow[]).map(
+        parseRegistration,
+      ),
     });
   }
+  if (scope === "publisher") {
+    const identity = await getActor(request, "enterprise");
+    if (!identity)
+      return Response.json({ registrations: [] }, { status: 401 });
+    if (identity.role !== "enterprise")
+      return Response.json({ error: "仅企业账号可查看报名数据" }, { status: 403 });
+    const registrationRows = await env.DB.prepare(
+      "SELECT id,activity_id AS activityId,activity_title AS activityTitle,student_owner_id AS studentOwnerId,publisher_owner_id AS publisherOwnerId,answers,status,review_note AS reviewNote,reviewed_at AS reviewedAt,created_at AS createdAt FROM activity_registrations WHERE publisher_owner_id=? ORDER BY created_at DESC LIMIT 500",
+    )
+      .bind(identity.id)
+      .all();
+    return Response.json({
+      registrations: (registrationRows.results as unknown as RegistrationRow[]).map(
+        parseRegistration,
+      ),
+    });
+  }
+  const identity = await getActor(request, "student");
+  if (!identity) return Response.json({ registrations: [] }, { status: 401 });
+  if (identity.role !== "student")
+    return Response.json({ error: "仅学生账号可查看报名" }, { status: 403 });
+  const owner = identity.id;
   const rows = await env.DB.prepare(
     "SELECT id,activity_id AS activityId,activity_title AS activityTitle,answers,status,review_note AS reviewNote,reviewed_at AS reviewedAt,created_at AS createdAt FROM activity_registrations WHERE student_owner_id=? ORDER BY created_at DESC",
   )
@@ -138,10 +153,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   await setup();
-  const identity = await getActor(request);
+  const identity = await getActor(request, "student");
   if (!identity)
     return Response.json({ error: "缺少报名身份" }, { status: 401 });
-  if (identity.role !== "student" && !identity.testMode)
+  if (identity.role !== "student")
     return Response.json({ error: "仅学生账号可报名活动" }, { status: 403 });
   const student = identity.id;
   const body = (await request.json()) as {
@@ -169,11 +184,54 @@ export async function POST(request: Request) {
   }
   const activityRows = await activities();
   const record = findActivity(activityRows, body.activityId);
+  const seedActivity = !record
+    ? seedActivities.find((activity) => activity.id === body.activityId)
+    : undefined;
+  if (!record && !seedActivity)
+    return Response.json(
+      { error: "活动不存在或已下线，请刷新活动列表" },
+      { status: 404 },
+    );
   let publisher = "ja:seed";
   let canonicalActivityId = body.activityId;
   let canonicalTitle = String(body.activityTitle).trim().slice(0, 200);
   let startAt = normalizeDateTime(body.activityDate);
   let endAt = normalizeDateTime(body.activityEnd);
+  if (seedActivity) {
+    if (["报名截止", "已结束", "已满员"].includes(seedActivity.status))
+      return Response.json({ error: "该活动当前不可报名" }, { status: 400 });
+    const missing = (seedActivity.registrationFields || []).find(
+      (field) => field.required && !answerData.clean[field.id],
+    );
+    if (missing)
+      return Response.json(
+        { error: `请填写：${missing.label}` },
+        { status: 400 },
+      );
+    const emailField = (seedActivity.registrationFields || []).find(
+      (field) => field.type === "email",
+    );
+    if (
+      emailField &&
+      answerData.clean[emailField.id] &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(answerData.clean[emailField.id])
+    )
+      return Response.json({ error: "请填写有效邮箱" }, { status: 400 });
+    const phoneField = (seedActivity.registrationFields || []).find(
+      (field) => field.type === "tel",
+    );
+    if (
+      phoneField &&
+      answerData.clean[phoneField.id] &&
+      !/^[0-9+\-\s]{7,24}$/.test(answerData.clean[phoneField.id])
+    )
+      return Response.json({ error: "请填写有效联系电话" }, { status: 400 });
+    canonicalActivityId = seedActivity.id;
+    canonicalTitle = seedActivity.title;
+    startAt = normalizeDateTime(seedActivity.date) || startAt;
+    if (seedActivity.capacity > 0)
+      answerData.clean.__capacity = String(seedActivity.capacity);
+  }
   if (record) {
     const payload = JSON.parse(String(record.payload));
     if (payload.reviewStatus !== "approved")
@@ -250,24 +308,41 @@ export async function POST(request: Request) {
   await writeAudit(student, "register", "activity", canonicalActivityId);
   await env.DB.prepare("INSERT INTO student_calendar_events(id,student_id,source_type,source_id,title,start_at,end_at,reminder_at,reminder_enabled,status,created_at,updated_at) VALUES(?,?,'activity',?,?,?,?,?,1,'active',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(student_id,source_type,source_id) DO UPDATE SET title=excluded.title,start_at=excluded.start_at,end_at=excluded.end_at,reminder_at=excluded.reminder_at,status='active',updated_at=CURRENT_TIMESTAMP")
     .bind(crypto.randomUUID(), student, canonicalActivityId, canonicalTitle, startAt, endAt, reminderBefore(startAt, 24)).run();
-  await notify(publisher, "new-registration", "收到新的活动报名", `${canonicalTitle} 有新的学生报名待确认。`, "/workspace/enterprise/registrations");
+  await notify(
+    publisher,
+    "new-registration",
+    "收到新的活动报名",
+    `${canonicalTitle} 有新的学生报名待确认。`,
+    registrationReviewScope(publisher) === "ja"
+      ? "/ja-console/registrations"
+      : "/workspace/enterprise/registrations",
+  );
   return Response.json({ ok: true, id, status: "pending" });
 }
 
 export async function PATCH(request: Request) {
   await setup();
-  const identity = await getActor(request);
-  if (!identity)
-    return Response.json({ error: "缺少企业身份" }, { status: 401 });
-  if (identity.role !== "enterprise" && !identity.testMode)
-    return Response.json({ error: "仅活动发布企业可审核报名" }, { status: 403 });
-  const publisher = identity.id;
   const body = (await request.json()) as {
+    scope?: RegistrationReviewScope;
     registrationId?: string;
     registrationIds?: string[];
     decision?: "approved" | "rejected";
     note?: string;
   };
+  const reviewScope: RegistrationReviewScope =
+    body.scope === "ja" ? "ja" : "enterprise";
+  const identity =
+    reviewScope === "ja"
+      ? await requireAdmin(request)
+      : await getActor(request, "enterprise");
+  if (!identity)
+    return Response.json(
+      { error: reviewScope === "ja" ? "需要 JA 后台权限" : "缺少企业身份" },
+      { status: 401 },
+    );
+  if (reviewScope === "enterprise" && identity.role !== "enterprise")
+    return Response.json({ error: "仅活动发布企业可审核报名" }, { status: 403 });
+  const publisher = identity.id;
   const ids = [
     ...(Array.isArray(body.registrationIds) ? body.registrationIds : []),
     ...(body.registrationId ? [body.registrationId] : []),
@@ -299,18 +374,30 @@ export async function PATCH(request: Request) {
     );
   const unauthorized = registrations.results.some(
     (registration) =>
-      registration.publisherOwnerId !== publisher &&
-      !(
-        publisher.startsWith("demo:") &&
-        registration.publisherOwnerId === "ja:seed"
+      !canReviewRegistration(
+        reviewScope,
+        publisher,
+        registration.publisherOwnerId,
       ),
   );
   if (unauthorized)
-    return Response.json({ error: "无权审核其他企业的报名" }, { status: 403 });
+    return Response.json(
+      {
+        error:
+          reviewScope === "ja"
+            ? "JA 只能审核 JA 发起活动的报名"
+            : "无权审核其他发布方的报名",
+      },
+      { status: 403 },
+    );
 
   const reviewNote =
     body.note?.trim() ||
-    (body.decision === "approved" ? "企业确认报名通过" : "");
+    (body.decision === "approved"
+      ? reviewScope === "ja"
+        ? "JA 确认报名通过"
+        : "企业确认报名通过"
+      : "");
   await env.DB.batch(
     registrations.results.flatMap((registration) => [
       env.DB.prepare(
@@ -318,7 +405,11 @@ export async function PATCH(request: Request) {
       ).bind(body.decision, reviewNote, registration.id),
       env.DB.prepare(
         "INSERT INTO audit_logs(actor_id,action,target_type,target_id) VALUES(?,?,'activity-registration',?)",
-      ).bind(publisher, `registration-${body.decision}`, registration.id),
+      ).bind(
+        publisher,
+        `${reviewScope}-registration-${body.decision}`,
+        registration.id,
+      ),
     ]),
   );
   if (body.decision === "approved") {
@@ -340,10 +431,10 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   await setup();
-  const identity = await getActor(request);
+  const identity = await getActor(request, "student");
   if (!identity)
     return Response.json({ error: "缺少报名身份" }, { status: 401 });
-  if (identity.role !== "student" && !identity.testMode)
+  if (identity.role !== "student")
     return Response.json({ error: "仅学生账号可取消报名" }, { status: 403 });
   const student = identity.id;
   const id = new URL(request.url).searchParams.get("activityId");

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RichBlock } from "../data";
 import { PageTransition, runViewTransition, type TransitionDirection } from "../components/motion";
-import { ToastProvider, useToast } from "../components/ui";
+import { SidePanel, ToastProvider, useToast } from "../components/ui";
 import {
   JA_TABS,
   jaConsoleLocation,
@@ -31,10 +31,13 @@ type Registration = {
   id: string;
   activityId: string;
   activityTitle: string;
+  studentOwnerId?: string;
+  publisherOwnerId?: string;
   answers: Record<string, string>;
   status: string;
   createdAt: string;
   reviewNote?: string;
+  reviewedAt?: string | null;
 };
 type ManagedComment = {
   id: string;
@@ -466,6 +469,8 @@ function JAConsoleWorkspace({
       ? "平台活力看板"
       : tab === "review"
         ? "分区审核"
+        : tab === "registrations"
+          ? "JA 活动报名"
         : tab === "organizations"
           ? "企业主体认证"
         : tab === "publish"
@@ -484,6 +489,8 @@ function JAConsoleWorkspace({
       ? "用真实发布、报名和审核数据说明 Star Plan 的平台活性。"
       : tab === "review"
         ? "只审核三类需要公开前确认的内容：JA 发起活动、企业发布活动、企业发布内容。"
+        : tab === "registrations"
+          ? "只处理 JA 发起活动的学生报名；企业活动报名仍由对应企业处理。"
         : tab === "organizations"
           ? "核验企业主体名称和统一社会信用代码，通过后企业才能正式发布。"
         : tab === "publish"
@@ -505,6 +512,12 @@ function JAConsoleWorkspace({
   }> = [
     { id: "pulse", label: "数据看板", glyph: "◈" },
     { id: "review", label: "分区审核", glyph: "✓", count: pending.length },
+    {
+      id: "registrations",
+      label: "JA 活动报名",
+      glyph: "▤",
+      count: registrations.filter((item) => item.status === "pending").length,
+    },
     {
       id: "organizations",
       label: "企业认证",
@@ -586,6 +599,13 @@ function JAConsoleWorkspace({
                     setReason("");
                   }}
                   onDecideMany={decideMany}
+                />
+              )}{" "}
+              {tab === "registrations" && (
+                <JARegistrationDesk
+                  items={registrations}
+                  onReload={load}
+                  onNotice={setNotice}
                 />
               )}{" "}
               {tab === "organizations" && <OrganizationVerification items={organizations} onUpdated={load} onNotice={setNotice} />}
@@ -884,6 +904,234 @@ function RecordCard({
         查看详情
       </button>
     </article>
+  );
+}
+
+function JARegistrationDesk({
+  items,
+  onReload,
+  onNotice,
+}: {
+  items: Registration[];
+  onReload: () => Promise<void>;
+  onNotice: (message: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("all");
+  const [activity, setActivity] = useState("all");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selected, setSelected] = useState<Registration | null>(null);
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const activities = [...new Set(items.map((item) => item.activityTitle))];
+  const filtered = items.filter((item) => {
+    const state = item.status === "registered" ? "pending" : item.status;
+    const text = `${item.activityTitle} ${Object.values(item.answers).join(" ")}`.toLowerCase();
+    return (
+      (status === "all" || state === status) &&
+      (activity === "all" || item.activityTitle === activity) &&
+      (!query.trim() || text.includes(query.trim().toLowerCase()))
+    );
+  });
+  const pendingIds = filtered
+    .filter((item) => ["pending", "registered"].includes(item.status))
+    .map((item) => item.id);
+  const allChecked =
+    pendingIds.length > 0 && pendingIds.every((id) => selectedIds.includes(id));
+  const summary = {
+    pending: items.filter((item) => ["pending", "registered"].includes(item.status)).length,
+    approved: items.filter((item) => item.status === "approved").length,
+    rejected: items.filter((item) => item.status === "rejected").length,
+  };
+  const decide = async (
+    ids: string[],
+    decision: "approved" | "rejected",
+    decisionNote: string,
+  ) => {
+    if (!ids.length) return;
+    if (decision === "rejected" && !decisionNote.trim()) {
+      onNotice("退回时请填写具体原因");
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await fetch("/api/registrations", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          scope: "ja",
+          registrationIds: ids,
+          decision,
+          note: decisionNote.trim(),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "报名审核失败");
+      onNotice(
+        decision === "approved"
+          ? `已通过 ${ids.length} 份 JA 活动报名`
+          : `已退回 ${ids.length} 份 JA 活动报名`,
+      );
+      setSelected(null);
+      setSelectedIds([]);
+      setNote("");
+      await onReload();
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : "报名审核失败");
+    } finally {
+      setSaving(false);
+    }
+  };
+  const exportCsv = () => {
+    if (!filtered.length) {
+      onNotice("当前没有可导出的报名数据");
+      return;
+    }
+    const labelOf = (key: string) =>
+      ({
+        name: "姓名",
+        phone: "联系电话",
+        email: "邮箱",
+        school: "学校、专业与年级",
+        studentId: "学号",
+        expectation: "活动期待",
+      })[key] || key;
+    const escape = (value: unknown) =>
+      `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const rows = [
+      ["活动", "姓名", "学校/专业", "联系电话", "邮箱", "状态", "审核意见", "提交时间", "完整报名信息"],
+      ...filtered.map((item) => [
+        item.activityTitle,
+        item.answers.name || "",
+        item.answers.school || "",
+        item.answers.phone || "",
+        item.answers.email || "",
+        item.status === "approved" ? "已通过" : item.status === "rejected" ? "已退回" : "待确认",
+        item.reviewNote || "",
+        new Date(item.createdAt).toLocaleString("zh-CN"),
+        Object.entries(item.answers).map(([key, value]) => `${labelOf(key)}：${value}`).join("；"),
+      ]),
+    ];
+    const url = URL.createObjectURL(
+      new Blob(["\ufeff", rows.map((row) => row.map(escape).join(",")).join("\n")], {
+        type: "text/csv;charset=utf-8",
+      }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `JA星光计划_JA活动报名_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    onNotice(`已导出筛选结果，共 ${filtered.length} 条`);
+  };
+  const open = (item: Registration) => {
+    setSelected(item);
+    setNote(item.reviewNote || "");
+  };
+  return (
+    <>
+      <section className="ja-registration-hero">
+        <div>
+          <small>JA-OWNED ACTIVITY REGISTRATION</small>
+          <h2>报名处理与成长认证</h2>
+          <p>通过后将自动写入学生成长时间轴并标记 JA 认证；企业活动不会出现在这里。</p>
+        </div>
+        <button className="primary-btn" onClick={exportCsv}>导出筛选结果</button>
+      </section>
+      <section className="registration-summary visual-summary">
+        <span><small>全部报名</small><b>{items.length}</b></span>
+        <span><small>待确认</small><b>{summary.pending}</b></span>
+        <span><small>已通过</small><b>{summary.approved}</b></span>
+        <span><small>已退回</small><b>{summary.rejected}</b></span>
+      </section>
+      <section className="registration-filterbar" aria-label="JA 活动报名筛选">
+        <label className="registration-search">
+          <span>搜索学生</span>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="姓名、学校、电话或邮箱" />
+        </label>
+        <label>
+          <span>活动</span>
+          <select value={activity} onChange={(event) => setActivity(event.target.value)}>
+            <option value="all">全部 JA 活动</option>
+            {activities.map((name) => <option value={name} key={name}>{name}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>状态</span>
+          <select value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option value="all">全部状态</option>
+            <option value="pending">待确认</option>
+            <option value="approved">已通过</option>
+            <option value="rejected">已退回</option>
+          </select>
+        </label>
+        <b>当前显示 {filtered.length} 条</b>
+      </section>
+      {selectedIds.length > 0 && (
+        <section className="registration-bulkbar">
+          <div><b>已选择 {selectedIds.length} 份待确认报名</b><button onClick={() => setSelectedIds([])}>取消选择</button></div>
+          <label><span>统一审核意见</span><input value={note} onChange={(event) => setNote(event.target.value)} placeholder="通过时选填，退回时必填" /></label>
+          <button className="bulk-reject" disabled={saving} onClick={() => decide(selectedIds, "rejected", note)}>批量退回</button>
+          <button className="bulk-approve" disabled={saving} onClick={() => decide(selectedIds, "approved", note)}>批量通过</button>
+        </section>
+      )}
+      {!items.length ? (
+        <div className="admin-empty">JA 活动暂时没有学生报名。</div>
+      ) : !filtered.length ? (
+        <div className="admin-empty">没有符合当前筛选条件的报名。</div>
+      ) : (
+        <div className="registration-table enterprise-registration-table ja-registration-table">
+          <div className="registration-row head">
+            <label aria-label="选择全部待确认报名"><input type="checkbox" checked={allChecked} onChange={() => setSelectedIds(allChecked ? [] : pendingIds)} /></label>
+            <b>活动</b><b>学生</b><b>学校 / 联系方式</b><b>提交时间</b><b>状态</b><b>审核</b>
+          </div>
+          {filtered.map((item) => (
+            <div className="registration-row" key={item.id}>
+              <label aria-label={`选择 ${item.answers.name || "该学生"} 的报名`}>
+                {["pending", "registered"].includes(item.status) && <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => setSelectedIds((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} />}
+              </label>
+              <strong>{item.activityTitle}</strong>
+              <span className="registration-student-name"><b>{item.answers.name || "未填写姓名"}</b><small>{item.answers.email || "未填写邮箱"}</small></span>
+              <span className="registration-contact"><b>{item.answers.school || "未填写学校"}</b><small>{item.answers.phone || "未填写电话"}</small></span>
+              <span className="registration-created-at">{new Date(item.createdAt).toLocaleDateString("zh-CN")}</span>
+              <span className={`registration-state ${item.status}`}>{item.status === "approved" ? "已通过" : item.status === "rejected" ? "已退回" : "待确认"}</span>
+              <button onClick={() => open(item)}>{["pending", "registered"].includes(item.status) ? "查看并审核" : "查看结果"}</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <SidePanel
+        open={Boolean(selected)}
+        title={`${selected?.answers.name || "学生"} · 报名详情`}
+        description={selected?.activityTitle}
+        dirty={Boolean(selected && ["pending", "registered"].includes(selected.status) && note !== (selected.reviewNote || ""))}
+        onClose={() => setSelected(null)}
+      >
+        {selected && (
+          <div className="registration-detail registration-detail-panel ja-registration-detail">
+            <header className="registration-detail-header">
+              <span>{String(selected.answers.name || "学").slice(0, 1)}</span>
+              <div><small>JA REGISTRATION REVIEW</small><h1>{selected.answers.name || "未填写姓名"}</h1><p>{selected.activityTitle}</p></div>
+              <b className={`registration-state ${selected.status}`}>{selected.status === "approved" ? "已通过" : selected.status === "rejected" ? "已退回" : "待确认"}</b>
+            </header>
+            <section className="registration-answer-grid">
+              {Object.entries(selected.answers).map(([key, value]) => <p key={key}><b>{key}</b><span>{value || "未填写"}</span></p>)}
+            </section>
+            {["pending", "registered"].includes(selected.status) ? (
+              <section className="registration-decision-panel">
+                <label className="registration-review-note"><span>审核意见</span><textarea rows={4} value={note} onChange={(event) => setNote(event.target.value)} placeholder="通过时选填；退回时必须说明需要修改的内容" /></label>
+                <div className="registration-review-actions">
+                  <button disabled={saving} onClick={() => decide([selected.id], "rejected", note)}>退回修改</button>
+                  <button className="approve" disabled={saving} onClick={() => decide([selected.id], "approved", note)}>通过并生成 JA 认证</button>
+                </div>
+              </section>
+            ) : (
+              <p className={`registration-result ${selected.status}`}><b>{selected.status === "approved" ? "报名已通过" : "报名已退回"}</b><span>{selected.reviewNote || "暂无审核意见"}</span></p>
+            )}
+          </div>
+        )}
+      </SidePanel>
+    </>
   );
 }
 

@@ -1,6 +1,7 @@
 export const JA_TABS = [
   "pulse",
   "review",
+  "registrations",
   "organizations",
   "publish",
   "records",

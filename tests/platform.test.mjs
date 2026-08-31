@@ -170,7 +170,7 @@ test("registration API scopes enterprise data and supports batch review", async 
   assert.match(apiSource, /CREATE TABLE IF NOT EXISTS audit_logs/);
   assert.match(apiSource, /WHERE publisher_owner_id=\?/);
   assert.match(apiSource, /registrationIds/);
-  assert.match(apiSource, /无权审核其他企业的报名/);
+  assert.match(apiSource, /无权审核其他发布方的报名/);
   assert.doesNotMatch(apiSource, /testVisible/);
   assert.match(workspaceSource, /批量通过/);
   assert.match(workspaceSource, /已导出当前筛选结果/);
