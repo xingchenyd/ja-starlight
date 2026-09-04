@@ -1,0 +1,33 @@
+[Unit]
+Description=Star Plan web platform
+After=network.target
+
+[Service]
+Type=simple
+User=star-plan
+Group=star-plan
+WorkingDirectory=/srv/star-plan/current
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=3000
+Environment=STARLIGHT_DATA_DIR=/srv/star-plan/data
+Environment=STARLIGHT_CONFIG_FILE=/etc/star-plan/runtime.json
+Environment=STARLIGHT_STANDALONE_ENTRY=/srv/star-plan/current/standalone/server.js
+Environment=VINEXT_TRUSTED_HOSTS=star-plan.com,www.star-plan.com
+Environment=VINEXT_TRUST_PROXY=1
+ExecStart=/opt/node-v24.20.0-linux-x64/bin/node --max-old-space-size=768 server/start.mjs
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/star-plan/data /srv/star-plan/cache
+MemoryMax=1400M
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target

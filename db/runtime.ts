@@ -86,6 +86,7 @@ export async function ensureCoreSchema() {
 }
 
 export function isTestRequest(request: Request) {
+  if ((env as unknown as { STARLIGHT_RUNTIME?: string }).STARLIGHT_RUNTIME === "node") return false;
   const hostname = new URL(request.url).hostname;
   return hostname.endsWith(".test") || String((env as unknown as { STARLIGHT_TEST_MODE?: string }).STARLIGHT_TEST_MODE || "") === "true";
 }

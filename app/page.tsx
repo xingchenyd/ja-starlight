@@ -37,7 +37,7 @@ export default function Home() {
       <HomeSections/>
       <HomeGrowthJourney/>
       <HomeImpactStories/>
-      <footer><div className="shell"><div className="brand inverse brand-official"><img src="/media/ja-china-logo.jpg" alt="星光计划"/><b>Star Plan 星光计划</b></div><p>让青年拥有成就全球经济的技能、思维与格局。</p><div className="footer-legal"><a href="/privacy">隐私政策</a><a href="/terms">平台使用规则</a><a href="mailto:support@jachina.org">联系项目团队</a></div><small>© 2026 星光计划. All rights reserved.</small></div></footer>
+      <footer className="site-footer"><div className="shell"><div className="brand inverse brand-official"><img src="/media/ja-china-logo.jpg" alt="星光计划"/><b>Star Plan 星光计划</b></div><p>让青年拥有成就全球经济的技能、思维与格局。</p><div className="footer-legal"><a href="/privacy">隐私政策</a><a href="/terms">平台使用规则</a><a href="mailto:ruthyanghao@hotmail.com">联系项目团队</a></div><div className="footer-compliance"><small>© 2026 星光计划 · 主办者：杨浩</small><a href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer">湘ICP备2026038303号-1</a></div></div></footer>
     </main>
   );
 }

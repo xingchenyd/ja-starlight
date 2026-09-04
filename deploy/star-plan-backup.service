@@ -1,0 +1,17 @@
+[Unit]
+Description=Verified Star Plan database and file backup
+After=star-plan.service
+
+[Service]
+Type=oneshot
+User=star-plan
+Group=star-plan
+WorkingDirectory=/srv/star-plan/current
+ExecStart=/opt/node-v24.20.0-linux-x64/bin/node scripts/backup.mjs /srv/star-plan/data /srv/star-plan/snapshots /etc/star-plan/runtime.json
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/star-plan/data /srv/star-plan/snapshots
+TimeoutStartSec=600

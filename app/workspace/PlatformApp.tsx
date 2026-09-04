@@ -387,7 +387,7 @@ function PlatformWorkspace({
           ))}
         </nav>
         <div className="side-help contact-only">
-          <a href="mailto:support@jachina.org">联系项目团队 →</a>
+          <a href="mailto:ruthyanghao@hotmail.com">联系项目团队 →</a>
         </div>
         <button className="back" onClick={async () => { await fetch("/api/auth/logout", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ role }) }); location.assign("/"); }}>退出登录</button>
       </aside>
