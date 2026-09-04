@@ -10,7 +10,9 @@
 - 文件私有权限由接口校验；Nginx 不直接公开数据目录。
 - 生产环境禁止测试身份绕过；平台后台仍需要原管理员密钥。
 
-## 域名与 HTTPS 尚待执行
+## 域名与 HTTPS 配置
+
+2026-09-04 状态：root/www A 记录已生效，证书已签发（有效期至 2026-12-03），HTTPS 配置和 HTTP/www 重定向已启用。续期 dry-run（含 Nginx reload hook）成功。服务器本地 TLS 访问正常，外网 TCP 443 超时，待用户放通腾讯云轻量实例防火墙后完成公网验收；目前不可宣称已全面上线。以下保留配置步骤供后续维护。
 
 DNSPod 的 `@` 和 `www` 添加 A 记录指向服务器，线路默认，TTL 默认。保留已有 MX/TXT 记录，同名冲突先核对，不直接删除。
 
@@ -26,9 +28,9 @@ sudo certbot certonly --webroot -w /var/www/star-plan-acme \
   --email ruthyanghao@hotmail.com --agree-tos --non-interactive
 ```
 
-证书成功签发后才安装 `deploy/nginx-https.conf` 到 `/etc/nginx/sites-available/star-plan`，执行 `sudo nginx -t`，通过后 reload。当前 HTTP 配置仅开放 ACME 挑战，其余显示维护页，不提供明文登录。
+证书成功签发后才安装 `deploy/nginx-https.conf` 到 `/etc/nginx/sites-available/star-plan`，执行 `sudo nginx -t`，通过后 reload。原 HTTP 维护配置已备份至 `/etc/nginx/star-plan-http-pre-tls.backup`，当前 HTTP 配置开放 ACME 挑战，其余跳转 HTTPS，不提供明文登录。
 
-验收证书主机名、有效期、完整链、HTTP/www 重定向、三端实际浏览器登录、私有简历下载及备案页脚，并执行 `sudo certbot renew --dry-run`。证书续期应配置成功后 reload Nginx 的 deploy hook；仅有 certbot.timer 不等于完成全链路续期验收。
+验收证书主机名、有效期、完整链、HTTP/www 重定向、三端实际浏览器登录、私有简历下载及备案页脚，并执行 `sudo certbot renew --dry-run --run-deploy-hooks`。`deploy/certbot-reload-nginx.sh` 已安装到 `/etc/letsencrypt/renewal-hooks/deploy/star-plan-nginx`（root:root 755），续期后先检查配置再 reload Nginx；仅有 certbot.timer 不等于完成全链路续期验收。
 
 ## 日常检查
 
