@@ -36,3 +36,15 @@ test("student login provides a native horizontal story rail without page overflo
   assert.match(styles, /\.auth-story-slide[^}]*scroll-snap-align:\s*start/);
   assert.match(styles, /\.auth-page[^}]*overflow-x:\s*(?:hidden|clip)/);
 });
+
+test("auth shell removes the left logo and uses a plain home link", async () => {
+  const [shell, styles] = await Promise.all([
+    readFile(new URL("../app/auth/AuthShell.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  assert.doesNotMatch(shell, /className="auth-logo"/);
+  assert.doesNotMatch(shell, /ja-china-logo\.jpg/);
+  assert.doesNotMatch(styles, /\.auth-logo/);
+  assert.match(shell, /<a className="auth-back" href="\/">← 返回首页<\/a>/);
+  assert.doesNotMatch(shell, /<Link className="auth-back"/);
+});

@@ -18,11 +18,10 @@ export default function AuthShell({ eyebrow, title, description, stories, childr
           </div>
         </article>)}
       </div>
-      <Link className="auth-logo" href="/"><Image src="/media/ja-china-logo.jpg" alt="星光计划" width={58} height={58}/><span><b>星光计划</b><small>STARLIGHT · HUNAN</small></span></Link>
       {items.length > 1 ? <span className="auth-swipe-hint">← 左右滑动浏览 →</span> : null}
     </section>
     <section className="auth-stage">
-      <Link className="auth-back" href="/">← 返回首页</Link>{children}
+      <a className="auth-back" href="/">← 返回首页</a>{children}
       <p className="auth-legal">登录或注册即表示你同意<Link href="/terms">平台使用规则</Link>和<Link href="/privacy">隐私政策</Link></p>
     </section>
   </main>;
