@@ -67,7 +67,7 @@ async function sendTencentPasswordResetMail(config: MailConfig, to: string, code
     Subject: message.subject,
     ReplyToAddresses: config.MAIL_REPLY_TO || undefined,
     ...(templateId > 0 ? {
-      Template: { TemplateID: templateId, TemplateData: JSON.stringify({ code, expires: "10 分钟", product: "星光计划" }) },
+      Template: { TemplateID: templateId, TemplateData: JSON.stringify({ code }) },
     } : {
       Simple: { Text: toBase64(message.text), Html: toBase64(message.html) },
     }),

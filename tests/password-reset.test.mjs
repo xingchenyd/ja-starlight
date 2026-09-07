@@ -54,7 +54,7 @@ test("Tencent SES adapter sends branded reset codes through template API", async
   assert.deepEqual(payload.Destination, ["student@example.com"]);
   assert.equal(payload.Subject, "星光计划｜重置密码验证码");
   assert.equal(payload.ReplyToAddresses, "ruthyanghao@hotmail.com");
-  assert.deepEqual(payload.Template, { TemplateID: 123456, TemplateData: JSON.stringify({ code: "123456", expires: "10 分钟", product: "星光计划" }) });
+  assert.deepEqual(payload.Template, { TemplateID: 123456, TemplateData: JSON.stringify({ code: "123456" }) });
   assert.equal(payload.Simple, undefined);
 });
 
