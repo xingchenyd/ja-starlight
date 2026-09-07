@@ -4,8 +4,8 @@ type Statement = { bind: (...values: unknown[]) => Statement; first: <T>() => Pr
 type Database = { prepare: (sql: string) => Statement; batch: (statements: Statement[]) => Promise<unknown> };
 
 export async function ensureFormalPlatformData(db: Database) {
-  const enterprise = await db.prepare("SELECT id FROM users WHERE role='enterprise' AND status='active' ORDER BY created_at LIMIT 1").first<{ id: string }>();
-  const student = await db.prepare("SELECT id FROM users WHERE role='student' AND status='active' ORDER BY created_at LIMIT 1").first<{ id: string }>();
+  const enterprise = await db.prepare("SELECT id FROM users WHERE role='enterprise' AND status='active' ORDER BY CASE WHEN lower(email)='enterprise@starlight-hunan.cn' THEN 0 ELSE 1 END,created_at LIMIT 1").first<{ id: string }>();
+  const student = await db.prepare("SELECT id FROM users WHERE role='student' AND status='active' ORDER BY CASE WHEN lower(email)='student@starlight-hunan.cn' THEN 0 ELSE 1 END,created_at LIMIT 1").first<{ id: string }>();
   const enterpriseOwner = enterprise?.id || "demo:enterprise", studentOwner = student?.id || "demo:student", starlightOwner = "ja:formal";
   const existing = await db.prepare("SELECT owner_id AS ownerId FROM workspace_records WHERE id='formal-job-01'").first<{ ownerId: string }>();
   const existingExperience = await db.prepare("SELECT student_id AS studentId FROM student_experiences WHERE id='formal-experience-01'").first<{ studentId: string }>();
@@ -17,11 +17,12 @@ export async function ensureFormalPlatformData(db: Database) {
   records.push(db.prepare("INSERT INTO workspace_records(id,owner_id,kind,payload,version,archived_at,published_at,updated_at) VALUES('formal-enterprise-profile',?,'enterprise-profile',?,1,NULL,NULL,CURRENT_TIMESTAMP) ON CONFLICT(id) DO NOTHING").bind(enterpriseOwner, JSON.stringify({ name: "长沙星联数字科技有限公司", industry: "互联网AI", city: "长沙", intro: "面向湖南本地企业提供数字化产品与青年创新实践项目，长期开放产品、数据与内容方向的真实任务。", contactName: "周老师", contactPhone: "0731-88886666", contactEmail: "talent@starlink-hn.example", creditCode: "91430100MA4R8X6K2Y", verificationStatus: "verified" })));
   await db.batch(records);
   await db.batch([
-    db.prepare("UPDATE workspace_records SET owner_id=? WHERE owner_id='demo:enterprise' AND id LIKE 'formal-%'").bind(enterpriseOwner),
-    db.prepare("UPDATE workspace_records SET owner_id=? WHERE owner_id='demo:student' AND id='formal-student-profile'").bind(studentOwner),
-    db.prepare("UPDATE student_experiences SET student_id=? WHERE student_id='demo:student' AND id LIKE 'formal-experience-%'").bind(studentOwner),
-    db.prepare("UPDATE activity_registrations SET student_owner_id=? WHERE student_owner_id='demo:student' AND id='formal-registration-01'").bind(studentOwner),
-    db.prepare("UPDATE activity_registrations SET publisher_owner_id=? WHERE publisher_owner_id='demo:enterprise' AND id LIKE 'formal-registration-%'").bind(enterpriseOwner),
+    ...formalRecords.map((record) => db.prepare("UPDATE workspace_records SET owner_id=? WHERE id=?").bind(record.owner === "enterprise" ? enterpriseOwner : starlightOwner, record.id)),
+    db.prepare("UPDATE workspace_records SET owner_id=? WHERE id='formal-student-profile'").bind(studentOwner),
+    db.prepare("UPDATE workspace_records SET owner_id=? WHERE id='formal-enterprise-profile'").bind(enterpriseOwner),
+    db.prepare("UPDATE student_experiences SET student_id=? WHERE id LIKE 'formal-experience-%'").bind(studentOwner),
+    db.prepare("UPDATE activity_registrations SET student_owner_id=? WHERE id='formal-registration-01'").bind(studentOwner),
+    ...formalRegistrations.map((item) => db.prepare("UPDATE activity_registrations SET publisher_owner_id=? WHERE id=?").bind(item.publisher === "enterprise" ? enterpriseOwner : starlightOwner, item.id)),
     db.prepare("INSERT INTO organizations(id,owner_id,name,credit_code,verification_status,verified_by,verified_at,created_at,updated_at) VALUES('formal-organization',?,'长沙星联数字科技有限公司','91430100MA4R8X6K2Y','verified','system',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(owner_id) DO NOTHING").bind(enterpriseOwner),
   ]);
   await db.batch(formalExperiences.map((item) => db.prepare("INSERT INTO student_experiences(id,student_id,source_type,source_id,category,title,role,description,output,evidence_url,evidence_asset_key,occurred_at,certified,is_public,sort_order,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,'','',?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(id) DO NOTHING").bind(item.id, studentOwner, item.sourceType, item.sourceId, item.category, item.title, item.role, item.description, item.output, item.occurredAt, item.certified, item.isPublic, item.sortOrder)));
