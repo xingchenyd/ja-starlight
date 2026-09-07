@@ -21,6 +21,7 @@ export default function AuthShell({ eyebrow, title, description, stories, childr
       {items.length > 1 ? <span className="auth-swipe-hint">← 左右滑动浏览 →</span> : null}
     </section>
     <section className="auth-stage">
+      {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- Native anchor preserves reliable hard navigation from the auth island to the public home. */}
       <a className="auth-back" href="/">← 返回首页</a>{children}
       <p className="auth-legal">登录或注册即表示你同意<Link href="/terms">平台使用规则</Link>和<Link href="/privacy">隐私政策</Link></p>
     </section>

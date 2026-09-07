@@ -6,7 +6,8 @@ import { sendPasswordResetMail } from "./mail";
 type Statement = { bind: (...values: unknown[]) => Statement; first: <T>() => Promise<T | null>; run: () => Promise<{ success?: boolean; meta?: { changes?: number } }>; all: <T>() => Promise<{ results: T[] }> };
 export type AuthDatabase = { prepare: (sql: string) => Statement };
 export type AuthConfig = {
-  AUTH_PEPPER?: string; AUTH_TRUSTED_ORIGINS?: string; RESEND_API_KEY?: string; MAIL_FROM?: string; MAIL_REPLY_TO?: string;
+  AUTH_PEPPER?: string; AUTH_TRUSTED_ORIGINS?: string; MAIL_PROVIDER?: string; RESEND_API_KEY?: string; MAIL_FROM?: string; MAIL_REPLY_TO?: string;
+  TENCENT_SES_REGION?: string; TENCENT_SES_SECRET_ID?: string; TENCENT_SES_SECRET_KEY?: string; TENCENT_SES_TEMPLATE_ID?: string;
   AUTH_SEED_STUDENT_PASSWORD?: string; AUTH_SEED_ENTERPRISE_PASSWORD?: string; AUTH_SEED_ADMIN_KEY?: string;
 };
 type User = { id: string; email: string; name: string; role: "student" | "enterprise"; status: string };
@@ -111,7 +112,9 @@ export async function revokeSession(db: AuthDatabase, config: AuthConfig, reques
 export async function requestPasswordReset(db: AuthDatabase, config: AuthConfig, request: Request, body: Record<string, unknown>) {
   const email = validateEmail(body.email);
   await rateLimit(db, request, "forgot", email);
-  if (!config.RESEND_API_KEY || !config.MAIL_FROM) throw new AuthServiceError("MAIL_SERVICE_UNAVAILABLE", "邮件重置服务正在配置中，请稍后再试", 503);
+  const tencentConfigured = config.MAIL_PROVIDER === "tencent-ses" && config.MAIL_FROM && config.TENCENT_SES_SECRET_ID && config.TENCENT_SES_SECRET_KEY;
+  const resendConfigured = config.RESEND_API_KEY && config.MAIL_FROM;
+  if (!tencentConfigured && !resendConfigured) throw new AuthServiceError("MAIL_SERVICE_UNAVAILABLE", "邮件重置服务正在配置中，请稍后再试", 503);
   const user = await db.prepare("SELECT id,email FROM users WHERE lower(email)=? AND status='active'").bind(email).first<{ id: string; email: string }>();
   if (!user) {
     const decoyChallengeId = crypto.randomUUID(), decoyCode = randomCode();

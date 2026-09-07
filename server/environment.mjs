@@ -3,7 +3,7 @@ import { openDatabase } from './sqlite.mjs';
 import { createFileStore } from './files.mjs';
 
 let database, files;
-const allowed = new Set(['AUTH_PEPPER', 'AUTH_SEED_ADMIN_KEY', 'AUTH_SEED_STUDENT_PASSWORD', 'AUTH_SEED_ENTERPRISE_PASSWORD', 'AUTH_TRUSTED_ORIGINS', 'STARLIGHT_TEST_MODE', 'RESEND_API_KEY', 'MAIL_FROM', 'MAIL_REPLY_TO']);
+const allowed = new Set(['AUTH_PEPPER', 'AUTH_SEED_ADMIN_KEY', 'AUTH_SEED_STUDENT_PASSWORD', 'AUTH_SEED_ENTERPRISE_PASSWORD', 'AUTH_TRUSTED_ORIGINS', 'STARLIGHT_TEST_MODE', 'MAIL_PROVIDER', 'RESEND_API_KEY', 'MAIL_FROM', 'MAIL_REPLY_TO', 'TENCENT_SES_REGION', 'TENCENT_SES_SECRET_ID', 'TENCENT_SES_SECRET_KEY', 'TENCENT_SES_TEMPLATE_ID']);
 function dataRoot() {
   if (!process.env.STARLIGHT_DATA_DIR) throw new Error('STARLIGHT_DATA_DIR is required');
   return resolve(process.env.STARLIGHT_DATA_DIR);

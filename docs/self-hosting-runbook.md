@@ -68,8 +68,34 @@ sudo systemctl start star-plan-backup.service
 
 版本回退只切换代码软链接；如果已发生数据库迁移，必须先核对向后兼容性，不得只回退代码后假设数据兼容。
 
+## 邮件发送配置
+
+找回密码邮件通过可替换的邮件适配器发送。当前生产建议使用腾讯云邮件推送 SES API，密钥只保存在 `/etc/star-plan/runtime.json`，不要写入源码、提交或前端环境。
+
+必需配置：
+
+```json
+{
+  "MAIL_PROVIDER": "tencent-ses",
+  "MAIL_FROM": "星光计划 <no-reply@mail.star-plan.com>",
+  "MAIL_REPLY_TO": "ruthyanghao@hotmail.com",
+  "TENCENT_SES_REGION": "ap-guangzhou",
+  "TENCENT_SES_SECRET_ID": "...",
+  "TENCENT_SES_SECRET_KEY": "..."
+}
+```
+
+腾讯云邮件推送默认更推荐模板发送；如账号要求模板，需在控制台创建并审核通过“星光计划重置密码验证码”模板，并额外配置：
+
+```json
+{
+  "TENCENT_SES_TEMPLATE_ID": "模板 ID"
+}
+```
+
+模板变量约定为 `code`、`expires`、`product`，例如 `{"code":"123456","expires":"10 分钟","product":"星光计划"}`。未配置模板 ID 时，系统会尝试使用腾讯云自定义 HTML 内容发送；若腾讯云返回“无自定义内容权限/必须使用模板”，按上述方式补充模板 ID 后重启服务。
+
 ## 暂缓事项
 
-- Resend/Tencent Cloud 邮件发送仍未配置；忘记密码界面保留明确的未开通提示。
 - 公安备案未完成，不展示用户提供的非备案号字符串。
 - 未更换密码或管理员密钥；完成正式访问验收后建议由账号持有人轮换曾用于演示的凭据。
