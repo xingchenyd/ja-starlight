@@ -30,7 +30,7 @@
 }
 
 .motion-page-enter {
-  animation: motion-page-forward var(--motion-duration-page) var(--motion-ease-enter) both;
+  animation: motion-page-forward var(--motion-duration-page) var(--motion-ease-enter) backwards;
 }
 
 .motion-page-enter[data-direction="back"] {
@@ -102,4 +102,3 @@
     transform: none !important;
   }
 }
-

@@ -125,8 +125,19 @@
 .cinema-copy .search {
   border-color: rgba(255, 255, 255, 0.32);
   background: rgba(255, 255, 255, 0.94);
+  color: var(--home-ink);
   box-shadow: 0 20px 60px rgba(6, 26, 33, 0.28);
   backdrop-filter: blur(18px);
+}
+
+.cinema-copy .search label span,
+.cinema-copy .search input {
+  color: var(--home-ink);
+}
+
+.cinema-copy .search input::placeholder {
+  color: #697d83;
+  opacity: 1;
 }
 
 .cinema-copy .search button {
