@@ -22,3 +22,15 @@ test("public activity directory exists as a first-class route", async () => {
   );
   assert.match(page, /ActivityCatalog/);
 });
+
+test("homepage exposes both filing records through official query links", async () => {
+  const page = await readFile(
+    new URL("../app/page.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(page, /湘ICP备2026038303号-1/);
+  assert.match(page, /https:\/\/beian\.miit\.gov\.cn\//);
+  assert.match(page, /湘公网安备43012102001418号/);
+  assert.match(page, /https:\/\/beian\.mps\.gov\.cn\/#\/query\/webSearch\?code=43012102001418/);
+});

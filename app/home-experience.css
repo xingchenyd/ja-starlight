@@ -722,6 +722,18 @@
   color: var(--home-yellow);
 }
 
+.site-footer .footer-compliance .public-security-record {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.site-footer .footer-compliance .public-security-record img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
 .home-voices-head {
   display: flex;
   align-items: end;

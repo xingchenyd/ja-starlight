@@ -14,8 +14,10 @@ const passed = [];
 try {
   const home = await fetch(base, { headers });
   assert.equal(home.status, 200);
-  assert.ok((await home.text()).includes('湘ICP备2026038303号-1'));
-  passed.push('home and ICP footer');
+  const homeHtml = await home.text();
+  assert.ok(homeHtml.includes('湘ICP备2026038303号-1'));
+  assert.ok(homeHtml.includes('湘公网安备43012102001418号'));
+  passed.push('home, ICP and public-security filing footer');
   assert.equal((await fetch(base + '/api/admin', { headers: { Host: 'attacker.test', 'x-starlight-role': 'admin' } })).status, 401);
   assert.equal((await fetch(base + '/api/platform', { headers })).status, 401);
   passed.push('anonymous and forged-role access denied');
