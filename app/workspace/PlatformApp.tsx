@@ -2178,9 +2178,13 @@ function EnterpriseSpace({
     );
   if (tab === "feedback") return <PublisherFeedbackDesk flash={flash} />;
   if (tab === "registrations") return <EnterpriseRegistrations />;
+  const enterpriseProfile = records.find(
+    (record) => record.kind === "enterprise-profile",
+  );
   return (
     <EnterpriseProfile
-      record={records.find((r) => r.kind === "enterprise-profile")}
+      key={enterpriseProfile?.id || "new-enterprise-profile"}
+      record={enterpriseProfile}
       save={save}
       upload={upload}
     />
@@ -2349,6 +2353,9 @@ function EnterpriseOverview({
       (record) =>
         String(record.payload.reviewStatus || "pending") === "pending",
     ),
+    drafts = publicRecords.filter(
+      (record) => record.payload.reviewStatus === "draft",
+    ),
     approved = publicRecords.filter(
       (record) => record.payload.reviewStatus === "approved",
     ),
@@ -2383,6 +2390,8 @@ function EnterpriseOverview({
       return { label: "已公开", className: "approved" };
     if (status === "rejected")
       return { label: "需修改", className: "rejected" };
+    if (status === "draft")
+      return { label: "草稿", className: "draft" };
     return { label: "审核中", className: "pending" };
   };
   const openRecord = (record: StoredRecord) => {
@@ -2530,6 +2539,11 @@ function EnterpriseOverview({
             <button onClick={() => setTab("content")}>发布内容</button>
           </div>
           <div className="status-summary">
+            <article>
+              <span className="status-dot draft" />
+              <b>{drafts.length}</b>
+              <small>草稿</small>
+            </article>
             <article>
               <span className="status-dot approved" />
               <b>{approved.length}</b>
@@ -3400,6 +3414,10 @@ function EnterprisePublisher({
       reviewStatus: "draft",
       status: "草稿",
       featured: false,
+      reviewNote: "",
+      reviewedAt: null,
+      reviewedBy: "",
+      submittedAt: null,
     });
     if (copied) flash("已复制为草稿，可继续编辑");
   };
@@ -3577,6 +3595,7 @@ function EnterprisePublisher({
       )}
       {open && (
         <PublishDialog
+          key={edit?.id || "new-publish-record"}
           kind={kind}
           record={edit}
           save={save}
@@ -4216,10 +4235,10 @@ function PublishDialog({
       sortOrder: Number(old.sortOrder || 0) || 0,
       featured: Boolean(old.featured),
       reviewStatus,
-      reviewNote: isDraft ? String(old.reviewNote || "") : "",
-      submittedAt: isDraft
-        ? String(old.submittedAt || "")
-        : new Date().toISOString(),
+      reviewNote: "",
+      reviewedAt: null,
+      reviewedBy: "",
+      submittedAt: isDraft ? null : new Date().toISOString(),
       draftUpdatedAt: new Date().toISOString(),
       editorVersion: 2,
       bodyBlocks: blocks,
@@ -5021,18 +5040,15 @@ function EnterpriseProfile({
 }) {
   const old = record?.payload || {};
   const [form, setForm] = useState({
-    name: String(old.name || "湖南示例企业"),
-    industry: String(old.industry || "制造业"),
+    name: String(old.name || ""),
+    industry: String(old.industry || ""),
     city: String(old.city || "长沙"),
-    intro: String(
-      old.intro ||
-        "立足湖南，为青年提供真实、开放且有导师支持的实习、项目与成长活动。",
-    ),
-    website: String(old.website || "https://example.com"),
-    logo: String(old.logo || "/og.png"),
+    intro: String(old.intro || ""),
+    website: String(old.website || ""),
+    logo: String(old.logo || ""),
     creditCode: String(old.creditCode || ""),
-    companySize: String(old.companySize || "50-199人"),
-    address: String(old.address || "长沙市"),
+    companySize: String(old.companySize || ""),
+    address: String(old.address || ""),
     contactName: String(old.contactName || ""),
     contactPhone: String(old.contactPhone || ""),
     contactEmail: String(old.contactEmail || ""),
@@ -5087,19 +5103,27 @@ function EnterpriseProfile({
       />
       <div className="enterprise-profile-editor">
         <section>
-          <img src={form.logo} alt={`${form.name} logo`} />
+          {form.logo ? (
+            <img src={form.logo} alt={`${form.name || "企业"} logo`} />
+          ) : (
+            <div className="enterprise-logo-placeholder" aria-label="尚未上传企业 Logo">
+              企业 Logo
+            </div>
+          )}
           <small>PUBLIC COMPANY PROFILE PREVIEW</small>
-          <h1>{form.name}</h1>
-          <h2>{form.industry}</h2>
-          <p>{form.intro}</p>
+          <h1>{form.name || "填写企业名称"}</h1>
+          <h2>{form.industry || "选择所属行业"}</h2>
+          <p>{form.intro || "补充企业简介后，学生将在机会详情中看到完整介绍。"}</p>
           <div className="company-credit-tags profile-facts">
-            <span>{form.companySize}</span>
-            <span>{form.city}</span>
-            <span>{form.address}</span>
+            {[form.companySize, form.city, form.address]
+              .filter((value) => value.trim())
+              .map((value) => <span key={value}>{value}</span>)}
           </div>
-          <a href={form.website} target="_blank" rel="noreferrer">
-            访问企业官网 ↗
-          </a>
+          {form.website && (
+            <a href={form.website} target="_blank" rel="noreferrer">
+              访问企业官网 ↗
+            </a>
+          )}
         </section>
         <form onSubmit={(e) => e.preventDefault()}>
           <div className="profile-completeness-card">
@@ -5120,6 +5144,7 @@ function EnterpriseProfile({
               value={form.industry}
               onChange={(e) => change("industry", e.target.value)}
             >
+              <option value="">请选择行业</option>
               {industryOptions.filter((item) => item !== "全部行业").map((item) => <option key={item}>{item}</option>)}
             </select>
           </label>
@@ -5133,7 +5158,7 @@ function EnterpriseProfile({
           <label>
             企业规模
             <select value={form.companySize} onChange={(e) => change("companySize", e.target.value)}>
-              <option>1-49人</option><option>50-199人</option><option>200-499人</option><option>500-999人</option><option>1000人以上</option>
+              <option value="">请选择企业规模</option><option>1-49人</option><option>50-199人</option><option>200-499人</option><option>500-999人</option><option>1000人以上</option>
             </select>
           </label>
           <label>

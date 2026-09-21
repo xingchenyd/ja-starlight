@@ -33,6 +33,8 @@ test("student API is session scoped, idempotent and audited", async () => {
   assert.match(source, /ON CONFLICT\(student_id,target_type,target_id\)/);
   assert.match(source, /WHERE student_id=\?/);
   assert.match(source, /writeAudit/);
+  assert.match(source, /if \(existing && existing\.sourceType !== "manual"\)/);
+  assert.doesNotMatch(source, /existing\?\.sourceType !== "manual"/);
 });
 
 test("activity registration maintains the student's calendar lifecycle", async () => {

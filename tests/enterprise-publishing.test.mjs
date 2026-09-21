@@ -26,6 +26,7 @@ test("enterprise publishing opens exact records through canonical workspace item
   assert.match(source, /records\.find\(\(record\) => record\.id === initialItem\)/);
   assert.match(source, /onNavigate\(tab,\s*record\.id,\s*true\)/);
   assert.match(source, /onNavigate\(tab,\s*undefined,\s*true\)/);
+  assert.match(source, /key=\{edit\?\.id \|\| "new-publish-record"\}/);
 });
 
 test("publishing center supports draft duplication and recoverable archive language", async () => {
@@ -36,4 +37,18 @@ test("publishing center supports draft duplication and recoverable archive langu
   assert.match(source, /恢复到发布中心/);
   assert.match(source, /archived=1/);
   assert.doesNotMatch(source, /删除后无法恢复/);
+});
+
+test("drafts never retain a previous review decision", async () => {
+  const [api, workspace] = await Promise.all([
+    read("../app/api/platform/route.ts"),
+    read("../app/workspace/PlatformApp.tsx"),
+  ]);
+  assert.match(api, /payload\.reviewNote\s*=\s*""/);
+  assert.match(api, /payload\.reviewedAt\s*=\s*null/);
+  assert.match(api, /payload\.reviewedBy\s*=\s*""/);
+  assert.match(workspace, /reviewNote:\s*""/);
+  assert.match(workspace, /reviewedAt:\s*null/);
+  assert.match(workspace, /reviewedBy:\s*""/);
+  assert.match(workspace, /submittedAt:\s*isDraft \? null/);
 });

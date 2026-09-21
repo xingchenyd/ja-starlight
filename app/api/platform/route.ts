@@ -114,6 +114,12 @@ export async function POST(request: Request) {
   if (body.kind === "activity" || body.kind === "content") {
     payload.reviewStatus = isDraft ? "draft" : "pending";
     payload.status = isDraft ? "草稿" : "审核中";
+    if (isDraft) {
+      payload.reviewNote = "";
+      payload.reviewedAt = null;
+      payload.reviewedBy = "";
+      payload.submittedAt = null;
+    }
     if (
       !isDraft &&
       (!String(payload.title || "").trim() ||

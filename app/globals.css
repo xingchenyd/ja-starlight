@@ -3140,6 +3140,19 @@ footer small {
   object-fit: contain;
   margin-bottom: 30px;
 }
+.enterprise-logo-placeholder {
+  width: 100px;
+  height: 65px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 30px;
+  border: 1px dashed #9fc7c9;
+  border-radius: 12px;
+  background: #f4fbfa;
+  color: #537277;
+  font-size: 12px;
+  font-weight: 800;
+}
 .enterprise-profile-editor > section small {
   display: block;
   color: var(--transforming-teal);
@@ -10024,7 +10037,7 @@ button:disabled { cursor: not-allowed; opacity: 0.58; }
 }
 .status-summary {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
 }
 .status-summary article {
@@ -10054,6 +10067,9 @@ button:disabled { cursor: not-allowed; opacity: 0.58; }
 }
 .status-dot.approved {
   background: #2fa774;
+}
+.status-dot.draft {
+  background: #82979c;
 }
 .status-dot.pending {
   background: #d3c914;

@@ -19,6 +19,15 @@ function validContentId(value: unknown) {
   return id.length >= 1 && id.length <= 120 ? id : "";
 }
 
+async function isPublishedContent(contentId: string) {
+  const record = await env.DB.prepare(
+    "SELECT payload FROM workspace_records WHERE id=? AND kind='content' AND archived_at IS NULL LIMIT 1",
+  ).bind(contentId).first<{ payload: string }>();
+  if (!record) return false;
+  try { return JSON.parse(String(record.payload)).reviewStatus === "approved"; }
+  catch { return false; }
+}
+
 export async function GET(request: Request) {
   await setup();
   const user = await getActor(request);
@@ -64,6 +73,8 @@ export async function GET(request: Request) {
   const contentId = validContentId(url.searchParams.get("contentId"));
   if (!contentId)
     return Response.json({ error: "缺少内容标识" }, { status: 400 });
+  if (!(await isPublishedContent(contentId)))
+    return Response.json({ error: "内容不存在或尚未公开" }, { status: 404 });
   const [likeRows, comments] = await env.DB.batch([
     env.DB.prepare(
       "SELECT user_id AS userId FROM content_likes WHERE content_id=?",
@@ -103,6 +114,8 @@ export async function POST(request: Request) {
   const contentId = validContentId(body.contentId);
   if (!contentId)
     return Response.json({ error: "内容标识不正确" }, { status: 400 });
+  if (!(await isPublishedContent(contentId)))
+    return Response.json({ error: "内容不存在或尚未公开" }, { status: 404 });
   if (body.action === "toggle-like") {
     const existing = await env.DB.prepare(
       "SELECT 1 AS found FROM content_likes WHERE content_id=? AND user_id=?",

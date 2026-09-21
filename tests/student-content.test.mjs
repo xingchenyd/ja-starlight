@@ -26,6 +26,13 @@ test("content reader separates video and article layouts with reliable social ac
   assert.match(source, /repliedBy/);
 });
 
+test("social actions require an existing published content record", async () => {
+  const source = await readFile(new URL("../app/api/social/route.ts", import.meta.url), "utf8");
+  assert.match(source, /isPublishedContent/);
+  assert.match(source, /kind='content' AND archived_at IS NULL/);
+  assert.match(source, /reviewStatus === "approved"/);
+});
+
 test("workspace delegates student content to the refined modules", async () => {
   const source = await read("../app/workspace/PlatformApp.tsx");
   assert.match(source, /from "\.\/student\/LearningCenter"/);

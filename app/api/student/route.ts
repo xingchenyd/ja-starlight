@@ -76,7 +76,7 @@ export async function POST(request: Request) {
       ? await env.DB.prepare("SELECT source_type AS sourceType FROM student_experiences WHERE id=? AND student_id=?").bind(id, student).first<{ sourceType: string }>()
       : null;
     if (requestedId && !existing) return Response.json({ error: "经历不存在或无权修改" }, { status: 404 });
-    if (existing?.sourceType !== "manual") return Response.json({ error: "平台认证经历不可修改" }, { status: 403 });
+    if (existing && existing.sourceType !== "manual") return Response.json({ error: "平台认证经历不可修改" }, { status: 403 });
     await env.DB.prepare("INSERT INTO student_experiences(id,student_id,source_type,source_id,category,title,role,description,output,evidence_url,evidence_asset_key,occurred_at,certified,is_public,sort_order,created_at,updated_at) VALUES(?,?,'manual',NULL,?,?,?,?,?,?,?, ?,0,?,COALESCE((SELECT MAX(sort_order)+1 FROM student_experiences WHERE student_id=?),1),CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET category=excluded.category,title=excluded.title,role=excluded.role,description=excluded.description,output=excluded.output,evidence_url=excluded.evidence_url,evidence_asset_key=excluded.evidence_asset_key,occurred_at=excluded.occurred_at,is_public=excluded.is_public,updated_at=CURRENT_TIMESTAMP WHERE student_id=excluded.student_id AND source_type='manual'")
       .bind(id, student, experience.category, experience.title, experience.role, experience.description, experience.output, experience.evidenceUrl, experience.evidenceAssetKey, experience.occurredAt, experience.isPublic, student).run();
     await writeAudit(student, requestedId ? "update-experience" : "create-experience", "student-experience", id);
