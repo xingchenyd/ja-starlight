@@ -6,6 +6,9 @@
     "node": ">=22.13.0"
   },
   "scripts": {
+    "predev": "node scripts/prepare-pdf-assets.mjs",
+    "prebuild": "node scripts/prepare-pdf-assets.mjs",
+    "prebuild:node": "node scripts/prepare-pdf-assets.mjs",
     "dev": "vinext dev",
     "build": "vinext build",
     "build:node": "node scripts/build-node.mjs",
@@ -16,6 +19,7 @@
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
+    "pdfjs-dist": "6.3.289",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "react-loading-skeleton": "3.5.0"

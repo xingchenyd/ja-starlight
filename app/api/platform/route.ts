@@ -68,6 +68,23 @@ export async function POST(request: Request) {
   const payload = { ...body.payload, region: "湖南" };
   const isPublicRecord = ["job", "activity", "content"].includes(body.kind);
   const isDraft = isPublicRecord && payload.reviewStatus === "draft";
+  if (body.kind === "student-profile") {
+    const limits: Record<string, number> = { name: 80, school: 160, major: 160, grade: 80, headline: 200, bio: 4000, skills: 4000, awards: 4000, phone: 40, email: 254, resumeName: 240, resumeKey: 500 };
+    for (const [field, limit] of Object.entries(limits)) {
+      if (payload[field] !== undefined && (typeof payload[field] !== "string" || payload[field].length > limit))
+        return Response.json({ error: "资料格式不正确或内容过长，请检查后重试" }, { status: 400 });
+    }
+    if (payload.email && !/^\S+@\S+\.\S+$/.test(String(payload.email)))
+      return Response.json({ error: "请填写有效的联系邮箱" }, { status: 400 });
+    if (payload.resumeKey) {
+      const asset = await env.DB.prepare("SELECT id FROM media_assets WHERE storage_key=? AND owner_id=? AND purpose='resume' AND archived_at IS NULL").bind(String(payload.resumeKey), owner).first();
+      if (!asset) return Response.json({ error: "简历不存在或不属于当前账号，请重新上传" }, { status: 400 });
+    }
+    if (!body.id) {
+      const current = await env.DB.prepare("SELECT id FROM workspace_records WHERE owner_id=? AND kind='student-profile' AND archived_at IS NULL LIMIT 1").bind(owner).first();
+      if (current) return Response.json({ error: "资料已在其他窗口创建，请刷新后再编辑" }, { status: 409 });
+    }
+  }
   if (isPublicRecord && !isDraft && !identity.testMode) {
     const verification = await requireVerifiedEnterprise(request);
     if (verification.response) return verification.response;

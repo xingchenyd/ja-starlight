@@ -1,0 +1,14 @@
+import { writeFile, mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+const lines = ['个人简历', '姓名：林晓晨', '学校：中南大学', '专业：计算机科学与技术', '年级：2028届', '邮箱：resume@example.test', '联系电话：13812345678', '专业技能', 'Python、SQL、数据分析', '获奖经历', '校级创新项目一等奖', '自我介绍', '喜欢通过调研解决实际问题。'];
+const stream = 'BT /F1 12 Tf 50 760 Td 22 TL\n' + lines.map((line, i) => `${i ? 'T* ' : ''}<${Buffer.from(line, 'utf16le').swap16().toString('hex')}> Tj`).join('\n') + '\nET';
+const objects = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>', '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 6 0 R >>', '<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [5 0 R] >>', '<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 4 >> /DW 1000 >>', `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`];
+let pdf = '%PDF-1.4\n', offsets = [0];
+objects.forEach((object, index) => { offsets.push(Buffer.byteLength(pdf)); pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; });
+const xref = Buffer.byteLength(pdf);
+pdf += `xref\n0 7\n0000000000 65535 f \n${offsets.slice(1).map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+const folder = await mkdtemp(join(tmpdir(), 'star-plan-chinese-resume-'));
+const path = join(folder, 'chinese-resume.pdf');
+await writeFile(path, pdf);
+console.log(path);

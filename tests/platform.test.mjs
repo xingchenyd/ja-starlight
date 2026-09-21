@@ -47,7 +47,7 @@ test("student workspace uses formal student navigation without role switching", 
   const response = await page("/workspace/student/overview");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /你好，张晨/);
+  assert.match(html, /你好，同学/);
   assert.match(html, /实习项目机会/);
   assert.match(html, /成长主页/);
   assert.match(html, /联系项目团队/);

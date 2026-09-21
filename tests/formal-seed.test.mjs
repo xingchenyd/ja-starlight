@@ -65,9 +65,25 @@ test("formal seed prefers the official test accounts over older historical accou
   await ensureFormalPlatformData(adapter);
 
   assert.equal(sqlite.prepare("SELECT owner_id FROM workspace_records WHERE id='formal-job-01'").get().owner_id, "official-enterprise");
-  assert.equal(sqlite.prepare("SELECT owner_id FROM workspace_records WHERE id='formal-student-profile'").get().owner_id, "official-student");
+  assert.equal(sqlite.prepare("SELECT owner_id FROM workspace_records WHERE id='formal-student-profile'").get(), undefined);
   assert.equal(sqlite.prepare("SELECT student_id FROM student_experiences WHERE id='formal-experience-01'").get().student_id, "official-student");
   assert.equal(sqlite.prepare("SELECT student_owner_id FROM activity_registrations WHERE id='formal-registration-01'").get().student_owner_id, "official-student");
   assert.equal(sqlite.prepare("SELECT publisher_owner_id FROM activity_registrations WHERE id='formal-registration-02'").get().publisher_owner_id, "official-enterprise");
+  sqlite.close();
+});
+
+test("new real accounts never inherit sample identity and untouched old profile is archived", async () => {
+  const { sqlite, adapter } = memoryDatabase();
+  sqlite.prepare("INSERT INTO users VALUES(?,?,?,?,?)").run("real-student", "real@example.com", "student", "active", "2026-09-21");
+  await ensureFormalPlatformData(adapter);
+  assert.equal(sqlite.prepare("SELECT count(*) AS n FROM workspace_records WHERE owner_id='real-student'").get().n, 0);
+  sqlite.prepare("INSERT INTO workspace_records VALUES('formal-student-profile','real-student','student-profile',?,1,NULL,NULL,CURRENT_TIMESTAMP)").run(JSON.stringify(data.formalStudentProfile));
+  await ensureFormalPlatformData(adapter);
+  assert.ok(sqlite.prepare("SELECT archived_at FROM workspace_records WHERE id='formal-student-profile'").get().archived_at);
+  sqlite.prepare("UPDATE workspace_records SET version=2,archived_at=NULL,payload=? WHERE id='formal-student-profile'").run(JSON.stringify({ ...data.formalStudentProfile, name: "真实姓名" }));
+  await ensureFormalPlatformData(adapter);
+  const saved = sqlite.prepare("SELECT payload,archived_at FROM workspace_records WHERE id='formal-student-profile'").get();
+  assert.equal(JSON.parse(saved.payload).name, "真实姓名");
+  assert.equal(saved.archived_at, null);
   sqlite.close();
 });

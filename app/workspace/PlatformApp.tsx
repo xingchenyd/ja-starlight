@@ -224,6 +224,7 @@ function PlatformWorkspace({
     [records, setRecords] = useState<StoredRecord[]>([]),
     [catalog, setCatalog] = useState<StoredRecord[]>([]),
     [ready, setReady] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const studentPrivate = useStudentData(role === "student");
   const scrollPositions = useRef(new Map<string, number>());
   const navigationPending = useRef(false);
@@ -281,7 +282,7 @@ function PlatformWorkspace({
   }, [tab]);
   useEffect(() => {
     Promise.all([
-      api("/api/platform").then((r) => r.json()),
+      api("/api/platform").then((r) => { if (!r.ok) throw new Error("个人资料读取失败，请重新登录或重试"); return r.json(); }),
       fetch("/api/catalog").then((r) => r.json()),
     ])
       .then(([mine, publicData]) => {
@@ -289,7 +290,7 @@ function PlatformWorkspace({
         setCatalog(publicData.records || []);
         setReady(true);
       })
-      .catch(() => setReady(true));
+      .catch(() => { setLoadError("资料读取失败，请重试。尚未加载的数据不能被空白资料覆盖。"); setReady(true); });
   }, []);
   const flash = useCallback(
     (message: string) =>
@@ -301,6 +302,7 @@ function PlatformWorkspace({
     payload: Record<string, unknown>,
     id?: string,
   ) => {
+    if (!ready || loadError) { flash("资料尚未读取完成，请重新加载后再保存"); return null; }
     const response = await api("/api/platform", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -325,7 +327,9 @@ function PlatformWorkspace({
     };
     setRecords((v) => [record, ...v.filter((x) => x.id !== data.id)]);
     flash(
-      payload.reviewStatus === "draft"
+      kind === "student-profile" || kind === "enterprise-profile"
+        ? "资料已保存"
+        : payload.reviewStatus === "draft"
         ? "草稿已安全保存"
         : payload.reviewStatus === "approved"
           ? "已发布并同步到学生端"
@@ -360,7 +364,7 @@ function PlatformWorkspace({
     };
   };
   const studentName = String(
-    records.find((r) => r.kind === "student-profile")?.payload.name || "张晨",
+    records.find((r) => r.kind === "student-profile")?.payload.name || "同学",
   );
   const enterpriseName = String(
     records.find((r) => r.kind === "enterprise-profile")?.payload.name ||
@@ -412,7 +416,7 @@ function PlatformWorkspace({
             direction={direction}
             className="workspace-view page-transition"
           >
-            {role === "student" ? (
+            {loadError ? <div role="alert"><p>{loadError}</p><button className="primary-btn" onClick={() => window.location.reload()}>重新加载</button></div> : role === "student" ? (
               <StudentSpace
                 tab={tab}
                 initialItem={item}
@@ -423,7 +427,7 @@ function PlatformWorkspace({
                 upload={upload}
                 flash={flash}
                 privateData={studentPrivate.data}
-                privateLoading={studentPrivate.loading}
+                privateLoading={studentPrivate.loading || !ready}
                 privateError={studentPrivate.error}
                 reloadPrivateData={studentPrivate.reload}
                 removeFavorite={studentPrivate.removeFavorite}
@@ -1663,25 +1667,25 @@ function StudentProfile({
 }) {
   const initial = record?.payload || {};
   const [form, setForm] = useState({
-    name: String(initial.name || "张晨"),
-    school: String(initial.school || "湖南大学"),
-    major: String(initial.major || "工商管理"),
-    grade: String(initial.grade || "2027届"),
-    headline: String(initial.headline || "关注产品运营、公益实践与青年发展"),
+    name: String(initial.name || ""),
+    school: String(initial.school || ""),
+    major: String(initial.major || ""),
+    grade: String(initial.grade || ""),
+    headline: String(initial.headline || ""),
     bio: String(
       initial.bio ||
-        "擅长把复杂问题整理为清晰行动方案，期待在真实项目中学习用户理解、协作和复盘。",
+        "",
     ),
-    skills: String(initial.skills || "内容策划,用户研究,项目协作,数据整理"),
+    skills: String(initial.skills || ""),
     awards: String(
-      initial.awards || "星光计划简历工作坊优秀作品；校级创新挑战赛入围",
+      initial.awards || "",
     ),
     resumeName: String(initial.resumeName || ""),
     resumeKey: String(initial.resumeKey || ""),
     resumeType: String(initial.resumeType || ""),
     timelineItems: String(
       initial.timelineItems ||
-        "2026.10.08｜学生项目｜校园可持续议题调研｜完成访谈、问卷整理与问题定义。｜形成项目报告、路演页和行动建议。",
+        "",
     ),
   });
   const [editing, setEditing] = useState(false),

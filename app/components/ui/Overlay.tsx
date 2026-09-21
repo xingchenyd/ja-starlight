@@ -46,6 +46,8 @@ function OverlayFrame({
     if (dirty && !window.confirm("尚有未保存内容，确认离开？")) return;
     onClose();
   }, [dirty, onClose]);
+  const closeRef = useRef(requestClose);
+  useEffect(() => { closeRef.current = requestClose; }, [requestClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -59,7 +61,7 @@ function OverlayFrame({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        requestClose();
+        closeRef.current();
         return;
       }
       if (event.key !== "Tab" || !frame.current) return;
@@ -85,7 +87,7 @@ function OverlayFrame({
       document.body.style.overflow = previousOverflow;
       previousFocus.current?.focus();
     };
-  }, [open, requestClose]);
+  }, [open]);
 
   if (!open) return null;
   return (

@@ -41,3 +41,4 @@ yarn-error.log*
 /outputs/
 /work/
 /.worktrees/
+/public/pdfjs/

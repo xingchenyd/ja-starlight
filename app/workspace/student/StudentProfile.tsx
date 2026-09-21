@@ -13,9 +13,9 @@ type UploadResult = { url: string | null; key: string; name: string; type: strin
 function profileFrom(record?: ProfileRecord): StudentProfileForm {
   const value = record?.payload || {};
   return {
-    name:String(value.name||"张晨"),school:String(value.school||"湖南大学"),major:String(value.major||"工商管理"),grade:String(value.grade||"2027届"),
-    headline:String(value.headline||"关注产品运营、公益实践与青年发展"),bio:String(value.bio||"擅长把复杂问题整理为清晰行动方案，期待在真实项目中持续学习、协作和复盘。"),
-    skills:String(value.skills||"内容策划,用户研究,项目协作,数据整理"),awards:String(value.awards||"星光计划简历工作坊优秀作品；校级创新挑战赛入围"),
+    name:String(value.name||""),school:String(value.school||""),major:String(value.major||""),grade:String(value.grade||""),
+    headline:String(value.headline||""),bio:String(value.bio||""),
+    skills:String(value.skills||""),awards:String(value.awards||""),
     phone:String(value.phone||""),email:String(value.email||""),resumeName:String(value.resumeName||""),resumeKey:String(value.resumeKey||""),resumeType:String(value.resumeType||""),resumeSize:Number(value.resumeSize||0),
   };
 }
@@ -25,19 +25,30 @@ export default function StudentProfile({ record, experiences, privateLoading, pr
   saveRecord: (payload: Record<string, unknown>, id?: string) => Promise<string | null>;
   upload: (file: File, purpose?: string) => Promise<UploadResult | null>; flash: (message: string) => void;
 }) {
-  const [profile, setProfile] = useState(() => profileFrom(record));
+  const profile = profileFrom(record);
   const [draft, setDraft] = useState(profile);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const skills = profile.skills.split(/[,，]/).map((item)=>item.trim()).filter(Boolean);
-  const save = async (next: StudentProfileForm) => { const id = await saveRecord(next, record?.id); if (id) { setProfile(next); setDraft(next); } };
-  const saveEditor = async () => { if (!draft.name.trim() || !draft.school.trim()) return flash("请填写姓名与学校"); setSaving(true); await save(draft); setSaving(false); setEditing(false); };
+  const save = async (next: StudentProfileForm) => {
+    try {
+      const id = await saveRecord({ ...record?.payload, ...next }, record?.id);
+      if (!id) return false;
+      setDraft(next);
+      return true;
+    } catch { flash("资料保存失败，请检查网络后重试"); return false; }
+  };
+  const saveEditor = async () => {
+    if (!draft.name.trim() || !draft.school.trim()) return flash("请填写姓名与学校");
+    setSaving(true);
+    try { if (await save(draft)) setEditing(false); } finally { setSaving(false); }
+  };
   return <>
-    <header className="student-section-heading profile-section-heading"><div><small>GROWTH PROFILE</small><h1>成长主页</h1></div><button className="outline-btn" onClick={()=>{setDraft(profile);setEditing(true)}}>编辑个人资料</button></header>
+    <header className="student-section-heading profile-section-heading"><div><small>GROWTH PROFILE</small><h1>成长主页</h1></div><button className="outline-btn" disabled={privateLoading} onClick={()=>{setDraft(profile);setEditing(true)}}>编辑个人资料</button></header>
     <div className="student-growth-layout">
       <aside className="fixed-profile-rail">
-        <section className="student-identity-card"><span className="profile-avatar">{profile.name.slice(0,1)}</span><small>STUDENT PROFILE</small><h2>{profile.name}</h2><p>{profile.school} · {profile.major} · {profile.grade}</p><strong>{profile.headline}</strong><div>{skills.map((skill)=><span key={skill}>{skill}</span>)}</div><blockquote>{profile.bio}</blockquote></section>
-        <ResumePanel profile={profile} upload={upload} save={save} flash={flash} />
+        <section className="student-identity-card"><span className="profile-avatar">{profile.name.slice(0,1) || "○"}</span><small>STUDENT PROFILE</small><h2>{profile.name || "完善个人资料"}</h2><p>{[profile.school, profile.major, profile.grade].filter(Boolean).join(" · ") || "上传简历或编辑资料，建立你的成长主页"}</p>{profile.headline ? <strong>{profile.headline}</strong> : null}<div>{skills.map((skill)=><span key={skill}>{skill}</span>)}</div>{profile.bio ? <blockquote>{profile.bio}</blockquote> : null}</section>
+        <ResumePanel profile={profile} loading={privateLoading} upload={upload} save={save} flash={flash} />
         <StudentSharePanel flash={flash} />
         <section className="profile-privacy-note"><b>资料可见性</b><p>完整简历、联系方式和设为私密的经历仅自己可见；企业只能看到你主动公开的成长主页内容。</p></section>
       </aside>
