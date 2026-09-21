@@ -52,6 +52,7 @@ export type RichBlock = {
   meta?: string;
 };
 export type Activity = {
+  challenge?: import("../lib/challenges/model").ChallengeSpec;
   id: string;
   title: string;
   date: string;
@@ -76,6 +77,7 @@ export type Activity = {
   attachments?: string[];
 };
 export type ContentItem = {
+  videoUrl?: string;
   id: string;
   title: string;
   category: string;

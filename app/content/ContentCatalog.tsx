@@ -72,7 +72,7 @@ export default function ContentCatalog({ initialQuery, initialCategory }: { init
       const key = `${content.publisher}-${content.title}`;
       if (seen.has(key)) return false;
       seen.add(key);
-      const text = `${content.title}${content.summary}${content.publisher}${content.tags.join("")}`.toLowerCase();
+      const text = `${content.title}${content.summary}${content.publisher}${(content.tags || []).join("")}`.toLowerCase();
       return (category === "全部内容" || content.category === category) && text.includes(appliedQuery.trim().toLowerCase());
     });
   }, [catalog, category, appliedQuery]);

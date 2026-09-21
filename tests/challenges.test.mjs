@@ -1,0 +1,12 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { normalizeChallenge, validateChallenge, deadlineAt, safeEvidenceUrl } from "../lib/challenges/model.ts";
+import { jaLoginReturnPath } from "../lib/ui/ja-routes.ts";
+const valid = { enabled:true,problem:"真实问题",deliverables:"可验证成果",criteria:"评审规则",rewards:"主办方线下兑现",eligibility:"在校学生",registrationDeadline:"2027-01-02",submissionDeadline:"2027-01-03",resultsDate:"2027-01-04",teamMin:2,teamMax:6 };
+test("ordinary activities remain compatible",()=>{assert.equal(normalizeChallenge(null).enabled,false);assert.deepEqual(validateChallenge(null),[]);});
+test("complete challenge validates",()=>assert.deepEqual(validateChallenge(valid),[]));
+test("operations login returns to a known console page only",()=>{assert.equal(jaLoginReturnPath("/ja-console/registrations"),"/ja-console/registrations");for(const target of [null,"//evil.test","https://evil.test","/ja-console/unknown","/ja-console/registrations/../../evil"])assert.equal(jaLoginReturnPath(target),"/ja-console/pulse");});
+test("dates are real China-local calendar dates",()=>{assert.ok(Number.isNaN(deadlineAt("2027-02-30")));assert.ok(Number.isNaN(deadlineAt("2027-13-02")));assert.equal(deadlineAt("2027-01-02"),Date.parse("2027-01-02T15:59:59.999Z"));});
+test("team size and required fields cannot be bypassed",()=>{for(const teamMax of [NaN,Infinity,0,1,21,2.5])assert.ok(validateChallenge({...valid,teamMax}).length);assert.ok(validateChallenge({...valid,problem:""}).length);});
+test("deadline order is checked",()=>assert.ok(validateChallenge({...valid,submissionDeadline:"2026-12-31"}).length));
+test("evidence urls reject executable protocols and credentials",()=>{for(const url of ["javascript:alert(1)","data:text/html,x","https://user:pass@example.org/x","invalid"])assert.throws(()=>safeEvidenceUrl(url));assert.equal(safeEvidenceUrl("https://example.org/report"),"https://example.org/report");assert.equal(safeEvidenceUrl(""),"");});

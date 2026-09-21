@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   const auth = await studentActor(request);
   if (auth.response || !auth.identity) return auth.response;
   const student = auth.identity.id;
-  const [favorites, calendar, experiences] = await env.DB.batch([
+  const [favorites, calendar, experiences] = await env.DB.batch<Record<string, unknown>>([
     env.DB.prepare("SELECT id,target_type AS targetType,target_id AS targetId,target_snapshot AS targetSnapshot,status,created_at AS createdAt,updated_at AS updatedAt FROM student_favorites WHERE student_id=? ORDER BY created_at DESC").bind(student),
     env.DB.prepare("SELECT id,source_type AS sourceType,source_id AS sourceId,title,start_at AS startAt,end_at AS endAt,reminder_at AS reminderAt,reminder_enabled AS reminderEnabled,status,created_at AS createdAt,updated_at AS updatedAt FROM student_calendar_events WHERE student_id=? ORDER BY CASE WHEN start_at IS NULL THEN 1 ELSE 0 END,start_at ASC").bind(student),
     env.DB.prepare("SELECT id,source_type AS sourceType,source_id AS sourceId,category,title,role,description,output,evidence_url AS evidenceUrl,evidence_asset_key AS evidenceAssetKey,occurred_at AS occurredAt,certified,is_public AS isPublic,sort_order AS sortOrder,created_at AS createdAt,updated_at AS updatedAt FROM student_experiences WHERE student_id=? ORDER BY sort_order DESC,occurred_at DESC").bind(student),

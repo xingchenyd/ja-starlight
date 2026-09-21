@@ -4,6 +4,8 @@
 import { useMemo, useState } from "react";
 import type { Activity, RegistrationField } from "../../data";
 import { SidePanel } from "../../components/ui";
+import ChallengeBrief from "../../components/ChallengeBrief";
+import { StudentChallenge } from "../../components/ChallengeWorkspace";
 
 export type RegistrationItem = {
   id: string;
@@ -76,14 +78,16 @@ export default function RegistrationPanel({
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
     setSaving(true);
-    await onSubmit(answers);
-    setSaving(false);
+    try { await onSubmit(answers); }
+    catch { setErrors(current => ({ ...current, submit: "网络异常，未能确认保存结果。请重试。" })); }
+    finally { setSaving(false); }
   };
 
   const cancel = async () => {
     setSaving(true);
-    await onCancel();
-    setSaving(false);
+    try { await onCancel(); }
+    catch { setErrors(current => ({ ...current, submit: "网络异常，取消未完成，请重试。" })); }
+    finally { setSaving(false); }
   };
 
   const statusLabel = registration?.status === "approved"
@@ -100,7 +104,7 @@ export default function RegistrationPanel({
     <SidePanel
       open={open && Boolean(activity)}
       title={activity?.title || "活动详情"}
-      description={activity ? `${activity.publisher || "星光计划"} · ${activity.date} · ${activity.place}` : undefined}
+      description={activity ? [activity.publisher || "星光计划", activity.date, activity.place].filter(Boolean).join(" · ") : undefined}
       dirty={!readOnly && Object.values(answers).some(Boolean) && !registration}
       onClose={onClose}
       footer={activity ? (
@@ -114,9 +118,12 @@ export default function RegistrationPanel({
         <div className="registration-panel-content">
           <img className="registration-panel-cover" src={activity.cover} alt={activity.title} />
           <div className="registration-activity-facts">
-            <span>{activity.category}</span><span>{activity.status}</span><span>{activity.registered} / {activity.capacity} 人</span>
+            <span>{activity.category || "成长活动"}</span><span>{activity.status}</span><span>{activity.registered || 0} / {activity.capacity} 人</span>
           </div>
           <p className="registration-activity-summary">{activity.summary}</p>
+          {errors.submit && <p role="alert" className="field-error">{errors.submit}</p>}
+          {activity.challenge?.enabled && readOnly && <StudentChallenge activityId={activity.id} />}
+          {activity.challenge?.enabled && readOnly ? <details><summary>查看挑战任务书与比赛规则</summary><ChallengeBrief value={activity.challenge} /></details> : <ChallengeBrief value={activity.challenge} />}
           {activity.bodyBlocks?.length ? <div className="registration-activity-body">{activity.bodyBlocks.map((block) => block.type === "heading" ? <h3 key={block.id}>{block.title}</h3> : block.type === "image" && block.url ? <figure key={block.id}><img src={block.url} alt={block.caption || block.title || "活动图片"} /><figcaption>{block.caption}</figcaption></figure> : <p key={block.id}>{block.text || block.title}</p>)}</div> : null}
           <section className={`registration-status-card status-${registration?.status || "new"}`}>
             <b>{statusLabel}</b>

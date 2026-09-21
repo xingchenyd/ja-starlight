@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { deadlineAt, normalizeChallenge } from "../../../lib/challenges/model";
 import { activities as seedActivities } from "../../data";
 import { getActor, notify, requireAdmin, writeAudit } from "../../../db/runtime";
 import { normalizeDateTime, reminderBefore } from "../../../lib/services/student";
@@ -8,7 +9,7 @@ import {
   type RegistrationReviewScope,
 } from "../../../lib/services/registration-governance";
 
-type ActivityRow = { id: string; ownerId: string; payload: string };
+type ActivityRow = { id: string; ownerId: string; payload: string; archivedAt?: string | null };
 type RegistrationRow = {
   id: string;
   activityId: string;
@@ -86,7 +87,7 @@ function parseRegistration(row: RegistrationRow) {
 }
 async function activities() {
   const rows = await env.DB.prepare(
-    "SELECT id,owner_id AS ownerId,payload FROM workspace_records WHERE kind='activity'",
+    "SELECT id,owner_id AS ownerId,payload,archived_at AS archivedAt FROM workspace_records WHERE kind='activity'",
   ).all();
   return rows.results as unknown as ActivityRow[];
 }
@@ -234,11 +235,14 @@ export async function POST(request: Request) {
   }
   if (record) {
     const payload = JSON.parse(String(record.payload));
+    if (record.archivedAt) return Response.json({ error: "该活动已下线" }, { status: 409 });
     if (payload.reviewStatus !== "approved")
       return Response.json({ error: "该活动暂未开放报名" }, { status: 400 });
     if (["报名截止", "已结束", "已满员"].includes(String(payload.status || "")))
       return Response.json({ error: "该活动当前不可报名" }, { status: 400 });
-    const deadline = String(payload.deadline || payload.date || "");
+    const challenge = normalizeChallenge(payload.challenge);
+    if (challenge.enabled && Date.now() > deadlineAt(challenge.registrationDeadline)) return Response.json({ error: "竞赛报名已截止" }, { status: 409 });
+    const deadline = String(challenge.enabled ? challenge.registrationDeadline : payload.registrationDeadline || payload.deadline || payload.date || "");
     if (deadline && /^\d{4}-\d{2}-\d{2}/.test(deadline)) {
       const closeAt = new Date(`${deadline.slice(0, 10)}T23:59:59+08:00`);
       if (Date.now() > closeAt.getTime())
@@ -278,14 +282,18 @@ export async function POST(request: Request) {
     if (capacity > 0) answerData.clean.__capacity = String(capacity);
   }
   const previous = await env.DB.prepare(
-    "SELECT id FROM activity_registrations WHERE student_owner_id=? AND activity_id IN (?,?) LIMIT 1",
+    "SELECT id,status FROM activity_registrations WHERE student_owner_id=? AND activity_id IN (?,?) LIMIT 1",
   )
     .bind(student, body.activityId, canonicalActivityId)
     .first();
   const id = previous ? String(previous.id) : crypto.randomUUID();
-  if (previous)
-    await env.DB.prepare(
-      "UPDATE activity_registrations SET activity_id=?,activity_title=?,publisher_owner_id=?,answers=?,status='pending',review_note='',reviewed_at=NULL,cancelled_at=NULL,updated_at=CURRENT_TIMESTAMP,created_at=CURRENT_TIMESTAMP WHERE id=?",
+  if (previous?.status === "approved") return Response.json({ error: "报名已通过，不可重复提交；如需修改请联系主办方" }, { status: 409 });
+  const capacity = Number(answerData.clean.__capacity || 0);
+  delete answerData.clean.__capacity;
+  answerData.json = JSON.stringify(answerData.clean);
+  if (previous) {
+    const updated = await env.DB.prepare(
+      "UPDATE activity_registrations SET activity_id=?,activity_title=?,publisher_owner_id=?,answers=?,status='pending',review_note='',reviewed_at=NULL,cancelled_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status<>'approved' AND (?<=0 OR (SELECT COUNT(*) FROM activity_registrations WHERE activity_id=? AND status IN ('pending','approved') AND id<>?)<?)",
     )
       .bind(
         canonicalActivityId,
@@ -293,12 +301,11 @@ export async function POST(request: Request) {
         publisher,
         answerData.json,
         id,
+        capacity, canonicalActivityId, id, capacity,
       )
       .run();
-  else {
-    const capacity = Number(answerData.clean.__capacity || 0);
-    delete answerData.clean.__capacity;
-    answerData.json = JSON.stringify(answerData.clean);
+    if (!updated.meta.changes) return Response.json({ error: "名额已满或报名状态已变化，请刷新后重试" }, { status: 409 });
+  } else {
     const inserted = await env.DB.prepare(
       "INSERT INTO activity_registrations(id,activity_id,activity_title,student_owner_id,publisher_owner_id,answers,status,review_note,reviewed_at,created_at) SELECT ?,?,?,?,?,?,'pending','',NULL,CURRENT_TIMESTAMP WHERE ?<=0 OR (SELECT COUNT(*) FROM activity_registrations WHERE activity_id=? AND status IN ('pending','approved'))<?",
     ).bind(id, canonicalActivityId, canonicalTitle, student, publisher, answerData.json, capacity, canonicalActivityId, capacity).run();
@@ -357,7 +364,7 @@ export async function PATCH(request: Request) {
     return Response.json({ error: "退回时请填写原因" }, { status: 400 });
   const placeholders = ids.map(() => "?").join(",");
   const registrations = await env.DB.prepare(
-    `SELECT id,activity_id AS activityId,activity_title AS activityTitle,student_owner_id AS studentOwnerId,publisher_owner_id AS publisherOwnerId FROM activity_registrations WHERE id IN (${placeholders})`,
+    `SELECT id,activity_id AS activityId,activity_title AS activityTitle,student_owner_id AS studentOwnerId,publisher_owner_id AS publisherOwnerId,status FROM activity_registrations WHERE id IN (${placeholders})`,
   )
     .bind(...ids)
     .all<{
@@ -366,6 +373,7 @@ export async function PATCH(request: Request) {
       publisherOwnerId: string;
       studentOwnerId: string;
       activityTitle: string;
+      status: string;
     }>();
   if (registrations.results.length !== ids.length)
     return Response.json(
@@ -398,6 +406,8 @@ export async function PATCH(request: Request) {
         ? "星光计划确认报名通过"
         : "企业确认报名通过"
       : "");
+  if (registrations.results.some(row => !["pending", "registered", "rejected"].includes(row.status)))
+    return Response.json({ error: "报名已通过或已取消，请刷新后查看当前状态" }, { status: 409 });
   await env.DB.batch(
     registrations.results.flatMap((registration) => [
       env.DB.prepare(
@@ -413,8 +423,13 @@ export async function PATCH(request: Request) {
     ]),
   );
   if (body.decision === "approved") {
-    await env.DB.batch(
-      registrations.results.map((registration, index) =>
+    const activityRows = await activities();
+    const ordinary = registrations.results.filter(registration => {
+      const row = findActivity(activityRows, registration.activityId);
+      return !row || !normalizeChallenge(JSON.parse(row.payload).challenge).enabled;
+    });
+    if (ordinary.length) await env.DB.batch(
+      ordinary.map((registration, index) =>
         env.DB.prepare(
           "INSERT INTO student_experiences(id,student_id,source_type,source_id,category,title,role,description,output,occurred_at,certified,is_public,sort_order,created_at,updated_at) VALUES(?,?,'platform',?,'成长活动',?,'参与者','通过平台报名并由活动发布方确认。',?,CURRENT_TIMESTAMP,1,1,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(student_id,source_type,source_id) DO UPDATE SET title=excluded.title,output=excluded.output,certified=1,updated_at=CURRENT_TIMESTAMP",
         ).bind(crypto.randomUUID(), registration.studentOwnerId, registration.id, registration.activityTitle, reviewNote || "已完成活动报名确认", 1000 + index),

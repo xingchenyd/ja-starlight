@@ -27,3 +27,7 @@ export function jaConsoleLocation(pathname: string) {
   const match = pathname.match(/^\/ja-console\/([^/?#]+)/);
   return normalizeJATab(match?.[1]);
 }
+
+export function jaLoginReturnPath(value: string | null) {
+  return JA_TABS.some(tab => jaConsolePath(tab) === value) ? value! : jaConsolePath();
+}

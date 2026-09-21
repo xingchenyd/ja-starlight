@@ -32,7 +32,7 @@ const toBase64 = (value: string) => {
   return Buffer.from(value, "utf8").toString("base64");
 };
 const sha256Hex = async (value: string) => toHex(await crypto.subtle.digest("SHA-256", encoder.encode(value)));
-const hmac = async (key: ArrayBuffer | Uint8Array, value: string) => crypto.subtle.sign("HMAC", await crypto.subtle.importKey("raw", key instanceof ArrayBuffer ? key : key.buffer.slice(key.byteOffset, key.byteOffset + key.byteLength), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]), encoder.encode(value));
+const hmac = async (key: ArrayBuffer | Uint8Array, value: string) => crypto.subtle.sign("HMAC", await crypto.subtle.importKey("raw", key instanceof ArrayBuffer ? key : new Uint8Array(key).buffer, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]), encoder.encode(value));
 
 async function tencentAuthorization(secretId: string, secretKey: string, timestamp: number, payload: string) {
   const date = new Date(timestamp * 1000).toISOString().slice(0, 10);

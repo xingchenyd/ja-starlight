@@ -1,7 +1,6 @@
 import { formalExperiences, formalRecords, formalRegistrations, formalStudentProfile } from "./formal-seed-data.ts";
 
-type Statement = { bind: (...values: unknown[]) => Statement; first: <T>() => Promise<T | null>; run: () => Promise<unknown> };
-type Database = { prepare: (sql: string) => Statement; batch: (statements: Statement[]) => Promise<unknown> };
+type Database = Pick<import("@cloudflare/workers-types/index.ts").D1Database, "prepare" | "batch">;
 
 export async function ensureFormalPlatformData(db: Database) {
   // Never attach historical sample records to a newly registered real user.

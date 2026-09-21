@@ -2,6 +2,10 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RichBlock } from "../data";
+import ChallengeEditor from "../components/ChallengeEditor";
+import ChallengeBrief from "../components/ChallengeBrief";
+import { ChallengeReviewDesk } from "../components/ChallengeWorkspace";
+import { activityCategories, normalizeChallenge, validateChallenge } from "../../lib/challenges/model";
 import { PageTransition, runViewTransition, type TransitionDirection } from "../components/motion";
 import { SidePanel, ToastProvider, useToast } from "../components/ui";
 import {
@@ -52,16 +56,6 @@ type ManagedComment = {
 type Organization = { id: string; ownerId: string; name: string; creditCode: string; verificationStatus: string; verifiedAt?: string | null; createdAt: string; updatedAt: string };
 type Field = { id: string; label: string; type: string; required: boolean };
 const reviewable = ["activity", "content"];
-const activityCategories = [
-  "企业参访",
-  "能力工作坊",
-  "创新挑战",
-  "职业市集",
-  "导师对谈",
-  "商业实践",
-  "公益课堂",
-  "赛事观摩",
-];
 const contentCategories = [
   "技能成长",
   "活动分享",
@@ -537,8 +531,7 @@ function JAConsoleWorkspace({
     <main className="ja-console platform v2 ja-platform">
       <aside className="side">
         <a href="/" className="side-brand official-side-brand">
-          <img src="/media/ja-china-logo.jpg" alt="星光计划" />
-          <b>Star Plan</b>
+          <b>星光计划</b>
         </a>
         <nav>
           {navigationItems.map((item) => (
@@ -602,11 +595,13 @@ function JAConsoleWorkspace({
                 />
               )}{" "}
               {tab === "registrations" && (
+                <><ChallengeReviewDesk scope="ja" />
                 <JARegistrationDesk
                   items={registrations}
                   onReload={load}
                   onNotice={setNotice}
                 />
+                </>
               )}{" "}
               {tab === "organizations" && <OrganizationVerification items={organizations} onUpdated={load} onNotice={setNotice} />}
               {tab === "publish" && (
@@ -1034,7 +1029,7 @@ function JARegistrationDesk({
         <div>
           <small>STARLIGHT ACTIVITY REGISTRATION</small>
           <h2>报名处理与成长认证</h2>
-          <p>通过后将自动写入学生成长时间轴并标记星光计划认证；企业活动不会出现在这里。</p>
+          <p>报名审核确认参与资格；组队竞赛须完成成果评审后才生成认证。企业活动由对应企业处理。</p>
         </div>
         <button className="primary-btn" onClick={exportCsv}>导出筛选结果</button>
       </section>
@@ -1563,7 +1558,7 @@ function AdminPublisher({
       place: "湖南 · 长沙",
       date: "",
       capacity: "100",
-      category: "技能成长",
+      category: "企业参访",
       duration: "10 分钟",
       mediaType: "article",
       cover: "/media/ja-career-fair.jpg",
@@ -1572,6 +1567,8 @@ function AdminPublisher({
       featured: false,
       agenda: "09:00-09:30 签到\n09:30-11:00 主题体验\n11:00-12:00 复盘输出",
     });
+  const [challenge, setChallenge] = useState(() => normalizeChallenge(null));
+  const [publishError, setPublishError] = useState("");
   const change = (key: string, value: string | boolean) =>
     setForm((v) => ({ ...v, [key]: value }));
   const switchKind = (next: "activity" | "content") => {
@@ -1602,7 +1599,11 @@ function AdminPublisher({
   };
   const publish = async () => {
     if (!form.title.trim() || !form.summary.trim()) return;
+    const issues = kind === "activity" ? validateChallenge(challenge) : [];
+    if (issues.length) { setPublishError(issues.join("；")); setStep("活动详情"); return; }
+    setPublishError("");
     setSaving(true);
+    try {
     const registrationFields = [
       ...fieldOptions.filter((x) => fields.includes(x.id)),
       ...custom
@@ -1636,6 +1637,7 @@ function AdminPublisher({
       kind === "activity"
         ? {
             ...base,
+            challenge,
             place: form.place.includes("湖南")
               ? form.place
               : `湖南 · ${form.place}`,
@@ -1675,6 +1677,8 @@ function AdminPublisher({
         ? "星光计划活动已进入内部审核队列，通过后学生端可见"
         : "星光计划内容已直接发布，学生端刷新后即可看到",
     );
+    } catch { setPublishError("网络异常，未能确认发布结果。请先刷新发布记录，避免重复提交。"); }
+    finally { setSaving(false); }
   };
   const registrationFields = [
     ...fieldOptions.filter((x) => fields.includes(x.id)),
@@ -1691,6 +1695,7 @@ function AdminPublisher({
   ];
   return (
     <section className="admin-publisher studio-admin-publisher">
+      {publishError && <p role="alert" className="field-error">{publishError}</p>}
       <div className="admin-publisher-intro">
         <small>DIRECT PUBLISH · CONTENT STUDIO</small>
         <h2>由星光计划直接发布活动或成长内容</h2>
@@ -1838,8 +1843,9 @@ function AdminPublisher({
               </label>
             </>
           )}
+          {step === "预览" && kind === "activity" && <div className="full"><ChallengeBrief value={challenge} /></div>}
           {(step === "活动详情" || step === "正文排版") && (
-            <AdminBlockEditor blocks={blocks} setBlocks={setBlocks} />
+            <>{kind === "activity" && <div className="full"><ChallengeEditor value={challenge} onChange={setChallenge} />{publishError && <p role="alert" className="field-error">{publishError}</p>}</div>}<AdminBlockEditor blocks={blocks} setBlocks={setBlocks} /></>
           )}{" "}
           {step === "报名设置" && (
             <fieldset className="registration-config full">
@@ -2239,8 +2245,8 @@ function IntegrityDesk({
                 {String(item.payload.type)} · {String(item.payload.level)}
               </span>
               <p>{String(item.payload.summary)}</p>
-              {item.payload.handling && <small>处理：{String(item.payload.handling)}</small>}
-              {item.payload.evidence && <small>凭证：{String(item.payload.evidence)}</small>}
+              {Boolean(item.payload.handling) && <small>处理：{String(item.payload.handling)}</small>}
+              {Boolean(item.payload.evidence) && <small>凭证：{String(item.payload.evidence)}</small>}
               {String(item.payload.state || "active") !== "resolved" && <button onClick={() => resolve(item)}>标记为已解除</button>}
             </article>
           ))
@@ -2366,7 +2372,7 @@ function ReviewDrawer({
           <p className="review-link-warning">检测到外部链接，请确认链接归属、有效性和隐私说明后再公开。</p>
         )}
       </section>
-      {selected.payload.cover && (
+      {Boolean(selected.payload.cover) && (
         <img src={String(selected.payload.cover)} alt="发布方上传的审核素材" />
       )}
       <div className="review-settings">

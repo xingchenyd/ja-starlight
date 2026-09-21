@@ -61,7 +61,7 @@ export async function GET(request: Request) {
       : await env.DB.prepare(
           `SELECT id,content_id AS contentId,author_name AS authorName,body,reply_body AS replyBody,replied_by AS repliedBy,replied_at AS repliedAt,status,created_at AS createdAt FROM content_comments WHERE content_id IN (${ids.map(() => "?").join(",")}) AND status='active' ORDER BY created_at DESC LIMIT 300`,
         ).bind(...ids).all();
-    const comments = rows.results.map((row) => ({
+    const comments = rows.results.map((row): Record<string, unknown> & { contentTitle: string } => ({
       ...row,
       contentTitle: titles.get(String(row.contentId)) || `平台内容 · ${String(row.contentId).slice(0, 12)}`,
     }));
@@ -75,7 +75,7 @@ export async function GET(request: Request) {
     return Response.json({ error: "缺少内容标识" }, { status: 400 });
   if (!(await isPublishedContent(contentId)))
     return Response.json({ error: "内容不存在或尚未公开" }, { status: 404 });
-  const [likeRows, comments] = await env.DB.batch([
+  const [likeRows, comments] = await env.DB.batch<Record<string, unknown>>([
     env.DB.prepare(
       "SELECT user_id AS userId FROM content_likes WHERE content_id=?",
     ).bind(contentId),

@@ -9,6 +9,6 @@ export async function authEnvironment() {
   const config = env as unknown as AuthConfig;
   const db = env.DB as unknown as AuthDatabase;
   await ensureAuthSeeds(config, db);
-  await ensureFormalPlatformData(db);
+  await ensureFormalPlatformData(env.DB);
   return { config, db };
 }

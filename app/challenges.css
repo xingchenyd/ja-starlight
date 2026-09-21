@@ -1,0 +1,65 @@
+/* Shared competition surfaces, kept independent of role-specific layout. */
+.challenge-surface { color:#24404d; background:#fff; border:1px solid #d8e6e7; border-radius:22px; padding:clamp(18px,2.3vw,30px); margin:20px 0; min-width:0; box-shadow:0 12px 36px #24404d08; }
+.challenge-surface h2,.challenge-surface h3,.challenge-surface h4 { color:#24404d; margin:0 0 14px; line-height:1.4; }
+.challenge-surface h2 { font-size:26px; }
+.challenge-surface h3 { font-size:22px; }
+.challenge-surface h4 { font-size:19px; }
+.challenge-surface p { line-height:1.8; overflow-wrap:anywhere; }
+.challenge-surface label { display:grid; gap:9px; margin:16px 0; min-width:0; font-size:16px; font-weight:600; }
+.challenge-surface input,.challenge-surface textarea,.challenge-surface select { box-sizing:border-box; width:100%; min-width:0; background:#fff; color:#24404d; border:1px solid #bdd2d7; border-radius:12px; padding:12px 14px; font:inherit; font-weight:400; line-height:1.6; }
+.challenge-surface textarea { resize:vertical; min-height:88px; }
+.challenge-surface :is(input,textarea,select):focus-visible { outline:3px solid #c2edf0; border-color:#008b9c; outline-offset:2px; }
+.challenge-surface button { cursor:pointer; }
+.challenge-surface button:disabled { cursor:wait; opacity:.65; }
+.challenge-surface button:not(.challenge-review-toggle) { min-height:42px; padding:10px 16px; border-radius:12px; font:inherit; font-weight:650; transition:background .18s ease,box-shadow .18s ease; }
+.challenge-surface .secondary-btn { display:inline-flex; align-items:center; justify-content:center; border:1px solid #b4d1d7; background:#eef8f8; color:#24404d; }
+.challenge-surface .secondary-btn:hover:not(:disabled) { background:#c2edf0; box-shadow:0 4px 12px #24404d10; }
+.challenge-surface button:focus-visible { outline:3px solid #008b9c; outline-offset:3px; }
+.challenge-invite button,.challenge-surface li button,.challenge-surface .field-error button { color:#008b9c; text-decoration:underline; text-underline-offset:4px; }
+.challenge-form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr)); gap:0 20px; }
+.challenge-eyebrow { color:#008b9c; font-size:14px; font-weight:750; letter-spacing:.08em; display:block; margin-bottom:8px; }
+.challenge-milestones { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:20px 0; }
+.challenge-milestones > div { display:grid; gap:8px; background:#eef8f8; border-radius:14px; padding:16px; }
+.challenge-milestones span { font-size:14px; color:#45636b; }
+.challenge-milestones b { font-size:20px; overflow-wrap:anywhere; }
+.challenge-brief-section { padding:18px 0; border-top:1px solid #e0eaeb; }
+.challenge-brief-section p,.challenge-prose { white-space:pre-wrap; }
+.challenge-team-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.challenge-team-heading > span { background:#c2edf0; color:#24404d; border-radius:100px; padding:7px 14px; }
+.challenge-members { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); list-style:none; padding:0; gap:10px; }
+.challenge-members li { display:grid; gap:5px; background:#eef8f8; padding:14px; border-radius:12px; overflow-wrap:anywhere; }
+.challenge-members li span { font-size:14px; color:#45636b; }
+.challenge-result { background:linear-gradient(110deg,#c2edf0,#f3f2b3); padding:20px; border-radius:16px; margin:20px 0; }
+.challenge-invite,.challenge-submission { padding-top:18px; border-top:1px solid #d8e6e7; margin-top:20px; }
+.challenge-review-card { border:1px solid #d8e6e7; border-radius:16px; overflow:hidden; margin-top:14px; }
+.challenge-review-toggle { border:0; background:#f5fafa; color:#24404d; display:flex; align-items:center; justify-content:space-between; text-align:left; gap:16px; padding:20px; width:100%; font:inherit; }
+.challenge-review-toggle > span:first-child { display:grid; gap:8px; min-width:0; overflow-wrap:anywhere; }
+.challenge-review-toggle b { font-size:20px; }
+.challenge-review-detail { padding:22px; animation:challenge-enter .3s ease-out; }
+@keyframes challenge-enter { from { opacity:0; transform:translateX(12px); } to { opacity:1; transform:translateX(0); } }
+@media(prefers-reduced-motion:reduce) { .challenge-review-detail { animation:none; } }
+@media(max-width:620px) { .challenge-milestones { grid-template-columns:1fr; } .challenge-review-toggle { align-items:flex-start; } }
+
+/* Card geometry is independent of uploaded image size and copy length. */
+.real-logo,.home-company-mark,.public-company-logo { box-sizing:border-box; flex-shrink:0; overflow:hidden; line-height:1; }
+.real-logo img,.home-company-mark img,.public-company-logo img { display:block; width:100%; height:100%; object-fit:contain; }
+.student-job-main { grid-template-columns:76px minmax(0,1fr) auto; }
+.student-job-main > div { min-width:0; }
+.student-job-list .real-logo { width:76px; height:76px; padding:12px; border-radius:16px; }
+.student-job-list .company-name-link,.student-job-main h3,.home-job-list h3,.home-job-list h4 { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
+.student-job-main p { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; min-height:3.4em; }
+.student-job-tags { min-height:38px; }
+.student-job-list { grid-auto-rows:1fr; }
+.refined-learning-grid > article { display:flex; flex-direction:column; min-width:0; }
+.refined-learning-grid .learning-card-cover { aspect-ratio:16/10; width:100%; height:auto; flex:none; overflow:hidden; }
+.refined-learning-grid .learning-card-cover :is(img,video) { width:100%; height:100%; object-fit:cover; }
+.refined-learning-grid .learning-card-body { flex:1; min-width:0; }
+.refined-learning-grid .learning-card-body h2,.refined-learning-grid .learning-card-body > p { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; min-height:3em; line-height:1.5; overflow-wrap:anywhere; }
+.refined-learning-grid .learning-card-actions { margin-top:auto; }
+.refined-activity-feed { grid-auto-rows:1fr; }
+.refined-activity-feed .activity-feed-cover { height:190px; overflow:hidden; }
+.refined-activity-feed .activity-feed-cover img { width:100%; height:100%; object-fit:cover; }
+.refined-activity-feed > article h2 { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; line-height:1.5; min-height:3em; }
+.refined-activity-feed > article > div > p { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; min-height:3.2em; line-height:1.6; }
+.refined-activity-feed > article > div { min-width:0; }
+@media(max-width:620px) { .student-job-main { grid-template-columns:56px minmax(0,1fr); } .student-job-list .real-logo { width:56px; height:56px; padding:8px; } .student-job-main > .status-badge { grid-column:2; } }

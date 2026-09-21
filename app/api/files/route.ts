@@ -42,7 +42,8 @@ export async function GET(request: Request) {
   }
   const headers = new Headers({ "content-type": object.httpMetadata?.contentType || "application/octet-stream", "cache-control": visibility === "public" ? "public, max-age=3600, stale-while-revalidate=86400" : "private, no-store", "x-content-type-options": "nosniff" });
   if (object.etag) headers.set("etag", object.etag);
-  return new Response(object.body, { headers });
+  // Both runtime adapters expose a Web ReadableStream; bridge the Workers/DOM type declarations without buffering the file.
+  return new Response(object.body as unknown as ReadableStream<Uint8Array>, { headers });
 }
 
 export async function DELETE(request: Request) {

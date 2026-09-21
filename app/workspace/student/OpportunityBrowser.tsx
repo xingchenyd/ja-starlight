@@ -22,7 +22,7 @@ const industryOptions = ["全部行业", "互联网AI", "电子通信半导体",
 function JobLogo({ job, large = false }: { job: Job; large?: boolean }) {
   return (
     <span className={`real-logo ${large ? "large" : ""}`} style={{ background: job.logoUrl ? "white" : job.color }}>
-      {job.logoUrl ? <img src={job.logoUrl} alt={`${job.company} logo`} /> : job.logo}
+      {job.logoUrl ? <img src={job.logoUrl} alt={`${job.company} logo`} /> : String(job.logo || job.company || "企业").slice(0, 2)}
     </span>
   );
 }

@@ -24,5 +24,5 @@ test("JA console uses canonical modules and shared interaction primitives", asyn
   assert.match(source, /aria-current/);
   assert.doesNotMatch(source, /from "next\/link"/);
   assert.match(source, /<a href="\/" className="side-brand/);
-  assert.match(loginSource, /jaConsolePath\("pulse"\)/);
+  assert.match(loginSource, /location\.assign\(jaLoginReturnPath/);
 });

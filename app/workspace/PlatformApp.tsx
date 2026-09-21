@@ -8,6 +8,10 @@ import OpportunityBrowserView from "./student/OpportunityBrowser";
 import ActivityExperienceView from "./student/ActivityExperience";
 import LearningCenterView from "./student/LearningCenter";
 import StudentProfileView from "./student/StudentProfile";
+import ChallengeEditor from "../components/ChallengeEditor";
+import ChallengeBrief from "../components/ChallengeBrief";
+import { ChallengeReviewDesk } from "../components/ChallengeWorkspace";
+import { activityCategories, normalizeChallenge, validateChallenge, type ChallengeSpec } from "../../lib/challenges/model";
 import { useStudentData, type StudentFavorite, type StudentPrivateData } from "./student/useStudentData";
 import {
   normalizeWorkspaceRoute,
@@ -91,14 +95,6 @@ const contentCategories = [
   "职业探索",
   "简历面试",
   "公益实践",
-];
-const activityCategories = [
-  "企业参访",
-  "职业体验",
-  "主题工作坊",
-  "赛事路演",
-  "志愿公益",
-  "校园活动",
 ];
 const registrationOptions: RegistrationField[] = [
   { id: "name", label: "姓名", type: "text", required: true },
@@ -2177,7 +2173,7 @@ function EnterpriseSpace({
       />
     );
   if (tab === "feedback") return <PublisherFeedbackDesk flash={flash} />;
-  if (tab === "registrations") return <EnterpriseRegistrations />;
+  if (tab === "registrations") return <><ChallengeReviewDesk scope="enterprise" /><EnterpriseRegistrations /></>;
   const enterpriseProfile = records.find(
     (record) => record.kind === "enterprise-profile",
   );
@@ -3570,7 +3566,7 @@ function EnterprisePublisher({
                       ? new Date(r.updatedAt).toLocaleDateString("zh-CN")
                       : "刚刚提交"}
                   </span>
-                  {r.payload.reviewNote && (
+                  {Boolean(r.payload.reviewNote) && (
                     <p className="review-note">
                       <b>星光计划审核意见：</b>
                       {String(r.payload.reviewNote)}
@@ -4060,6 +4056,7 @@ function PublishDialog({
   useDialogEscape(onClose);
   const old = record?.payload || {};
   const oldFields = (old.registrationFields as RegistrationField[]) || [];
+  const [challenge, setChallenge] = useState(() => normalizeChallenge(old.challenge));
   const [selectedFields, setSelectedFields] = useState<string[]>(
       oldFields.length
         ? oldFields
@@ -4081,7 +4078,7 @@ function PublishDialog({
     contactName: String(old.contactName || ""),
     contactPhone: String(old.contactPhone || ""),
     city: String(old.city || "长沙"),
-    category: String(old.jobCategory || old.category || "产品运营"),
+    category: String(old.jobCategory || old.category || (kind === "activity" ? "企业命题" : kind === "content" ? "技能成长" : "产品运营")),
     duration: String(old.duration || ""),
     date: String(old.date || ""),
     deadline: String(old.registrationDeadline || ""),
@@ -4133,6 +4130,7 @@ function PublishDialog({
             selectedFields?: string[];
             customQuestions?: string;
             abilities?: string[];
+            challenge?: ChallengeSpec;
           };
           if (draft.form) setForm((current) => ({ ...current, ...draft.form }));
           if (draft.blocks) setBlocks(draft.blocks);
@@ -4140,6 +4138,7 @@ function PublishDialog({
           if (typeof draft.customQuestions === "string")
             setCustomQuestions(draft.customQuestions);
           if (draft.abilities) setAbilities(draft.abilities);
+          if (draft.challenge) setChallenge(normalizeChallenge(draft.challenge));
           setAutosave("✓ 已恢复上次未完成草稿");
         } else {
           setAutosave("尚未保存到平台");
@@ -4163,6 +4162,7 @@ function PublishDialog({
           selectedFields,
           customQuestions,
           abilities,
+          challenge,
         }),
       );
       setAutosave(
@@ -4178,6 +4178,7 @@ function PublishDialog({
     draftReady,
     form,
     selectedFields,
+    challenge,
   ]);
   const change = (k: string, v: string | boolean) => {
     setForm((f) => ({ ...f, [k]: v }));
@@ -4288,6 +4289,7 @@ function PublishDialog({
         ...base,
         date: form.date,
         registrationDeadline: form.deadline,
+        challenge,
         place: form.city.trim() || "长沙",
         category: form.category || "企业活动",
         capacity: Number(form.capacity) || 100,
@@ -4337,10 +4339,13 @@ function PublishDialog({
     }
     if (kind === "activity") {
       if (!form.date) next.date = "请选择活动日期";
+      const challengeErrors = validateChallenge(challenge);
+      if (challengeErrors.length) next.challenge = challengeErrors.join("；");
       if (Number(form.capacity) < 1) next.capacity = "报名人数必须大于 0";
       if (
         form.deadline &&
         form.date &&
+        !challenge.enabled &&
         new Date(form.deadline) > new Date(form.date)
       )
         next.deadline = "报名截止日期不能晚于活动日期";
@@ -4350,7 +4355,7 @@ function PublishDialog({
         !selectedFields.some((field) => field === "phone" || field === "email")
       )
         next.registration = "报名表必须包含联系电话或常用邮箱";
-      if (splitLines(form.agenda).length < 2)
+      if (!challenge.enabled && splitLines(form.agenda).length < 2)
         next.agenda = "至少填写 2 个活动环节";
     }
     if (kind === "content") {
@@ -4380,6 +4385,7 @@ function PublishDialog({
       else if (["responsibilities", "requirements", "salary"].includes(first))
         setStep("岗位详情");
       else if (first === "registration") setStep("报名设置");
+      else if (first === "challenge") setStep("活动详情");
       else if (first === "agenda") setStep("成长设计");
       else if (first === "blocks")
         setStep(kind === "content" ? "内容编辑" : "活动详情");
@@ -4407,6 +4413,7 @@ function PublishDialog({
   };
   const preview = {
     ...form,
+    attachments: splitLines(form.attachments),
     cover: form.cover || "/media/ja-career-fair.jpg",
     bodyBlocks: blocks,
     abilityTags: abilities,
@@ -4807,6 +4814,7 @@ function PublishDialog({
                   </label>
                 </>
               )}
+              {step === "活动详情" && kind === "activity" && <div className="full"><ChallengeEditor value={challenge} onChange={setChallenge} />{issue("challenge")}</div>}
               {((step === "活动详情" && kind === "activity") ||
                 (step === "内容编辑" && kind === "content")) && (
                 <ContentBlockEditor
@@ -4931,6 +4939,7 @@ function PublishDialog({
                   </label>
                 </>
               )}
+              {step === "预览" && kind === "activity" && <div className="full"><ChallengeBrief value={challenge} /></div>}
               {step === "预览" && (
                 <section className="publish-readiness full">
                   <small>FINAL CHECK</small>

@@ -1,4 +1,6 @@
 import { env } from "cloudflare:workers";
+import { normalizeChallenge, validateChallenge } from "../../../lib/challenges/model";
+import { ensureChallengeSchema } from "../../../db/challenges";
 import { ensureCoreSchema, getActor, requireVerifiedEnterprise, writeAudit } from "../../../db/runtime";
 function clean(value: unknown) {
   const text = JSON.stringify(value);
@@ -65,9 +67,14 @@ export async function POST(request: Request) {
     "项目实践",
     "公益实践",
   ];
-  const payload = { ...body.payload, region: "湖南" };
+  const payload: Record<string, unknown> = { ...body.payload, region: "湖南" };
   const isPublicRecord = ["job", "activity", "content"].includes(body.kind);
   const isDraft = isPublicRecord && payload.reviewStatus === "draft";
+  if (body.kind === "activity") {
+    payload.challenge = normalizeChallenge(payload.challenge);
+    const errors = validateChallenge(payload.challenge);
+    if (!isDraft && errors.length) return Response.json({ error: errors.join("；") }, { status: 400 });
+  }
   if (body.kind === "student-profile") {
     const limits: Record<string, number> = { name: 80, school: 160, major: 160, grade: 80, headline: 200, bio: 4000, skills: 4000, awards: 4000, phone: 40, email: 254, resumeName: 240, resumeKey: 500 };
     for (const [field, limit] of Object.entries(limits)) {
@@ -162,20 +169,31 @@ export async function POST(request: Request) {
       ? body.id
       : crypto.randomUUID();
   const existing = await env.DB.prepare(
-    "SELECT owner_id AS ownerId,version FROM workspace_records WHERE id=?",
+    "SELECT owner_id AS ownerId,version,payload,kind FROM workspace_records WHERE id=?",
   )
     .bind(id)
-    .first<{ ownerId: string; version: number }>();
+    .first<{ ownerId: string; version: number; payload: string; kind: string }>();
   if (existing && existing.ownerId !== owner)
     return Response.json({ error: "无权修改该记录" }, { status: 403 });
+  if (existing && existing.kind !== body.kind)
+    return Response.json({ error: "不能将已有记录改成另一种内容类型" }, { status: 409 });
   if (existing && body.version && Number(body.version) !== Number(existing.version))
     return Response.json({ error: "该内容已被其他窗口更新，请刷新后再保存", currentVersion: existing.version }, { status: 409 });
+  let challengeRulesChanging = false;
+  if (body.kind === "activity") {
+    await ensureChallengeSchema();
+    const hasTeams = await env.DB.prepare("SELECT id FROM challenge_teams WHERE activity_id=? LIMIT 1").bind(id).first();
+    challengeRulesChanging = Boolean(existing && JSON.stringify(normalizeChallenge(JSON.parse(existing.payload).challenge)) !== JSON.stringify(payload.challenge));
+    if (hasTeams && challengeRulesChanging)
+      return Response.json({ error: "已有参赛团队，不能直接更改比赛规则。请联系项目团队确认变更并通知参赛者。" }, { status: 409 });
+  }
 
-  await env.DB.prepare(
-    "INSERT INTO workspace_records(id,owner_id,kind,payload,version,archived_at,published_at,updated_at) VALUES(?,?,?,?,1,NULL,CASE WHEN ?='approved' THEN CURRENT_TIMESTAMP ELSE NULL END,CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,version=workspace_records.version+1,archived_at=NULL,published_at=CASE WHEN json_extract(excluded.payload,'$.reviewStatus')='approved' THEN COALESCE(workspace_records.published_at,CURRENT_TIMESTAMP) ELSE workspace_records.published_at END,updated_at=CURRENT_TIMESTAMP WHERE owner_id=excluded.owner_id",
+  const write = await env.DB.prepare(
+    "INSERT INTO workspace_records(id,owner_id,kind,payload,version,archived_at,published_at,updated_at) VALUES(?,?,?,?,1,NULL,CASE WHEN ?='approved' THEN CURRENT_TIMESTAMP ELSE NULL END,CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,version=workspace_records.version+1,archived_at=NULL,published_at=CASE WHEN json_extract(excluded.payload,'$.reviewStatus')='approved' THEN COALESCE(workspace_records.published_at,CURRENT_TIMESTAMP) ELSE workspace_records.published_at END,updated_at=CURRENT_TIMESTAMP WHERE owner_id=excluded.owner_id AND workspace_records.version=?" + (challengeRulesChanging ? " AND NOT EXISTS(SELECT 1 FROM challenge_teams WHERE activity_id=workspace_records.id)" : ""),
   )
-    .bind(id, owner, body.kind, clean(payload), String(payload.reviewStatus || ""))
+    .bind(id, owner, body.kind, clean(payload), String(payload.reviewStatus || ""), existing?.version || 0)
     .run();
+  if (!write.meta.changes) return Response.json({ error: "该内容刚刚被其他窗口更新，请刷新后再保存" }, { status: 409 });
   if (body.kind === "enterprise-profile") {
     await env.DB.prepare("INSERT INTO organizations(id,owner_id,name,credit_code,verification_status,updated_at) VALUES(?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(owner_id) DO UPDATE SET name=excluded.name,credit_code=excluded.credit_code,verification_status=CASE WHEN organizations.name<>excluded.name OR organizations.credit_code<>excluded.credit_code THEN 'pending' ELSE organizations.verification_status END,updated_at=CURRENT_TIMESTAMP").bind(`org:${owner}`, owner, String(payload.name || "未命名企业"), String(payload.creditCode || ""), identity.testMode ? "verified" : "pending").run();
   }

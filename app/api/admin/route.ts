@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { normalizeChallenge, validateChallenge } from "../../../lib/challenges/model";
 import { ensureCoreSchema, notify, requireAdmin } from "../../../db/runtime";
 
 async function setup() {
@@ -41,7 +42,7 @@ export async function GET(request: Request) {
   const user = await requireAdmin(request);
   if (!user)
     return Response.json({ error: "需要后台登录" }, { status: 401 });
-  const [records, logs, registrations, organizations] = await env.DB.batch([
+  const [records, logs, registrations, organizations] = await env.DB.batch<Record<string, unknown>>([
     env.DB.prepare(
       "SELECT id,owner_id AS ownerId,kind,payload,version,updated_at AS updatedAt FROM workspace_records WHERE archived_at IS NULL ORDER BY updated_at DESC LIMIT 200",
     ),
@@ -242,6 +243,11 @@ export async function PUT(request: Request) {
   }
   const now = new Date().toISOString();
   const needsInternalReview = body.kind === "activity";
+  if (needsInternalReview) {
+    body.payload.challenge = normalizeChallenge(body.payload.challenge);
+    const errors = validateChallenge(body.payload.challenge);
+    if (errors.length) return Response.json({ error: errors.join("；") }, { status: 400 });
+  }
   const payload = {
     ...body.payload,
     id,

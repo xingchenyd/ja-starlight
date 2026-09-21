@@ -5,8 +5,9 @@ import { useEffect, useMemo, useState } from "react";
 import { mergeCatalogRecords, type PublicCatalogRecord } from "../../lib/catalog/public-catalog";
 import { activities, type Activity } from "../data";
 import { catalogFilterUrl, parseCatalogFilters } from "../../lib/catalog/catalog-url";
+import { activityCategories } from "../../lib/challenges/model";
 
-const categories = ["全部活动", "企业参访", "职业体验", "主题工作坊", "赛事路演", "志愿公益", "校园活动"];
+const categories = ["全部活动", ...activityCategories];
 
 export default function ActivityCatalog({ initialQuery, initialCategory }: { initialQuery: string; initialCategory: string }) {
   const [catalog, setCatalog] = useState<PublicCatalogRecord[]>([]);

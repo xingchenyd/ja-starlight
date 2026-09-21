@@ -31,6 +31,8 @@ try {
     const authenticated = { ...headers, Cookie: cookie };
     const route = role === 'admin' ? '/api/registrations?scope=ja' : role === 'enterprise' ? '/api/registrations?scope=publisher' : '/api/registrations';
     assert.equal((await fetch(base + route, { headers: authenticated })).status, 200, role + ' data');
+    const challengeRoute = role === 'admin' ? '/api/challenges?scope=ja' : role === 'enterprise' ? '/api/challenges?scope=enterprise' : '/api/challenges';
+    assert.equal((await fetch(base + challengeRoute, { headers: authenticated })).status, 200, role + ' challenge data');
     if (role === 'student') assert.equal((await fetch(base + '/api/registrations?scope=publisher', { headers: authenticated })).status, 403);
     const logout = await fetch(base + (role === 'admin' ? '/api/admin-auth/logout' : '/api/auth/logout'), { method: 'POST', headers: authenticated, body: '{}' });
     assert.equal(logout.status, 200, role + ' logout');

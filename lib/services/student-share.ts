@@ -1,7 +1,6 @@
 import { hashOpaqueToken } from "../auth/crypto.ts";
 
-type Statement = { bind: (...values: unknown[]) => Statement; first: <T>() => Promise<T | null>; all: () => Promise<{ results: Record<string, unknown>[] }>; run: () => Promise<unknown> };
-export type ShareDatabase = { prepare: (sql: string) => Statement; batch: (statements: Statement[]) => Promise<{ results: Record<string, unknown>[] }[]> };
+export type ShareDatabase = Pick<import("@cloudflare/workers-types/index.ts").D1Database, "prepare" | "batch">;
 
 export function normalizeShareDays(value: unknown) {
   const days = Number(value);
@@ -39,7 +38,7 @@ export async function getPublicGrowthProfile(db: ShareDatabase, token: string, p
   const secretHash = await hashOpaqueToken(secret, pepper);
   const share = await db.prepare("SELECT id,student_id AS studentId,expires_at AS expiresAt FROM student_profile_shares WHERE id=? AND token_hash=? AND status='active' AND expires_at>CURRENT_TIMESTAMP LIMIT 1").bind(shareId, secretHash).first<{ id: string; studentId: string; expiresAt: string }>();
   if (!share) return null;
-  const [profiles, experiences] = await db.batch([
+  const [profiles, experiences] = await db.batch<Record<string, unknown>>([
     db.prepare("SELECT payload FROM workspace_records WHERE owner_id=? AND kind='student-profile' AND archived_at IS NULL ORDER BY updated_at DESC LIMIT 1").bind(share.studentId),
     db.prepare("SELECT id,source_type AS sourceType,category,title,role,description,output,evidence_url AS evidenceUrl,occurred_at AS occurredAt,certified,is_public AS isPublic,sort_order AS sortOrder FROM student_experiences WHERE student_id=? AND is_public=1 ORDER BY sort_order DESC,occurred_at DESC").bind(share.studentId),
   ]);

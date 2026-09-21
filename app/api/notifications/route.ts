@@ -5,7 +5,7 @@ export async function GET(request: Request) {
   const actor = await getActor(request);
   if (!actor) return Response.json({ notifications: [], unread: 0 }, { status: 401 });
   const url = new URL(request.url), limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") || 20) || 20));
-  const [items, unread] = await env.DB.batch([
+  const [items, unread] = await env.DB.batch<Record<string, unknown>>([
     env.DB.prepare("SELECT id,type,title,body,target_url AS targetUrl,read_at AS readAt,created_at AS createdAt FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT ?").bind(actor.id, limit),
     env.DB.prepare("SELECT COUNT(*) AS count FROM notifications WHERE user_id=? AND read_at IS NULL").bind(actor.id),
   ]);

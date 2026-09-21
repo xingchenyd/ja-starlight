@@ -4,7 +4,8 @@ export async function readResumePdf(file: File) {
   const pdfjs = await import("pdfjs-dist");
   const { default: workerUrl } = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
-  const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false, cMapUrl: "/pdfjs/cmaps/", cMapPacked: true, standardFontDataUrl: "/pdfjs/standard_fonts/" });
+  const options = { data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false, cMapUrl: "/pdfjs/cmaps/", cMapPacked: true, standardFontDataUrl: "/pdfjs/standard_fonts/" };
+  const task = pdfjs.getDocument(options);
   try {
     const document = await task.promise;
     if (document.numPages > 30) throw new Error("简历超过 30 页，请上传精简版本或手动填写资料");
