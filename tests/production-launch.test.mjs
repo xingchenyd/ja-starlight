@@ -74,7 +74,7 @@ test('sample cleanup removes only known fixtures and their related records, pres
     db.prepare("INSERT INTO admin_credentials(id,label,key_prefix,secret_hash,status,created_by) VALUES('admin','真实管理员','key','retained-hash','active','system')").run();
     const insert=db.prepare('INSERT INTO workspace_records(id,owner_id,kind,payload) VALUES(?,?,?,?)');
     insert.run('formal-act-01','ja:formal','activity','{"title":"预置活动"}');
-    insert.run('real-record','business','content','{"title":"正式企业发布"}');
+    insert.run('real-record','business','content','{"title":"正式企业发布","reviewStatus":"approved","sortOrder":3}');
     insert.run('ambiguous','business','activity','{"title":"产品测试实践"}');
     insert.run('seed-owned','seed','student-profile','{"name":"内测资料"}');
     db.prepare("INSERT INTO activity_registrations(id,activity_id,activity_title,student_owner_id,publisher_owner_id,answers) VALUES('fixture-signup','formal-act-01','预置活动','real','ja:formal','{}')").run();
@@ -85,6 +85,8 @@ test('sample cleanup removes only known fixtures and their related records, pres
     applySampleCleanup(db,plan);
     assert.deepEqual(db.prepare('SELECT id FROM users ORDER BY id').all().map(row=>row.id),['business','real']);
     assert.deepEqual(db.prepare('SELECT id FROM workspace_records ORDER BY id').all().map(row=>row.id),['ambiguous','real-record']);
+    const retained=JSON.parse(db.prepare("SELECT payload FROM workspace_records WHERE id='real-record'").get().payload);
+    assert.equal(retained.title,'正式企业发布');assert.equal(retained.sortOrder,1);
     assert.deepEqual(db.prepare('SELECT id FROM student_experiences').all().map(row=>row.id),['real-growth']);
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM activity_registrations').get().n,0);
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM admin_credentials').get().n,1);

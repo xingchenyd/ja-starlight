@@ -78,7 +78,17 @@ export function applySampleCleanup(db, plan) {
       const remaining = db.prepare(`SELECT * FROM ${item.table}`).all().map(row => ({ ...row }));
       if (remaining.length !== item.keptCount || hash(remaining) !== item.keptHash) throw new Error(`Non-sample data changed in ${item.table}`);
     }
+    // Validate business data preservation first, then perform the requested
+    // ranking-only change so removing samples cannot leave a 1..N gap.
+    db.exec(`WITH ranked AS (
+      SELECT id,ROW_NUMBER() OVER(PARTITION BY kind ORDER BY
+        CASE WHEN CAST(json_extract(payload,'$.sortOrder') AS INTEGER)>0 THEN CAST(json_extract(payload,'$.sortOrder') AS INTEGER) ELSE 2147483647 END,
+        COALESCE(published_at,updated_at) DESC,id) AS position
+      FROM workspace_records WHERE kind IN ('job','activity','content') AND archived_at IS NULL AND json_extract(payload,'$.reviewStatus')='approved'
+    ) UPDATE workspace_records SET payload=json_set(payload,'$.sortOrder',(SELECT position FROM ranked WHERE ranked.id=workspace_records.id)),version=version+1
+      WHERE id IN (SELECT id FROM ranked) AND COALESCE(json_extract(payload,'$.sortOrder'),0)<>(SELECT position FROM ranked WHERE ranked.id=workspace_records.id)`);
     if (db.prepare('PRAGMA integrity_check').get().integrity_check !== 'ok') throw new Error('Database integrity failed');
+    if (db.prepare('PRAGMA foreign_key_check').all().length) throw new Error('Database reference integrity failed');
     db.prepare("INSERT INTO audit_logs(actor_id,action,target_type,target_id) VALUES('system','production-sample-cleanup','maintenance',?)").run(new Date().toISOString());
     db.exec('COMMIT');
     return plan.totals;

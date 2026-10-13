@@ -8,6 +8,7 @@ const [directory, mode, planFile, backupDirectory] = process.argv.slice(2);
 if (!directory || !planFile || !['--plan','--apply'].includes(mode)) throw new Error('Usage: cleanup-samples.mjs DATA (--plan|--apply) PRIVATE_PLAN [COMPLETED_BACKUP]');
 const root = resolve(directory), dbFile = join(root, 'app.sqlite');
 const db = new DatabaseSync(dbFile, { readOnly: mode === '--plan' });
+if (mode === '--apply') db.exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; PRAGMA synchronous=FULL;');
 try {
   if (mode === '--plan') {
     const plan = planSampleCleanup(db);
@@ -50,6 +51,6 @@ try {
       await mkdir(join(quarantine, 'blobs'), { mode: 0o700, recursive: true });
       try { await rename(join(root, 'files', 'blobs', digest), join(quarantine, 'blobs', digest)); } catch (error) { if (error.code !== 'ENOENT') throw error; }
     }
-    console.log(JSON.stringify({ deleted: totals, quarantinedFiles: plan.files.length, preservedNonSampleData: true, backup: snapshot }));
+    console.log(JSON.stringify({ deleted: totals, quarantinedFiles: plan.files.length, preservedNonSampleData: true, ranksCompacted: true, backup: snapshot }));
   }
 } finally { db.close(); }
