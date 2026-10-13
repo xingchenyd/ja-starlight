@@ -22,7 +22,9 @@ try {
   assert.equal((await fetch(base + '/api/platform', { headers })).status, 401);
   passed.push('anonymous and forged-role access denied');
   for (const role of ['student', 'enterprise', 'admin']) {
-    const user = db.prepare('SELECT u.email FROM users u JOIN password_credentials p ON p.user_id=u.id WHERE u.role=? LIMIT 1').get(role);
+    if (role !== 'admin' && config.AUTH_ENABLE_SAMPLE_ACCOUNTS !== 'true') continue;
+    const user = role === 'admin' ? null : db.prepare('SELECT u.email FROM users u JOIN password_credentials p ON p.user_id=u.id WHERE u.role=? AND lower(u.email)=? AND u.status=\'active\' LIMIT 1').get(role, role + '@starlight-hunan.cn');
+    if (role !== 'admin' && !user) throw new Error('Explicitly enabled acceptance account missing');
     const body = role === 'admin' ? { key: config.AUTH_SEED_ADMIN_KEY } : { role, email: user.email, password: config['AUTH_SEED_' + role.toUpperCase() + '_PASSWORD'] };
     const login = await fetch(base + (role === 'admin' ? '/api/admin-auth/login' : '/api/auth/login'), { method: 'POST', headers, body: JSON.stringify(body) });
     assert.equal(login.status, 200, role + ' login');

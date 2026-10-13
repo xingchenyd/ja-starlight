@@ -88,11 +88,11 @@ export default function StudentOverview({
     [allJobs],
   );
   const sortedActivities = useMemo(
-    () => [...allActivities].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))),
+    () => [...allActivities].sort((a, b) => Number(a.sortOrder || Number.MAX_SAFE_INTEGER) - Number(b.sortOrder || Number.MAX_SAFE_INTEGER) || String(b.date || "").localeCompare(String(a.date || ""))),
     [allActivities],
   );
   const sortedContents = useMemo(
-    () => [...allContents].sort((a, b) => Number((b as ContentItem & { sortOrder?: number }).sortOrder || 0) - Number((a as ContentItem & { sortOrder?: number }).sortOrder || 0)),
+    () => [...allContents].sort((a, b) => Number(a.sortOrder || Number.MAX_SAFE_INTEGER) - Number(b.sortOrder || Number.MAX_SAFE_INTEGER)),
     [allContents],
   );
   const timeline = useMemo(() => {

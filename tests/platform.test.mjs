@@ -63,22 +63,18 @@ test("operations console is directly accessible only in explicit test mode", asy
   assert.match(html, /湖南运营后台/);
   assert.match(html, /星光计划运营管理员/);
   assert.match(html, /分区审核/);
-  assert.match(html, /星光计划发起的活动/);
+  assert.match(html, /星光计划发布的活动和内容/);
   assert.match(html, /企业发布的活动/);
   assert.match(html, /企业发布的内容/);
   assert.match(html, /诚信管理/);
   assert.doesNotMatch(html, /此账号没有后台权限|<span>☷<\/span>报名数据/);
 });
-test("opportunity route is a Hunan category-based direct-email opportunity", async () => {
+test("historical sample opportunity is not rendered as a live vacancy", async () => {
   const response = await page("/opportunities/job-01");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /三一集团/);
-  assert.match(html, /工业互联网产品运营实习生/);
-  assert.match(html, /产品运营/);
-  assert.match(html, /长沙/);
-  assert.match(html, /starlight-sany@example.com/);
-  assert.match(html, /平台不读取邮件/);
+  assert.match(html, /正在读取机会详情/);
+  assert.doesNotMatch(html, /三一集团|工业互联网产品运营实习生|starlight-sany@example.com/);
   assert.doesNotMatch(html, /站内申请|与企业沟通|北京|上海|深圳/);
 });
 test("enterprise workbench exposes operational tasks and publishing status", async () => {
@@ -150,7 +146,7 @@ test("JA review ownership and enterprise registration export are separated", asy
     ),
   ]);
   assert.match(adminSource, /admin-review-lanes/);
-  assert.match(adminSource, /星光计划发起的活动/);
+  assert.match(adminSource, /后台自发内容直接发布/);
   assert.match(adminSource, /企业发布的活动/);
   assert.match(adminSource, /企业发布的内容/);
   assert.doesNotMatch(adminSource, /RegistrationTable/);
@@ -182,7 +178,8 @@ test("public opportunities navigate by category and never by city filters", asyn
   const html = await response.text();
   assert.match(html, /机会类别/);
   assert.match(html, /技术研发/);
-  assert.match(html, /简历邮箱/);
+  assert.match(html, /招聘邮箱自行投递简历/);
+  assert.doesNotMatch(html, /三一集团|starlight-sany@example.com/);
   assert.match(html, /个开放机会/);
   assert.doesNotMatch(html, /全部城市|北京|上海|深圳|立即申请|站内沟通/);
 });
@@ -199,9 +196,11 @@ test("student activities use automatic carousel without signup fields in showcas
   const response = await page("/workspace/student/activities");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /refined-activity-showcase/);
-  assert.match(html, /activity-stage-track/);
-  assert.match(html, /暂停轮播/);
+  assert.match(html, /暂无可报名活动/);
+  const source = await readFile(new URL("../app/workspace/student/ActivityExperience.tsx", import.meta.url), "utf8");
+  assert.match(source, /refined-activity-showcase/);
+  assert.match(source, /activity-stage-track/);
+  assert.match(source, /暂停轮播/);
   assert.doesNotMatch(html, /signup-fields-preview"><b>报名信息/);
 });
 test("growth profile focuses on resume and unified timeline", async () => {
@@ -257,7 +256,7 @@ test("JA publication operations support risk checks, batch review and display co
   assert.match(adminSource, /导出当前结果/);
   assert.match(adminApiSource, /configure-publication/);
   assert.match(adminApiSource, /单次最多审核 100 条内容/);
-  assert.match(adminApiSource, /星光计划仅审核星光计划活动、企业活动和企业内容/);
+  assert.match(adminApiSource, /仅企业活动和企业内容需要审核/);
 });
 test("commercial profile and private resume flows are explicit", async () => {
   const [workspaceSource, platformApiSource, fileApiSource] = await Promise.all([

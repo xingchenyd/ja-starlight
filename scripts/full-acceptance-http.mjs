@@ -96,7 +96,7 @@ await call("/api/catalog?id=" + contentId, null, "GET", undefined, 404);
 await json("/api/admin", "admin", "POST", { id: contentId, decision: "approved" });
 await json("/api/admin", "admin", "POST", { action: "configure", id: contentId, sortOrder: 88, featured: true, category: "技能成长" });
 const configured = await json("/api/catalog?id=" + contentId, null);
-assert.equal(configured.record.payload.sortOrder, 88);
+assert.equal(configured.record.payload.sortOrder, 1);
 assert.equal(configured.record.payload.featured, true);
 passed.push("enterprise job direct publication plus activity/content review and display configuration");
 

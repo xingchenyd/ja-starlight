@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { mergeCatalogRecords, type PublicCatalogRecord } from "../../lib/catalog/public-catalog";
+import { getPublicCatalog } from "../../lib/catalog/client-catalog";
 import { activities, type Activity } from "../data";
 import { catalogFilterUrl, parseCatalogFilters } from "../../lib/catalog/catalog-url";
 import { activityCategories } from "../../lib/challenges/model";
@@ -17,9 +18,8 @@ export default function ActivityCatalog({ initialQuery, initialCategory }: { ini
 
   useEffect(() => {
     let active = true;
-    fetch("/api/catalog?pageSize=100")
-      .then((response) => response.json())
-      .then((data) => active && setCatalog(data.records || []))
+    getPublicCatalog()
+      .then((records) => active && setCatalog(records))
       .catch(() => {})
       .finally(() => active && setLoading(false));
     return () => { active = false; };

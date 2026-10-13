@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { normalizeChallenge, validateChallenge } from "../../../lib/challenges/model";
 import { ensureCoreSchema, notify, requireAdmin } from "../../../db/runtime";
+import { compactPublicationOrderStatement, publicationOrderStatement, publicationRank } from "../../../lib/platform/publication-order";
 
 async function setup() {
   await ensureCoreSchema();
@@ -44,7 +45,7 @@ export async function GET(request: Request) {
     return Response.json({ error: "需要后台登录" }, { status: 401 });
   const [records, logs, registrations, organizations] = await env.DB.batch<Record<string, unknown>>([
     env.DB.prepare(
-      "SELECT id,owner_id AS ownerId,kind,payload,version,updated_at AS updatedAt FROM workspace_records WHERE archived_at IS NULL ORDER BY updated_at DESC LIMIT 200",
+      "SELECT id,owner_id AS ownerId,kind,payload,version,updated_at AS updatedAt FROM workspace_records WHERE archived_at IS NULL AND kind IN ('job','activity','content','blacklist') ORDER BY updated_at DESC",
     ),
     env.DB.prepare(
       "SELECT id,actor_id AS actorId,action,target_type AS targetType,target_id AS targetId,created_at AS createdAt FROM audit_logs ORDER BY created_at DESC LIMIT 200",
@@ -87,6 +88,7 @@ export async function POST(request: Request) {
     sortOrder?: number | string;
     category?: string;
     featured?: boolean;
+    version?: number;
   };
   if (body.action === "verify-organization") {
     if (!body.organizationId || !["approved", "rejected"].includes(String(body.decision)))
@@ -109,6 +111,9 @@ export async function POST(request: Request) {
     ),
   );
   const configuring = body.action === "configure";
+  let requestedRank: number | null;
+  try { requestedRank = publicationRank(body.sortOrder); }
+  catch (error) { return Response.json({ error: (error as Error).message }, { status: 400 }); }
   if (!ids.length || (!configuring && !body.decision))
     return Response.json({ error: "缺少审核信息" }, { status: 400 });
   if (configuring && ids.length !== 1)
@@ -119,7 +124,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "退回时必须填写修改意见" }, { status: 400 });
   const placeholders = ids.map(() => "?").join(",");
   const result = await env.DB.prepare(
-    `SELECT id,owner_id AS ownerId,kind,payload FROM workspace_records WHERE archived_at IS NULL AND id IN (${placeholders})`,
+    `SELECT id,owner_id AS ownerId,kind,payload,version FROM workspace_records WHERE archived_at IS NULL AND id IN (${placeholders})`,
   )
     .bind(...ids)
     .all();
@@ -129,6 +134,7 @@ export async function POST(request: Request) {
     ...row,
     id: String(row.id),
     ownerId: String(row.ownerId || ""),
+    version: Number(row.version),
     kind: String(row.kind),
     current: JSON.parse(String(row.payload)) as Record<string, unknown>,
   }));
@@ -136,12 +142,11 @@ export async function POST(request: Request) {
     (row) =>
       configuring
         ? !["job", "activity", "content"].includes(row.kind)
-        : !["activity", "content"].includes(row.kind) ||
-          (row.kind === "content" && row.ownerId.startsWith("ja:")),
+        : !["activity", "content"].includes(row.kind) || row.ownerId.startsWith("ja:"),
   );
   if (unsupported)
     return Response.json(
-      { error: "星光计划仅审核星光计划活动、企业活动和企业内容" },
+      { error: "仅企业活动和企业内容需要审核；星光计划自发内容直接发布" },
       { status: 400 },
     );
   const alreadyReviewed = !configuring && rows.find(
@@ -154,13 +159,14 @@ export async function POST(request: Request) {
       { status: 409 },
     );
   const reviewedAt = new Date().toISOString();
+  if (body.version !== undefined && rows.some(row => Number(row.version) !== Number(body.version)))
+    return Response.json({ error: "内容已更新，请刷新后再处理" }, { status: 409 });
   const statements = rows.flatMap((row) => {
     const single = rows.length === 1;
     const payload: Record<string, unknown> = {
       ...row.current,
       region: row.current.region || "湖南",
-      sortOrder:
-        Number(single ? body.sortOrder ?? row.current.sortOrder ?? 0 : row.current.sortOrder ?? 0) || 0,
+      sortOrder: Number(row.current.sortOrder || 0),
       featured: single
         ? Boolean(body.featured ?? row.current.featured)
         : Boolean(row.current.featured),
@@ -181,10 +187,13 @@ export async function POST(request: Request) {
       if (row.kind === "job") payload.jobCategory = body.category;
       else payload.category = body.category;
     }
-    return [
+    const json = JSON.stringify(payload);
+    const changes = [
       env.DB.prepare(
-        "UPDATE workspace_records SET payload=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
-      ).bind(JSON.stringify(payload), row.id),
+        "UPDATE workspace_records SET payload=?,version=version+1,published_at=CASE WHEN json_extract(?,'$.reviewStatus')='approved' THEN COALESCE(published_at,CURRENT_TIMESTAMP) ELSE published_at END,updated_at=CURRENT_TIMESTAMP WHERE id=? AND version=? AND archived_at IS NULL",
+      ).bind(json, json, row.id, Number(row.version)),
+      // An optimistic-lock failure aborts the whole batch, including rank shifts.
+      env.DB.prepare("SELECT CASE WHEN EXISTS(SELECT 1 FROM workspace_records WHERE id=? AND version=? AND payload=?) THEN 1 ELSE json('publication-write-conflict') END").bind(row.id, Number(row.version) + 1, json),
       env.DB.prepare(
         "INSERT INTO audit_logs(actor_id,action,target_type,target_id) VALUES(?,?,?,?)",
       ).bind(
@@ -198,8 +207,15 @@ export async function POST(request: Request) {
         row.id,
       ),
     ];
+    if (payload.reviewStatus === "approved") changes.push(publicationOrderStatement(env.DB, row.kind, row.id, single && requestedRank !== null ? requestedRank : Number(row.current.sortOrder) > 0 ? Number(row.current.sortOrder) : null));
+    else changes.push(compactPublicationOrderStatement(env.DB, row.kind));
+    return changes;
   });
-  await env.DB.batch(statements);
+  try { await env.DB.batch(statements); }
+  catch (error) {
+    if (String(error).includes("malformed JSON")) return Response.json({ error: "内容刚刚被其他管理员更新，请刷新后重试" }, { status: 409 });
+    throw error;
+  }
   return Response.json({
     ok: true,
     count: rows.length,
@@ -242,12 +258,14 @@ export async function PUT(request: Request) {
       return Response.json({ error: "只能更新已有诚信记录" }, { status: 403 });
   }
   const now = new Date().toISOString();
-  const needsInternalReview = body.kind === "activity";
-  if (needsInternalReview) {
+  if (body.kind === "activity") {
     body.payload.challenge = normalizeChallenge(body.payload.challenge);
     const errors = validateChallenge(body.payload.challenge);
     if (errors.length) return Response.json({ error: errors.join("；") }, { status: 400 });
   }
+  let requestedRank: number | null;
+  try { requestedRank = publicationRank(body.payload.sortOrder); }
+  catch (error) { return Response.json({ error: (error as Error).message }, { status: 400 }); }
   const payload = {
     ...body.payload,
     id,
@@ -256,44 +274,62 @@ export async function PUT(request: Request) {
       body.kind === "activity"
         ? String(body.payload.place || "湖南")
         : body.payload.place,
-    sortOrder: Number(body.payload.sortOrder || 0) || 0,
+    sortOrder: requestedRank || 0,
     featured: Boolean(body.payload.featured),
-    reviewStatus: needsInternalReview ? "pending" : "approved",
+    reviewStatus: "approved",
     reviewNote:
       body.kind === "blacklist"
         ? "星光计划诚信记录"
-        : needsInternalReview
-          ? "星光计划发起活动，等待内部审核确认"
-          : "星光计划运营后台直接发布",
-    reviewedAt: needsInternalReview ? null : now,
+        : "星光计划运营后台直接发布",
+    reviewedAt: now,
     reviewedBy: user.email,
     submittedAt: now,
     status:
       body.kind === "blacklist"
         ? "已记录"
-        : needsInternalReview
-          ? "待内部审核"
-          : "已发布",
+        : "已发布",
   };
   const json = JSON.stringify(payload);
   if (json.length > 80000)
     return Response.json({ error: "内容过长" }, { status: 400 });
-  await env.DB.prepare(
-    "INSERT INTO workspace_records(id,owner_id,kind,payload,updated_at) VALUES(?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,updated_at=CURRENT_TIMESTAMP",
-  ).bind(id, `ja:${user.id}`, body.kind, json).run();
-  await env.DB.prepare(
+  const statements = [env.DB.prepare(
+    "INSERT INTO workspace_records(id,owner_id,kind,payload,published_at,updated_at) VALUES(?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,version=workspace_records.version+1,updated_at=CURRENT_TIMESTAMP",
+  ).bind(id, `ja:${user.id}`, body.kind, json), env.DB.prepare(
     "INSERT INTO audit_logs(actor_id,action,target_type,target_id) VALUES(?,?,?,?)",
   )
     .bind(
       user.id,
       body.id
         ? "update-integrity"
-        : needsInternalReview
-          ? "submit-ja-activity-review"
-          : "direct-publish",
+        : "direct-publish",
       body.kind,
       id,
-    )
-    .run();
+    )];
+  if (body.kind !== "blacklist") statements.push(publicationOrderStatement(env.DB, body.kind, id, requestedRank));
+  await env.DB.batch(statements);
   return Response.json({ ok: true, id });
+}
+
+export async function DELETE(request: Request) {
+  await setup();
+  const user = await requireAdmin(request);
+  if (!user) return Response.json({ error: "需要后台登录" }, { status: 401 });
+  const body = await request.json() as { id?: string; reason?: string; version?: number };
+  if (!body.id || !body.reason?.trim()) return Response.json({ error: "请填写删除原因" }, { status: 400 });
+  const row = await env.DB.prepare("SELECT id,owner_id AS ownerId,kind,payload,version FROM workspace_records WHERE id=? AND archived_at IS NULL").bind(body.id).first<{ id: string; ownerId: string; kind: string; payload: string; version: number }>();
+  if (!row || !["job", "activity", "content"].includes(row.kind)) return Response.json({ error: "内容不存在或已经删除" }, { status: 404 });
+  if (body.version !== undefined && body.version !== row.version) return Response.json({ error: "内容已更新，请刷新后再删除" }, { status: 409 });
+  const payload = { ...JSON.parse(row.payload), moderationDeleted: true, publicationStatus: "removed", status: "已删除", removalReason: body.reason.trim().slice(0, 1000), removedBy: user.id, removedAt: new Date().toISOString() };
+  const json = JSON.stringify(payload);
+  try { await env.DB.batch([
+    env.DB.prepare("UPDATE workspace_records SET payload=?,archived_at=CURRENT_TIMESTAMP,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=? AND version=? AND archived_at IS NULL").bind(json, row.id, row.version),
+    env.DB.prepare("SELECT CASE WHEN EXISTS(SELECT 1 FROM workspace_records WHERE id=? AND version=? AND payload=?) THEN 1 ELSE json('publication-write-conflict') END").bind(row.id, row.version + 1, json),
+    compactPublicationOrderStatement(env.DB, row.kind),
+    env.DB.prepare("INSERT INTO audit_logs(actor_id,action,target_type,target_id) VALUES(?,'moderation-delete',?,?)").bind(user.id, row.kind, row.id),
+    env.DB.prepare("INSERT INTO notifications(id,user_id,type,title,body,target_url) VALUES(?,?,'moderation-delete','发布内容已被平台删除',?,?)").bind(crypto.randomUUID(), row.ownerId, `${String(payload.title || '发布内容')}：${payload.removalReason}`, "/workspace?role=enterprise"),
+  ]); } catch (error) {
+    if (String(error).includes("malformed JSON")) return Response.json({ error: "内容刚刚发生变更，请刷新后重试" }, { status: 409 });
+    throw error;
+  }
+  return Response.json({ ok: true, id: row.id });
 }

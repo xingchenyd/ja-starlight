@@ -19,6 +19,7 @@ import {
   workspacePath,
 } from "../../lib/ui/workspace-routes";
 import { mergeCatalogRecords } from "../../lib/catalog/public-catalog";
+import { getPublicCatalog } from "../../lib/catalog/client-catalog";
 import { buildPublishReadiness } from "../../lib/services/publish-readiness";
 import {
   activities,
@@ -279,11 +280,11 @@ function PlatformWorkspace({
   useEffect(() => {
     Promise.all([
       api("/api/platform").then((r) => { if (!r.ok) throw new Error("个人资料读取失败，请重新登录或重试"); return r.json(); }),
-      fetch("/api/catalog").then((r) => r.json()),
+      getPublicCatalog().then(records => ({ records })),
     ])
       .then(([mine, publicData]) => {
         setRecords(mine.records || []);
-        setCatalog(publicData.records || []);
+        setCatalog(publicData.records as StoredRecord[]);
         setReady(true);
       })
       .catch(() => { setLoadError("资料读取失败，请重试。尚未加载的数据不能被空白资料覆盖。"); setReady(true); });
@@ -1058,8 +1059,8 @@ function ActivityExperience({
 }) {
   const list = [...custom, ...activities].sort(
     (a, b) =>
-      Number((b as unknown as { sortOrder?: number }).sortOrder || 0) -
-        Number((a as unknown as { sortOrder?: number }).sortOrder || 0) ||
+      Number((a as unknown as { sortOrder?: number }).sortOrder || Number.MAX_SAFE_INTEGER) -
+        Number((b as unknown as { sortOrder?: number }).sortOrder || Number.MAX_SAFE_INTEGER) ||
       String(b.date).localeCompare(String(a.date)),
   );
   const [registrations, setRegistrations] = useState<RegistrationItem[]>([]),
@@ -1440,8 +1441,8 @@ function LearningCenter({
 }) {
   const list = [...custom, ...contents].sort(
     (a, b) =>
-      Number((b as unknown as { sortOrder?: number }).sortOrder || 0) -
-      Number((a as unknown as { sortOrder?: number }).sortOrder || 0),
+      Number((a as unknown as { sortOrder?: number }).sortOrder || Number.MAX_SAFE_INTEGER) -
+      Number((b as unknown as { sortOrder?: number }).sortOrder || Number.MAX_SAFE_INTEGER),
   );
   const [selectedId, setSelectedId] = useState(initialItem || ""),
     [category, setCategory] = useState("全部内容"),
@@ -1752,24 +1753,7 @@ function StudentProfile({
     .split(",")
     .map((x) => x.trim())
     .filter(Boolean);
-  const certified = [
-    {
-      id: "tl-1",
-      date: "2026.09.12",
-      type: "星光计划认证",
-      title: "未来职场开放日 · 智能制造专场",
-      action: "完成企业参访、职业观察访谈和现场记录。",
-      output: "输出《智能制造岗位观察卡》与 3 条岗位兴趣判断。",
-    },
-    {
-      id: "tl-2",
-      date: "2026.09.19",
-      type: "星光计划认证",
-      title: "第一份简历工作坊",
-      action: "将校园经历拆解为任务、行动和结果。",
-      output: "产出一版可投递简历，并获得导师反馈。",
-    },
-  ];
+  const certified: { id: string; date: string; type: string; title: string; action: string; output: string }[] = [];
   const approved = registrations
     .filter((item) => item.status === "approved")
     .map((item, index) => ({
@@ -3390,7 +3374,7 @@ function EnterprisePublisher({
     )
     .sort(
       (a, b) =>
-        Number(b.payload.sortOrder || 0) - Number(a.payload.sortOrder || 0) ||
+        Number(a.payload.sortOrder || Number.MAX_SAFE_INTEGER) - Number(b.payload.sortOrder || Number.MAX_SAFE_INTEGER) ||
         String(b.updatedAt).localeCompare(String(a.updatedAt)),
     );
   const safeRemove = async (record: StoredRecord) => {

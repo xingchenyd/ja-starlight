@@ -15,6 +15,7 @@ const eslintConfig = defineConfig([
     ".worktrees/**",
     ".wrangler/**",
     "dist/**",
+    "work/**",
     "out/**",
     "outputs/**",
     "build/**",

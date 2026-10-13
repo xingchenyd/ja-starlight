@@ -21,6 +21,7 @@ type RecordItem = {
   ownerId?: string;
   kind: string;
   payload: Record<string, unknown>;
+  version: number;
   updatedAt: string;
 };
 type Log = {
@@ -85,16 +86,10 @@ const kindName = (kind: string) =>
           ? "诚信记录"
           : "企业资料";
 const stateName = (state: unknown) =>
-  state === "approved" ? "已通过" : state === "rejected" ? "已退回" : "待审核";
-const orderOf = (item: RecordItem) => Number(item.payload.sortOrder || 0) || 0;
+  state === "approved" ? "已发布" : state === "draft" ? "草稿" : state === "rejected" ? "已退回" : "待审核";
+const orderOf = (item: RecordItem) => Number(item.payload.sortOrder) > 0 ? Number(item.payload.sortOrder) : Number.MAX_SAFE_INTEGER;
 const publisherOf = (item: RecordItem) =>
   String(item.payload.company || item.payload.publisher || "湖南平台");
-const reviewLaneOf = (item: RecordItem) =>
-  item.kind === "activity"
-    ? String(item.ownerId || "").startsWith("ja:")
-      ? "ja-activity"
-      : "enterprise-activity"
-    : "enterprise-content";
 const reviewRiskOf = (item: RecordItem) => {
   const issues: string[] = [];
   const payload = item.payload;
@@ -319,11 +314,12 @@ function JAConsoleWorkspace({
         .filter(
           (r) =>
             reviewable.includes(r.kind) &&
+            !String(r.ownerId || "").startsWith("ja:") &&
             (!r.payload.reviewStatus || r.payload.reviewStatus === "pending"),
         )
         .sort(
           (a, b) =>
-            orderOf(b) - orderOf(a) ||
+            orderOf(a) - orderOf(b) ||
             String(b.updatedAt).localeCompare(String(a.updatedAt)),
         ),
     [records],
@@ -333,27 +329,17 @@ function JAConsoleWorkspace({
       records
         .filter(
           (r) =>
-            ["job", "activity", "content"].includes(r.kind) &&
-            r.payload.reviewStatus === "approved",
+            ["job", "activity", "content"].includes(r.kind),
         )
         .sort(
           (a, b) =>
-            orderOf(b) - orderOf(a) ||
+            a.kind.localeCompare(b.kind) || orderOf(a) - orderOf(b) ||
             String(b.updatedAt).localeCompare(String(a.updatedAt)),
         ),
     [records],
   );
   const reviewQueues = useMemo(
     () => [
-      {
-        key: "ja-activity",
-        title: "星光计划发起的活动",
-        desc: "由星光计划运营后台创建的活动，内部确认后再进入学生端报名与展示。",
-        items: pending.filter(
-          (r) =>
-            r.kind === "activity" && String(r.ownerId || "").startsWith("ja:"),
-        ),
-      },
       {
         key: "enterprise-activity",
         title: "企业发布的活动",
@@ -391,6 +377,7 @@ function JAConsoleWorkspace({
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         id: selected.id,
+        version: selected.version,
         decision,
         reason: reason.trim(),
         ...settings,
@@ -447,7 +434,7 @@ function JAConsoleWorkspace({
     const response = await fetch("/api/admin", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id: selected.id, action: "configure", ...settings }),
+      body: JSON.stringify({ id: selected.id, version: selected.version, action: "configure", ...settings }),
     });
     const data = await response.json();
     if (!response.ok) {
@@ -456,6 +443,16 @@ function JAConsoleWorkspace({
     }
     setNotice("展示分类、排序和推荐位已更新");
     setSelectedId("");
+    await load();
+  };
+  const removePublication = async (removalReason: string) => {
+    if (!selected) return;
+    const response = await fetch("/api/admin", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: selected.id, version: selected.version, reason: removalReason }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "删除失败，请稍后重试");
+    setSelectedId("");
+    setReason("");
+    setNotice("内容已删除，公开页面已移除，并已通知发布方");
     await load();
   };
   const title =
@@ -470,7 +467,7 @@ function JAConsoleWorkspace({
         : tab === "publish"
           ? "星光计划内容发布"
           : tab === "records"
-            ? "平台内容排序"
+            ? "平台内容管理"
             : tab === "feedback"
               ? "互动管理"
             : tab === "integrity"
@@ -482,15 +479,15 @@ function JAConsoleWorkspace({
     tab === "pulse"
       ? "用真实发布、报名和审核数据说明 Star Plan 的平台活性。"
       : tab === "review"
-        ? "只审核三类需要公开前确认的内容：星光计划发起活动、企业发布活动、企业发布内容。"
+        ? "审核企业发布的活动和内容；星光计划后台自发内容直接发布。"
         : tab === "registrations"
           ? "只处理星光计划发起活动的学生报名；企业活动报名仍由对应企业处理。"
         : tab === "organizations"
           ? "核验企业主体名称和统一社会信用代码，通过后企业才能正式发布。"
         : tab === "publish"
-          ? "由星光计划创建活动、文章或视频；星光计划活动会进入内部审核队列。"
+          ? "创建并直接发布活动、文章或视频，发布后即可在公开目录展示。"
           : tab === "records"
-            ? "集中查看已提交和已发布内容的状态、分类、推荐和排序。"
+            ? "管理企业和平台发布内容，可设置排名或删除；同栏目排名从1开始，重复名次自动顺延。"
             : tab === "feedback"
               ? "集中回应学生对成长内容的提问，并处理不适合公开的评论。"
             : tab === "integrity"
@@ -613,15 +610,7 @@ function JAConsoleWorkspace({
                 />
               )}
               {tab === "records" && (
-                <div className="admin-records records-view">
-                  {publicRecords.map((r) => (
-                    <RecordCard
-                      key={r.id}
-                      item={r}
-                      onOpen={() => setSelectedId(r.id)}
-                    />
-                  ))}
-                </div>
+                <PublicationManagement items={publicRecords} onOpen={setSelectedId} />
               )}
               {tab === "feedback" && (
                 <JAFeedbackDesk onNotice={setNotice} />
@@ -651,6 +640,7 @@ function JAConsoleWorkspace({
           setReason={setReason}
           decide={decide}
           configure={configure}
+          remove={removePublication}
           close={() => {
             setSelectedId("");
             setReason("");
@@ -774,7 +764,7 @@ function ReviewOperationsDesk({
       <section className="review-operations-head">
         <div>
           <small>CONTENT GOVERNANCE</small>
-          <h2>三类公开内容，分区审核</h2>
+          <h2>企业活动与内容，分区审核</h2>
           <p>先核验事实与报名规则，再处理展示分类、推荐位和排序。</p>
         </div>
         <div className="review-operations-stats">
@@ -834,7 +824,7 @@ function ReviewOperationsDesk({
       ) : loading ? (
         <div className="admin-empty">正在读取审核队列…</div>
       ) : allItems.length === 0 ? (
-        <div className="admin-empty">当前三条审核队列均已处理完成。</div>
+        <div className="admin-empty">当前企业审核队列已处理完成。</div>
       ) : totalVisible === 0 ? (
         <div className="admin-empty">没有符合当前筛选条件的待审核内容。</div>
       ) : (
@@ -878,7 +868,7 @@ function RecordCard({
       <div>
         <small>
           {publisherOf(item)} · {kindName(item.kind)}{" "}
-          · 排序 {orderOf(item)}
+          · {orderOf(item) === Number.MAX_SAFE_INTEGER ? "公开后自动分配排名" : `排名 ${orderOf(item)}`}
           {item.payload.featured ? " · 首页推荐" : ""}
         </small>
         <h2>{String(item.payload.title || "未命名内容")}</h2>
@@ -896,7 +886,7 @@ function RecordCard({
         )}
       </div>
       <button className="inspect" onClick={onOpen}>
-        查看详情
+        查看 / 管理
       </button>
     </article>
   );
@@ -1162,7 +1152,7 @@ function AdminPulse({
         <Metric
           label="待审核内容"
           value={String(pending)}
-          note="三条审核队列合计"
+          note="企业活动与内容审核合计"
         />
         <Metric
           label="今日处理"
@@ -1207,7 +1197,7 @@ function AdminPulse({
       </section>
       <section className="review-duty-strip">
         {[
-          ["星光计划发起的活动", "星光计划内部确认后公开"],
+          ["星光计划发布的活动和内容", "后台直接发布，无需重复审核"],
           ["企业发布的活动", "星光计划审核报名字段和活动信息"],
           ["企业发布的内容", "星光计划审核文章、视频和企业曝光"],
         ].map(([name, text]) => (
@@ -1563,7 +1553,7 @@ function AdminPublisher({
       mediaType: "article",
       cover: "/media/ja-career-fair.jpg",
       coverType: "image",
-      sortOrder: "0",
+      sortOrder: "",
       featured: false,
       agenda: "09:00-09:30 签到\n09:30-11:00 主题体验\n11:00-12:00 复盘输出",
     });
@@ -1672,11 +1662,7 @@ function AdminPublisher({
       return;
     }
     setForm((v) => ({ ...v, title: "", summary: "" }));
-    await onPublished(
-      kind === "activity"
-        ? "星光计划活动已进入内部审核队列，通过后学生端可见"
-        : "星光计划内容已直接发布，学生端刷新后即可看到",
-    );
+    await onPublished("星光计划内容已直接发布，公开目录与学生端已同步");
     } catch { setPublishError("网络异常，未能确认发布结果。请先刷新发布记录，避免重复提交。"); }
     finally { setSaving(false); }
   };
@@ -1759,12 +1745,14 @@ function AdminPublisher({
                 </select>
               </label>
               <label>
-                排序数字
+                展示排名（留空自动排在末尾）
                 <input
                   type="number"
+                  min={1}
+                  step={1}
                   value={form.sortOrder}
                   onChange={(e) => change("sortOrder", e.target.value)}
-                  placeholder="数字越大越靠前"
+                  placeholder="从1开始，数字越小越靠前"
                 />
               </label>
               <label className="switch-line">
@@ -1940,9 +1928,7 @@ function AdminPublisher({
       >
         {saving
           ? "正在发布…"
-          : kind === "activity"
-            ? "提交星光计划内部审核 →"
-            : "立即发布到学生端 →"}
+          : "立即发布 →"}
       </button>
     </section>
   );
@@ -2262,6 +2248,7 @@ function ReviewDrawer({
   setReason,
   decide,
   configure,
+  remove,
   close,
 }: {
   selected: RecordItem;
@@ -2277,12 +2264,17 @@ function ReviewDrawer({
     featured: boolean;
   }) => void;
   close: () => void;
+  remove: (reason: string) => Promise<void>;
 }) {
   useDialogEscape(close);
   const risk = reviewRiskOf(selected);
-  const isJaActivity = reviewLaneOf(selected) === "ja-activity";
+  const isPlatformPublication = String(selected.ownerId || "").startsWith("ja:");
+  const [deletionReason, setDeletionReason] = useState("");
+  const [removalConfirmed, setRemovalConfirmed] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deletionError, setDeletionError] = useState("");
   const [sortOrder, setSortOrder] = useState(
-      String(selected.payload.sortOrder || 0),
+      String(selected.payload.sortOrder || ""),
     ),
     [category, setCategory] = useState(
       String(
@@ -2304,13 +2296,13 @@ function ReviewDrawer({
       <button className="drawer-close" aria-label="关闭审核详情" onClick={close}>
         ×
       </button>
-      <small>{kindName(selected.kind)}审核详情</small>
+      <small>{kindName(selected.kind)}内容管理</small>
       <h1>{String(selected.payload.title || "未命名")}</h1>
       <div className="review-drawer-summary">
         <span className={`review-risk ${risk.level}`}>
           {risk.level === "high" ? "高风险" : risk.level === "medium" ? "需核验" : "信息较完整"}
         </span>
-        <span>{isJaActivity ? "星光计划内部审核" : "企业公开内容审核"}</span>
+        <span>{isPlatformPublication ? "星光计划直接发布" : "企业发布内容管理"}</span>
         <span>信息完整度 {risk.score}%</span>
       </div>
       <div className="review-meta">
@@ -2388,9 +2380,11 @@ function ReviewDrawer({
           </select>
         </label>
         <label>
-          排序数字
+          展示排名（从1开始）
           <input
             type="number"
+            min={1}
+            step={1}
             value={sortOrder}
             onChange={(e) => setSortOrder(e.target.value)}
           />
@@ -2404,6 +2398,7 @@ function ReviewDrawer({
           <span>首页推荐</span>
         </label>
       </div>
+      <p>数字越小越靠前；重复排名会将原项目及后续项目顺延。各栏目独立排序，首页推荐不改变栏目名次。</p>
       <h3>简介</h3>
       <p>{String(selected.payload.summary || "无")}</p>
       {blocks.length > 0 && (
@@ -2474,7 +2469,7 @@ function ReviewDrawer({
           </ul>
         </>
       )}
-      <label>
+      {!isPlatformPublication && (!selected.payload.reviewStatus || selected.payload.reviewStatus === "pending") && <label>
         星光计划审核意见
         <textarea
           rows={4}
@@ -2482,7 +2477,7 @@ function ReviewDrawer({
           onChange={(e) => setReason(e.target.value)}
           placeholder="通过时可填写确认意见；退回时必须说明修改内容"
         />
-      </label>
+      </label>}
       {!selected.payload.reviewStatus ||
       selected.payload.reviewStatus === "pending" ? (
         <div className="drawer-actions">
@@ -2495,7 +2490,7 @@ function ReviewDrawer({
               })
             }
           >
-            {isJaActivity ? "退回星光计划发布人员" : "退回企业修改"}
+            退回企业修改
           </button>
           <button
             className="approve"
@@ -2533,6 +2528,34 @@ function ReviewDrawer({
           )}
         </>
       )}
+      <section className="publication-removal">
+        <h3>删除发布内容</h3>
+        <p>删除后将从官网和学生端移除，企业无法自行恢复；已有报名、比赛成果与审计记录保留。</p>
+        <label>删除原因<textarea rows={3} value={deletionReason} onChange={event => setDeletionReason(event.target.value)} maxLength={1000} placeholder="原因会通知发布方" /></label>
+        <label className="switch-line"><input type="checkbox" checked={removalConfirmed} disabled={deleting} onChange={event => setRemovalConfirmed(event.target.checked)} /><span>确认从官网和学生端移除此内容，并通知发布方</span></label>
+        {deletionError && <p role="alert">{deletionError}</p>}
+        <button className="danger-text-btn" disabled={deleting || !deletionReason.trim() || !removalConfirmed} onClick={async () => {
+          setDeleting(true); setDeletionError("");
+          try { await remove(deletionReason.trim()); }
+          catch (error) { setDeletionError(error instanceof Error ? error.message : "删除失败"); }
+          finally { setDeleting(false); }
+        }}>{deleting ? "正在删除…" : "删除此内容"}</button>
+      </section>
     </div>
   );
+}
+
+function PublicationManagement({ items, onOpen }: { items: RecordItem[]; onOpen: (id: string) => void }) {
+  const [kind, setKind] = useState("all");
+  const [state, setState] = useState("all");
+  const [query, setQuery] = useState("");
+  const visible = items.filter(item => (kind === "all" || kind === item.kind) && (state === "all" || state === item.payload.reviewStatus) && `${item.payload.title || ""} ${publisherOf(item)}`.toLowerCase().includes(query.trim().toLowerCase()));
+  return <section>
+    <div className="review-filterbar">
+      <label>搜索<input value={query} onChange={event => setQuery(event.target.value)} placeholder="标题或发布方" /></label>
+      <label>栏目<select value={kind} onChange={event => setKind(event.target.value)}><option value="all">全部栏目</option><option value="job">实习项目机会</option><option value="activity">成长活动</option><option value="content">成长内容</option></select></label>
+      <label>状态<select value={state} onChange={event => setState(event.target.value)}><option value="all">全部状态</option><option value="approved">已发布</option><option value="pending">待审核</option><option value="rejected">已退回</option><option value="draft">草稿</option></select></label>
+    </div>
+    <div className="admin-records records-view">{visible.map(item => <RecordCard key={item.id} item={item} onOpen={() => onOpen(item.id)} />)}{!visible.length && <p className="admin-empty">暂无符合条件的发布内容。</p>}</div>
+  </section>;
 }

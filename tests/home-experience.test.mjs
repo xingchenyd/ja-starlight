@@ -20,7 +20,8 @@ test("homepage uses content-led cinematic storytelling", async () => {
   assert.match(journey, /IntersectionObserver/);
   assert.match(journey, /公开成长档案/);
   assert.match(impact, /7500/);
-  assert.match(impact, /成长者故事/);
+  assert.match(impact, /成长的更多可能/);
+  assert.doesNotMatch(impact, /张晨|湖南大学/);
   assert.match(styles, /prefers-reduced-motion/);
   assert.match(styles, /scroll-snap-type/);
 });

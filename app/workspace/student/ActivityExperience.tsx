@@ -37,7 +37,7 @@ export default function ActivityExperience({
   flash: (message: string) => void;
 }) {
   const reducedMotion = useReducedMotion();
-  const list = useMemo(() => [...activities].filter((item) => item.status !== "已下线").sort((a, b) => Number(b.sortOrder || 0) - Number(a.sortOrder || 0) || String(b.date).localeCompare(String(a.date))), [activities]);
+  const list = useMemo(() => [...activities].filter((item) => item.status !== "已下线").sort((a, b) => Number(a.sortOrder || Number.MAX_SAFE_INTEGER) - Number(b.sortOrder || Number.MAX_SAFE_INTEGER) || String(b.date).localeCompare(String(a.date))), [activities]);
   const [registrations, setRegistrations] = useState<RegistrationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeIndex, setActiveIndex] = useState(0);

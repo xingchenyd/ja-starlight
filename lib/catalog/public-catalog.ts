@@ -30,9 +30,7 @@ export function isPublicNow(
 
 export function sortPublicRecords<T extends PublicCatalogRecord>(records: T[]) {
   return [...records].sort((a, b) => {
-    const featured = Number(Boolean(b.payload.featured)) - Number(Boolean(a.payload.featured));
-    if (featured) return featured;
-    const order = Number(b.payload.sortOrder || 0) - Number(a.payload.sortOrder || 0);
+    const order = (Number(a.payload.sortOrder) > 0 ? Number(a.payload.sortOrder) : Number.MAX_SAFE_INTEGER) - (Number(b.payload.sortOrder) > 0 ? Number(b.payload.sortOrder) : Number.MAX_SAFE_INTEGER);
     if (order) return order;
     return String(b.payload.publishedAt || b.payload.publishAt || b.payload.date || "")
       .localeCompare(String(a.payload.publishedAt || a.payload.publishAt || a.payload.date || ""));
@@ -41,14 +39,14 @@ export function sortPublicRecords<T extends PublicCatalogRecord>(records: T[]) {
 
 export function mergeCatalogRecords<T extends { id: string }>(
   live: PublicCatalogRecord[],
-  fallback: T[],
+  _fallback: T[],
   kind: string,
   now = new Date(),
 ) {
   const candidates = sortPublicRecords(
     live.filter((record) => record.kind === kind && isPublicNow(record.payload, now)),
   ).map((record) => ({ ...record.payload, id: record.id }) as T);
-  if (!candidates.length) return fallback;
+  if (!candidates.length) return [];
 
   const seen = new Set<string>();
   return candidates.filter((item) => {

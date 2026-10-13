@@ -24,7 +24,7 @@ export default function LearningCenter({ items, initialItem, favorites, onNaviga
   flash: (message: string) => void;
 }) {
   const [category, setCategory] = useState(initialCategory);
-  const list = useMemo(() => [...items].filter((item) => (item as ContentItem & { status?: string }).status !== "已下线").sort((a, b) => Number(b.sortOrder || 0) - Number(a.sortOrder || 0)), [items]);
+  const list = useMemo(() => [...items].filter((item) => (item as ContentItem & { status?: string }).status !== "已下线").sort((a, b) => Number(a.sortOrder || Number.MAX_SAFE_INTEGER) - Number(b.sortOrder || Number.MAX_SAFE_INTEGER)), [items]);
   const selected = list.find((item) => item.id === initialItem) || null;
   const shown = list.filter((item) => category === "全部内容" || item.category === category);
 

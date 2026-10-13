@@ -2,7 +2,7 @@ import { hashOpaqueToken, hashPassword, validatePassword } from "./crypto";
 
 type Statement = { bind: (...values: unknown[]) => Statement; first: <T>() => Promise<T | null>; run: () => Promise<unknown> };
 type Database = { prepare: (sql: string) => Statement };
-type SeedConfig = { AUTH_PEPPER?: string; AUTH_SEED_STUDENT_PASSWORD?: string; AUTH_SEED_ENTERPRISE_PASSWORD?: string; AUTH_SEED_ADMIN_KEY?: string };
+type SeedConfig = { AUTH_PEPPER?: string; AUTH_ENABLE_SAMPLE_ACCOUNTS?: string; AUTH_SEED_STUDENT_PASSWORD?: string; AUTH_SEED_ENTERPRISE_PASSWORD?: string; AUTH_SEED_ADMIN_KEY?: string };
 
 export async function ensureAuthSeeds(config: SeedConfig, db: Database) {
   const pepper = String(config.AUTH_PEPPER || "");
@@ -11,7 +11,7 @@ export async function ensureAuthSeeds(config: SeedConfig, db: Database) {
     { email: "student@starlight-hunan.cn", role: "student", name: "张晨", password: config.AUTH_SEED_STUDENT_PASSWORD },
     { email: "enterprise@starlight-hunan.cn", role: "enterprise", name: "长沙星联数字科技有限公司", password: config.AUTH_SEED_ENTERPRISE_PASSWORD },
   ];
-  for (const account of accounts) {
+  for (const account of config.AUTH_ENABLE_SAMPLE_ACCOUNTS === "true" ? accounts : []) {
     if (!account.password || !validatePassword(account.password).valid) continue;
     const existing = await db.prepare("SELECT id FROM users WHERE lower(email)=?").bind(account.email).first<{ id: string }>();
     if (!existing) {

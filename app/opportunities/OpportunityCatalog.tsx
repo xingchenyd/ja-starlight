@@ -2,6 +2,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { jobs, type Job } from "../data";
+import { getPublicCatalog } from "../../lib/catalog/client-catalog";
 import { catalogFilterUrl, parseCatalogFilters } from "../../lib/catalog/catalog-url";
 
 type RecordItem = { id: string; kind: string; payload: Record<string, unknown> };
@@ -50,11 +51,10 @@ export default function OpportunityCatalog({ initialQuery, initialCategory }: { 
     [loading, setLoading] = useState(true);
   useEffect(() => {
     let active = true;
-    fetch("/api/catalog")
-      .then((response) => response.json())
-      .then((data) => {
+    getPublicCatalog()
+      .then((records) => {
         if (active)
-          setCatalog((data.records || []).filter((record: RecordItem) => record.kind === "job").map(normalize));
+          setCatalog(records.filter((record: RecordItem) => record.kind === "job").map(normalize));
       })
       .catch(() => {})
       .finally(() => active && setLoading(false));

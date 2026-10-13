@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 const dir=await mkdtemp(join(tmpdir(),"star-plan-challenge-audit-"));
 const base="http://127.0.0.1:3014";
-await writeFile(join(dir,"runtime.json"),JSON.stringify({AUTH_PEPPER:randomUUID()+randomUUID(),AUTH_SEED_STUDENT_PASSWORD:"StudentAudit2026!",AUTH_SEED_ENTERPRISE_PASSWORD:"EnterpriseAudit2026!",AUTH_SEED_ADMIN_KEY:"STARLIGHT-LocalAuditAdminKey-20260921-Only",AUTH_TRUSTED_ORIGINS:base,MAIL_PROVIDER:"disabled"}));
+await writeFile(join(dir,"runtime.json"),JSON.stringify({AUTH_PEPPER:randomUUID()+randomUUID(),AUTH_ENABLE_SAMPLE_ACCOUNTS:"true",AUTH_SEED_STUDENT_PASSWORD:"StudentAudit2026!",AUTH_SEED_ENTERPRISE_PASSWORD:"EnterpriseAudit2026!",AUTH_SEED_ADMIN_KEY:"STARLIGHT-LocalAuditAdminKey-20260921-Only",AUTH_TRUSTED_ORIGINS:base,MAIL_PROVIDER:"disabled"}));
 await writeFile(join(dir,"restore-complete.json"),"{}");
 console.log("Disposable acceptance directory:",dir);
 const start=()=>{
@@ -23,7 +23,7 @@ async function ready(){
 }
 try {
   await ready();
-  for(const script of ["full-acceptance-http.mjs","challenge-acceptance-http.mjs"]){
+  for(const script of ["launch-acceptance-http.mjs","full-acceptance-http.mjs","challenge-acceptance-http.mjs"]){
     const code=await new Promise((resolve,reject)=>{const p=spawn(process.execPath,[`scripts/${script}`,base,"--disposable-database"],{stdio:"inherit"});p.on("error",reject);p.on("exit",resolve);});
     if(code!==0)throw new Error(`${script} failed`);
   }

@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
 "use client";
 import { useEffect, useState } from "react";
 import { activities, contents, jobs } from "./data";
@@ -87,14 +86,9 @@ export function HomeImpactMetrics() {
           <div><dt>{counts.activities}</dt><dd>成长活动</dd></div>
           <div><dt>{counts.contents}</dt><dd>成长内容</dd></div>
         </dl>
-        <div className="home-partners" aria-label="平台示例合作企业">
+        <div className="home-partners">
           <span>与青年共同成长</span>
-          <div>
-            <img src="/media/logos/lenovo.svg" alt="Lenovo" />
-            <img src="/media/logos/intel.svg" alt="Intel" />
-            <img src="/media/logos/dell.svg" alt="Dell Technologies" />
-            <img src="/media/logos/schneider.svg" alt="Schneider Electric" />
-          </div>
+          <a href="/auth/enterprise">企业入驻 →</a>
         </div>
       </div>
     </section>

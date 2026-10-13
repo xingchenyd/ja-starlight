@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { getActor, writeAudit } from "../../../db/runtime";
+import { ensureCoreSchema, getActor, writeAudit } from "../../../db/runtime";
 
 const documents = ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
 const media = ["image/jpeg", "image/png", "image/webp", "video/mp4", "video/webm"];
@@ -24,6 +24,7 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
+  await ensureCoreSchema();
   const url = new URL(request.url), key = safeKey(String(url.searchParams.get("key") || ""));
   if (!key) {
     const actor = await getActor(request);
@@ -32,6 +33,8 @@ export async function GET(request: Request) {
     const rows = await env.DB.prepare("SELECT id,storage_key AS storageKey,original_name AS name,content_type AS type,size,purpose,visibility,status,created_at AS createdAt FROM media_assets WHERE owner_id=? AND archived_at IS NULL ORDER BY created_at DESC LIMIT ?").bind(actor.id, limit).all();
     return Response.json({ assets: rows.results.map((row) => ({ ...row, url: row.visibility === "public" ? `/api/files?key=${encodeURIComponent(String(row.storageKey))}` : null })) });
   }
+  const asset = await env.DB.prepare("SELECT id FROM media_assets WHERE storage_key=? AND archived_at IS NULL AND status='ready'").bind(key).first();
+  if (!asset) return new Response("Not found", { status: 404 });
   const object = await env.FILES.get(key);
   if (!object) return new Response("Not found", { status: 404 });
   const visibility = object.customMetadata?.visibility;

@@ -3,4 +3,5 @@ export function configureRuntime(config, target = process.env) {
   if (typeof config.AUTH_PEPPER !== 'string' || config.AUTH_PEPPER.length < 24) throw new Error('Original AUTH_PEPPER is required');
   for (const key of allowed) if (typeof config[key] === 'string') target[key] = config[key];
   target.STARLIGHT_TEST_MODE = 'false';
+  target.AUTH_ENABLE_SAMPLE_ACCOUNTS = config.AUTH_ENABLE_SAMPLE_ACCOUNTS === 'true' ? 'true' : 'false';
 }

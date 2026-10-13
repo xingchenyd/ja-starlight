@@ -75,7 +75,8 @@ for(const role of ["captain","member"]){
 await post("enterprise",{action:"review",teamId:team.id,version:(await own()).version,decision:"completed",note:"重复终审"},409);
 passed.push("revision history, final evaluation and private certified results for every member");
 const ja=await data("/api/admin","admin","PUT",{kind:"activity",payload:{...payload,title:"星光计划自办循环经济挑战",challenge:{...challenge,teamMin:1}}});
-await data("/api/admin","admin","POST",{id:ja.id,decision:"approved"});
+assert.equal((await data(`/api/catalog?id=${ja.id}`,null)).record.payload.reviewStatus,"approved");
+await call("/api/admin","admin","POST",{id:ja.id,decision:"approved"},400);
 const jr=await data("/api/registrations","outsider","POST",{activityId:ja.id,activityTitle:"自办挑战",answers:{name:"独立账号参赛者"}});
 await data("/api/registrations","admin","PATCH",{scope:"ja",registrationId:jr.id,decision:"approved"});
 await post("outsider",{action:"create",activityId:ja.id,name:"自办测试团队"});

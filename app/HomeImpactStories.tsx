@@ -8,21 +8,21 @@ import { useReducedMotion } from "./components/motion";
 const stories = [
   {
     image: "/media/ja-official-market.jpg",
-    role: "学生成长故事 · 湖南大学",
-    title: "从一次职业市集，到一份可以呈现的用户研究成果。",
-    copy: "张晨把活动中的访谈、观察和复盘写进成长时间轴，并生成公开档案随简历一起投递。",
+    role: "成长路径 · 实践积累",
+    title: "把一次探索，沉淀为可以呈现的成果。",
+    copy: "记录自己的访谈、观察和复盘，将成长档案与简历一起分享给企业。",
   },
   {
     image: "/media/ja-official-student-company.jpg",
-    role: "学生公司 · 长沙地区",
+    role: "成长路径 · 团队共创",
     title: "真实用户的反馈，让课堂里的想法第一次成为产品。",
-    copy: "团队在展销现场完成定价、表达、销售与复盘，把过程和成果沉淀为认证经历。",
+    copy: "通过团队项目实践定价、表达、用户沟通与复盘，记录过程与成果。",
   },
   {
     image: "/media/ja-official-planning.jpg",
-    role: "职业探索 · 企业导师",
+    role: "成长路径 · 职业探索",
     title: "比岗位名称更重要的，是理解一份工作真正如何发生。",
-    copy: "学生通过导师对话和任务实践建立行业认知，再回到平台继续寻找适合自己的机会。",
+    copy: "通过导师对话和任务实践建立行业认知，寻找适合自己的下一步。",
   },
 ];
 
@@ -49,7 +49,7 @@ export default function HomeImpactStories() {
         <div className="home-voices-head">
           <div>
             <p className="eyebrow">GROWTH IN ACTION</p>
-            <h2 id="home-voices-title">成长者故事</h2>
+            <h2 id="home-voices-title">成长的更多可能</h2>
           </div>
           <div className="home-voices-controls">
             {stories.map((story, index) => (

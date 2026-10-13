@@ -1,4 +1,4 @@
-import { activities, contents, jobs } from "../../app/data.ts";
+import { activities, contents, jobs } from "./sample-data.ts";
 
 export type FormalRecord = { id: string; kind: "job" | "activity" | "content"; owner: "enterprise" | "starlight"; payload: Record<string, unknown> };
 

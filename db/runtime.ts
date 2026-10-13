@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
+import { ensureLaunchMigration } from "../lib/platform/launch-migration";
 import { getAccountActor, getAdminActor, type AuthConfig, type AuthDatabase } from "../lib/auth/accounts";
-import { ensureFormalPlatformData } from "../lib/platform/ensure-formal-data";
 
 export type PlatformRole = "student" | "enterprise" | "admin";
 export type PlatformActor = { id: string; email: string; name: string; role: PlatformRole; testMode: boolean };
@@ -65,7 +65,7 @@ export async function ensureCoreSchema() {
   if (!names.has("archived_at")) alters.push(env.DB.prepare("ALTER TABLE workspace_records ADD COLUMN archived_at TEXT"));
   if (!names.has("published_at")) alters.push(env.DB.prepare("ALTER TABLE workspace_records ADD COLUMN published_at TEXT"));
   if (alters.length) await env.DB.batch(alters);
-  await ensureFormalPlatformData(env.DB);
+  await ensureLaunchMigration(env.DB);
   const brandMigration = await env.DB.prepare("SELECT id FROM system_migrations WHERE id='brand-starlight-20260831'").first();
   if (!brandMigration) {
     await env.DB.batch([

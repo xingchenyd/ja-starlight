@@ -46,6 +46,7 @@ export default function HomeSections() {
         <a href="/opportunities">查看全部 →</a>
       </div>
       <div className="home-job-list" aria-label="最新实习项目机会">
+        {!publicJobs.length && <p className="admin-empty">暂无公开机会，欢迎企业入驻发布。</p>}
         {publicJobs.map((job) => (
           <article key={job.id}>
             <div className="home-company-mark" style={{ background: job.logoUrl ? "white" : job.color }}>
@@ -67,6 +68,7 @@ export default function HomeSections() {
         <a href="/activities">查看全部 →</a>
       </div>
       <div className="home-card-row" aria-label="最新成长活动">
+        {!publicActivities.length && <p className="admin-empty">暂无公开活动，发布后将在这里展示。</p>}
         {publicActivities.map((activity) => (
           <a href={`/activities/${encodeURIComponent(activity.id)}`} key={activity.id}>
             <img src={activity.cover} alt={activity.title} loading="lazy" />
@@ -82,6 +84,7 @@ export default function HomeSections() {
         <a href="/content">查看全部 →</a>
       </div>
       <div className="home-card-row content-row" aria-label="最新成长内容">
+        {!publicContents.length && <p className="admin-empty">暂无公开成长内容。</p>}
         {publicContents.map((content) => (
           <a href={`/content/${encodeURIComponent(content.id)}`} key={content.id}>
             <img src={content.cover} alt={content.title} loading="lazy" />

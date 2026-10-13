@@ -45,5 +45,5 @@ test("live records replace fallback examples and duplicates are removed", () => 
     catalog.mergeCatalogRecords(live, fallback, "job").map((item) => item.id),
     ["live-1"],
   );
-  assert.deepEqual(catalog.mergeCatalogRecords([], fallback, "job"), fallback);
+  assert.deepEqual(catalog.mergeCatalogRecords([], fallback, "job"), []);
 });

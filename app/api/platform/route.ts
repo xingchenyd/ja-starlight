@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { normalizeChallenge, validateChallenge } from "../../../lib/challenges/model";
 import { ensureChallengeSchema } from "../../../db/challenges";
 import { ensureCoreSchema, getActor, requireVerifiedEnterprise, writeAudit } from "../../../db/runtime";
+import { compactPublicationOrderStatement, publicationOrderStatement } from "../../../lib/platform/publication-order";
 function clean(value: unknown) {
   const text = JSON.stringify(value);
   if (text.length > 80000) throw new Error("内容过长");
@@ -175,6 +176,8 @@ export async function POST(request: Request) {
     .first<{ ownerId: string; version: number; payload: string; kind: string }>();
   if (existing && existing.ownerId !== owner)
     return Response.json({ error: "无权修改该记录" }, { status: 403 });
+  if (existing && JSON.parse(existing.payload).moderationDeleted)
+    return Response.json({ error: "该内容已被平台删除，不能由企业自行恢复。请联系项目团队。" }, { status: 403 });
   if (existing && existing.kind !== body.kind)
     return Response.json({ error: "不能将已有记录改成另一种内容类型" }, { status: 409 });
   if (existing && body.version && Number(body.version) !== Number(existing.version))
@@ -188,11 +191,30 @@ export async function POST(request: Request) {
       return Response.json({ error: "已有参赛团队，不能直接更改比赛规则。请联系项目团队确认变更并通知参赛者。" }, { status: 409 });
   }
 
-  const write = await env.DB.prepare(
+  // Placement and recommendations are controlled by operations, not supplied by publishers.
+  if (isPublicRecord) {
+    const previous = existing ? JSON.parse(existing.payload) : {};
+    payload.sortOrder = Number(previous.sortOrder) > 0 ? Number(previous.sortOrder) : 0;
+    payload.featured = Boolean(previous.featured);
+  }
+  const json = clean(payload);
+  const writeStatement = env.DB.prepare(
     "INSERT INTO workspace_records(id,owner_id,kind,payload,version,archived_at,published_at,updated_at) VALUES(?,?,?,?,1,NULL,CASE WHEN ?='approved' THEN CURRENT_TIMESTAMP ELSE NULL END,CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,version=workspace_records.version+1,archived_at=NULL,published_at=CASE WHEN json_extract(excluded.payload,'$.reviewStatus')='approved' THEN COALESCE(workspace_records.published_at,CURRENT_TIMESTAMP) ELSE workspace_records.published_at END,updated_at=CURRENT_TIMESTAMP WHERE owner_id=excluded.owner_id AND workspace_records.version=?" + (challengeRulesChanging ? " AND NOT EXISTS(SELECT 1 FROM challenge_teams WHERE activity_id=workspace_records.id)" : ""),
   )
-    .bind(id, owner, body.kind, clean(payload), String(payload.reviewStatus || ""), existing?.version || 0)
-    .run();
+    .bind(id, owner, body.kind, json, String(payload.reviewStatus || ""), existing?.version || 0);
+  let write;
+  try {
+    const statements = [writeStatement,
+      env.DB.prepare("SELECT CASE WHEN EXISTS(SELECT 1 FROM workspace_records WHERE id=? AND version=? AND payload=?) THEN 1 ELSE json('publication-write-conflict') END").bind(id, existing ? existing.version + 1 : 1, json),
+    ];
+    if (isPublicRecord) statements.push(payload.reviewStatus === "approved"
+      ? publicationOrderStatement(env.DB, body.kind, id, Number(payload.sortOrder) > 0 ? Number(payload.sortOrder) : null)
+      : compactPublicationOrderStatement(env.DB, body.kind));
+    [write] = await env.DB.batch(statements);
+  } catch (error) {
+    if (String(error).includes("malformed JSON")) return Response.json({ error: "该内容刚刚被其他窗口更新，请刷新后再保存" }, { status: 409 });
+    throw error;
+  }
   if (!write.meta.changes) return Response.json({ error: "该内容刚刚被其他窗口更新，请刷新后再保存" }, { status: 409 });
   if (body.kind === "enterprise-profile") {
     await env.DB.prepare("INSERT INTO organizations(id,owner_id,name,credit_code,verification_status,updated_at) VALUES(?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(owner_id) DO UPDATE SET name=excluded.name,credit_code=excluded.credit_code,verification_status=CASE WHEN organizations.name<>excluded.name OR organizations.credit_code<>excluded.credit_code THEN 'pending' ELSE organizations.verification_status END,updated_at=CURRENT_TIMESTAMP").bind(`org:${owner}`, owner, String(payload.name || "未命名企业"), String(payload.creditCode || ""), identity.testMode ? "verified" : "pending").run();
@@ -216,11 +238,12 @@ export async function DELETE(request: Request) {
   const owner = identity.id;
   const id = new URL(request.url).searchParams.get("id");
   if (!id) return Response.json({ error: "缺少记录" }, { status: 400 });
-  await env.DB.prepare(
+  const record = await env.DB.prepare("SELECT kind FROM workspace_records WHERE id=? AND owner_id=? AND archived_at IS NULL").bind(id, owner).first<{ kind: string }>();
+  if (!record) return Response.json({ error: "记录不存在或无权删除" }, { status: 404 });
+  await env.DB.batch([env.DB.prepare(
     "UPDATE workspace_records SET archived_at=CURRENT_TIMESTAMP,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=? AND owner_id=? AND archived_at IS NULL",
   )
-    .bind(id, owner)
-    .run();
+    .bind(id, owner), compactPublicationOrderStatement(env.DB, record.kind)]);
   await writeAudit(owner, "archive", "workspace_record", id);
   return Response.json({ ok: true });
 }
