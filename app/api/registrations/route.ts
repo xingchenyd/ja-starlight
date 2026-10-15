@@ -1,6 +1,8 @@
 import { env } from "cloudflare:workers";
 import { deadlineAt, normalizeChallenge } from "../../../lib/challenges/model";
 import { activities as seedActivities } from "../../data";
+import type { RegistrationField } from "../../data";
+import { defaultRegistrationFields, validateRegistrationAnswers, validateRegistrationFields } from "../../../lib/services/registration-form";
 import { getActor, notify, requireAdmin, writeAudit } from "../../../db/runtime";
 import { normalizeDateTime, reminderBefore } from "../../../lib/services/student";
 import {
@@ -17,6 +19,7 @@ type RegistrationRow = {
   publisherOwnerId?: string;
   studentOwnerId?: string;
   answers: string;
+  formSnapshot?: string;
   status: string;
   reviewNote?: string;
   reviewedAt?: string | null;
@@ -61,26 +64,34 @@ async function setup() {
     alters.push(env.DB.prepare("ALTER TABLE activity_registrations ADD COLUMN cancelled_at TEXT"));
   if (!names.has("attendance_status"))
     alters.push(env.DB.prepare("ALTER TABLE activity_registrations ADD COLUMN attendance_status TEXT NOT NULL DEFAULT 'unconfirmed'"));
+  if (!names.has("form_snapshot"))
+    alters.push(env.DB.prepare("ALTER TABLE activity_registrations ADD COLUMN form_snapshot TEXT NOT NULL DEFAULT '[]'"));
   if (alters.length) await env.DB.batch(alters);
   await env.DB.batch(setupSql.slice(5).map((sql) => env.DB.prepare(sql)));
 }
 function cleanAnswers(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("报名信息格式不正确");
+  if (Object.keys(value).length > 40) throw new Error("报名问题数量过多");
+  for (const [key, answer] of Object.entries(value)) {
+    if (!/^[a-zA-Z0-9_-]{1,80}$/.test(key) || ["__proto__", "constructor", "prototype"].includes(key) || typeof answer !== "string") throw new Error("报名答案格式不正确");
+    if (answer.length > 5000) throw new Error("单题回答最多5000字，请缩短后重新提交");
+  }
   const clean = Object.fromEntries(
     Object.entries(value as Record<string, unknown>).map(([key, answer]) => [
       String(key).slice(0, 80),
-      String(answer ?? "").trim().slice(0, 1200),
+      String(answer ?? ""),
     ]),
   );
   const json = JSON.stringify(clean);
-  if (json.length > 12000) throw new Error("报名信息过长");
+  if (json.length > 200000) throw new Error("报名信息过长");
   return { clean, json };
 }
 function parseRegistration(row: RegistrationRow) {
   return {
     ...row,
     answers: JSON.parse(String(row.answers)),
+    formFields: JSON.parse(row.formSnapshot || "[]"),
     status: row.status === "registered" ? "pending" : row.status,
     reviewNote: row.reviewNote || "",
   };
@@ -110,7 +121,7 @@ export async function GET(request: Request) {
     if (!admin)
       return Response.json({ error: "需要星光计划运营后台权限" }, { status: 401 });
     const rows = await env.DB.prepare(
-      "SELECT id,activity_id AS activityId,activity_title AS activityTitle,student_owner_id AS studentOwnerId,publisher_owner_id AS publisherOwnerId,answers,status,review_note AS reviewNote,reviewed_at AS reviewedAt,created_at AS createdAt FROM activity_registrations WHERE publisher_owner_id LIKE 'ja:%' ORDER BY created_at DESC LIMIT 500",
+      "SELECT id,activity_id AS activityId,activity_title AS activityTitle,student_owner_id AS studentOwnerId,publisher_owner_id AS publisherOwnerId,answers,form_snapshot AS formSnapshot,status,review_note AS reviewNote,reviewed_at AS reviewedAt,created_at AS createdAt FROM activity_registrations WHERE publisher_owner_id LIKE 'ja:%' ORDER BY created_at DESC LIMIT 500",
     ).all();
     return Response.json({
       registrations: (rows.results as unknown as RegistrationRow[]).map(
@@ -125,7 +136,7 @@ export async function GET(request: Request) {
     if (identity.role !== "enterprise")
       return Response.json({ error: "仅企业账号可查看报名数据" }, { status: 403 });
     const registrationRows = await env.DB.prepare(
-      "SELECT id,activity_id AS activityId,activity_title AS activityTitle,student_owner_id AS studentOwnerId,publisher_owner_id AS publisherOwnerId,answers,status,review_note AS reviewNote,reviewed_at AS reviewedAt,created_at AS createdAt FROM activity_registrations WHERE publisher_owner_id=? ORDER BY created_at DESC LIMIT 500",
+      "SELECT id,activity_id AS activityId,activity_title AS activityTitle,student_owner_id AS studentOwnerId,publisher_owner_id AS publisherOwnerId,answers,form_snapshot AS formSnapshot,status,review_note AS reviewNote,reviewed_at AS reviewedAt,created_at AS createdAt FROM activity_registrations WHERE publisher_owner_id=? ORDER BY created_at DESC LIMIT 500",
     )
       .bind(identity.id)
       .all();
@@ -141,7 +152,7 @@ export async function GET(request: Request) {
     return Response.json({ error: "仅学生账号可查看报名" }, { status: 403 });
   const owner = identity.id;
   const rows = await env.DB.prepare(
-    "SELECT id,activity_id AS activityId,activity_title AS activityTitle,answers,status,review_note AS reviewNote,reviewed_at AS reviewedAt,created_at AS createdAt FROM activity_registrations WHERE student_owner_id=? ORDER BY created_at DESC",
+    "SELECT id,activity_id AS activityId,activity_title AS activityTitle,answers,form_snapshot AS formSnapshot,status,review_note AS reviewNote,reviewed_at AS reviewedAt,created_at AS createdAt FROM activity_registrations WHERE student_owner_id=? ORDER BY created_at DESC",
   )
     .bind(owner)
     .all();
@@ -198,7 +209,10 @@ export async function POST(request: Request) {
   let canonicalTitle = String(body.activityTitle).trim().slice(0, 200);
   let startAt = normalizeDateTime(body.activityDate);
   let endAt = normalizeDateTime(body.activityEnd);
+  let formFields: RegistrationField[] = defaultRegistrationFields();
+  let capacity = 0;
   if (seedActivity) {
+    formFields = seedActivity.registrationFields?.length ? seedActivity.registrationFields : formFields;
     if (["报名截止", "已结束", "已满员"].includes(seedActivity.status))
       return Response.json({ error: "该活动当前不可报名" }, { status: 400 });
     const missing = (seedActivity.registrationFields || []).find(
@@ -230,8 +244,7 @@ export async function POST(request: Request) {
     canonicalActivityId = seedActivity.id;
     canonicalTitle = seedActivity.title;
     startAt = normalizeDateTime(seedActivity.date) || startAt;
-    if (seedActivity.capacity > 0)
-      answerData.clean.__capacity = String(seedActivity.capacity);
+    if (seedActivity.capacity > 0) capacity = seedActivity.capacity;
   }
   if (record) {
     const payload = JSON.parse(String(record.payload));
@@ -248,9 +261,8 @@ export async function POST(request: Request) {
       if (Date.now() > closeAt.getTime())
         return Response.json({ error: "该活动报名已截止" }, { status: 400 });
     }
-    const fields = Array.isArray(payload.registrationFields)
-      ? (payload.registrationFields as { id?: string; label?: string; required?: boolean; type?: string }[])
-      : [];
+    const fields: RegistrationField[] = Array.isArray(payload.registrationFields) && payload.registrationFields.length ? payload.registrationFields : defaultRegistrationFields();
+    formFields = fields;
     const missing = fields.find(
       (field) => field.required && !answerData.clean[String(field.id || "")],
     );
@@ -278,9 +290,12 @@ export async function POST(request: Request) {
     canonicalTitle = String(payload.title || canonicalTitle).slice(0, 200);
     startAt = normalizeDateTime(payload.startAt || payload.date) || startAt;
     endAt = normalizeDateTime(payload.endAt || payload.endDate) || endAt;
-    const capacity = Number(payload.capacity || 0);
-    if (capacity > 0) answerData.clean.__capacity = String(capacity);
+    capacity = Number(payload.capacity || 0);
   }
+  const formErrors = validateRegistrationFields(formFields);
+  if (formErrors.length) return Response.json({ error: "主办方报名问卷配置有误，请联系主办方" }, { status: 409 });
+  const answerErrors = validateRegistrationAnswers(formFields, answerData.clean);
+  if (answerErrors.length) return Response.json({ error: answerErrors[0] }, { status: 400 });
   const previous = await env.DB.prepare(
     "SELECT id,status FROM activity_registrations WHERE student_owner_id=? AND activity_id IN (?,?) LIMIT 1",
   )
@@ -288,18 +303,19 @@ export async function POST(request: Request) {
     .first();
   const id = previous ? String(previous.id) : crypto.randomUUID();
   if (previous?.status === "approved") return Response.json({ error: "报名已通过，不可重复提交；如需修改请联系主办方" }, { status: 409 });
-  const capacity = Number(answerData.clean.__capacity || 0);
-  delete answerData.clean.__capacity;
+  answerData.clean = Object.fromEntries(formFields.map(f => [f.id, answerData.clean[f.id] || ""]));
   answerData.json = JSON.stringify(answerData.clean);
+  const formSnapshot = JSON.stringify(formFields);
   if (previous) {
     const updated = await env.DB.prepare(
-      "UPDATE activity_registrations SET activity_id=?,activity_title=?,publisher_owner_id=?,answers=?,status='pending',review_note='',reviewed_at=NULL,cancelled_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status<>'approved' AND (?<=0 OR (SELECT COUNT(*) FROM activity_registrations WHERE activity_id=? AND status IN ('pending','approved') AND id<>?)<?)",
+      "UPDATE activity_registrations SET activity_id=?,activity_title=?,publisher_owner_id=?,answers=?,form_snapshot=?,status='pending',review_note='',reviewed_at=NULL,cancelled_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status<>'approved' AND (?<=0 OR (SELECT COUNT(*) FROM activity_registrations WHERE activity_id=? AND status IN ('pending','approved') AND id<>?)<?)",
     )
       .bind(
         canonicalActivityId,
         canonicalTitle,
         publisher,
         answerData.json,
+        formSnapshot,
         id,
         capacity, canonicalActivityId, id, capacity,
       )
@@ -307,8 +323,8 @@ export async function POST(request: Request) {
     if (!updated.meta.changes) return Response.json({ error: "名额已满或报名状态已变化，请刷新后重试" }, { status: 409 });
   } else {
     const inserted = await env.DB.prepare(
-      "INSERT INTO activity_registrations(id,activity_id,activity_title,student_owner_id,publisher_owner_id,answers,status,review_note,reviewed_at,created_at) SELECT ?,?,?,?,?,?,'pending','',NULL,CURRENT_TIMESTAMP WHERE ?<=0 OR (SELECT COUNT(*) FROM activity_registrations WHERE activity_id=? AND status IN ('pending','approved'))<?",
-    ).bind(id, canonicalActivityId, canonicalTitle, student, publisher, answerData.json, capacity, canonicalActivityId, capacity).run();
+      "INSERT INTO activity_registrations(id,activity_id,activity_title,student_owner_id,publisher_owner_id,answers,form_snapshot,status,review_note,reviewed_at,created_at) SELECT ?,?,?,?,?,?,?,'pending','',NULL,CURRENT_TIMESTAMP WHERE ?<=0 OR (SELECT COUNT(*) FROM activity_registrations WHERE activity_id=? AND status IN ('pending','approved'))<?",
+    ).bind(id, canonicalActivityId, canonicalTitle, student, publisher, answerData.json, formSnapshot, capacity, canonicalActivityId, capacity).run();
     if (!inserted.meta.changes)
       return Response.json({ error: "该活动报名名额已满" }, { status: 409 });
   }

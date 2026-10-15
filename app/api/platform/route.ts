@@ -3,6 +3,7 @@ import { normalizeChallenge, validateChallenge } from "../../../lib/challenges/m
 import { ensureChallengeSchema } from "../../../db/challenges";
 import { ensureCoreSchema, getActor, requireVerifiedEnterprise, writeAudit } from "../../../db/runtime";
 import { compactPublicationOrderStatement, publicationOrderStatement } from "../../../lib/platform/publication-order";
+import { validateRegistrationFields } from "../../../lib/services/registration-form";
 function clean(value: unknown) {
   const text = JSON.stringify(value);
   if (text.length > 80000) throw new Error("内容过长");
@@ -72,6 +73,8 @@ export async function POST(request: Request) {
   const isPublicRecord = ["job", "activity", "content"].includes(body.kind);
   const isDraft = isPublicRecord && payload.reviewStatus === "draft";
   if (body.kind === "activity") {
+    const formErrors = validateRegistrationFields(payload.registrationFields, isDraft);
+    if (formErrors.length) return Response.json({ error: formErrors.join("；") }, { status: 400 });
     payload.challenge = normalizeChallenge(payload.challenge);
     const errors = validateChallenge(payload.challenge);
     if (!isDraft && errors.length) return Response.json({ error: errors.join("；") }, { status: 400 });

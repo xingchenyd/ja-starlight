@@ -1,7 +1,10 @@
 /* eslint-disable @next/next/no-img-element, @next/next/no-html-link-for-pages, jsx-a11y/media-has-caption */
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { RichBlock } from "../data";
+import type { RichBlock, RegistrationField } from "../data";
+import RegistrationFormEditor from "../components/RegistrationForm";
+import PublicationImages from "../components/PublicationImages";
+import { answerLabel, answerText, defaultRegistrationFields, validateRegistrationFields } from "../../lib/services/registration-form";
 import ChallengeEditor from "../components/ChallengeEditor";
 import ChallengeBrief from "../components/ChallengeBrief";
 import { ChallengeReviewDesk } from "../components/ChallengeWorkspace";
@@ -39,6 +42,7 @@ type Registration = {
   studentOwnerId?: string;
   publisherOwnerId?: string;
   answers: Record<string, string>;
+  formFields?: RegistrationField[];
   status: string;
   createdAt: string;
   reviewNote?: string;
@@ -132,19 +136,6 @@ function useDialogEscape(close: () => void) {
     };
   }, [close]);
 }
-const fieldOptions: Field[] = [
-  { id: "name", label: "姓名", type: "text", required: true },
-  { id: "phone", label: "联系电话", type: "tel", required: true },
-  { id: "email", label: "常用邮箱", type: "email", required: true },
-  { id: "school", label: "学校、专业与年级", type: "text", required: true },
-  { id: "studentId", label: "学号", type: "text", required: false },
-  {
-    id: "expectation",
-    label: "参加活动的期待",
-    type: "textarea",
-    required: false,
-  },
-];
 const abilityOptions = [
   "表达沟通",
   "问题解决",
@@ -972,15 +963,6 @@ function JARegistrationDesk({
       onNotice("当前没有可导出的报名数据");
       return;
     }
-    const labelOf = (key: string) =>
-      ({
-        name: "姓名",
-        phone: "联系电话",
-        email: "邮箱",
-        school: "学校、专业与年级",
-        studentId: "学号",
-        expectation: "活动期待",
-      })[key] || key;
     const escape = (value: unknown) =>
       `"${String(value ?? "").replaceAll('"', '""')}"`;
     const rows = [
@@ -994,7 +976,7 @@ function JARegistrationDesk({
         item.status === "approved" ? "已通过" : item.status === "rejected" ? "已退回" : "待确认",
         item.reviewNote || "",
         new Date(item.createdAt).toLocaleString("zh-CN"),
-        Object.entries(item.answers).map(([key, value]) => `${labelOf(key)}：${value}`).join("；"),
+        Object.entries(item.answers).map(([key, value]) => `${answerLabel(key, item.formFields)}：${answerText(value, item.formFields?.find(f => f.id === key))}`).join("；"),
       ]),
     ];
     const url = URL.createObjectURL(
@@ -1100,7 +1082,7 @@ function JARegistrationDesk({
               <b className={`registration-state ${selected.status}`}>{selected.status === "approved" ? "已通过" : selected.status === "rejected" ? "已退回" : "待确认"}</b>
             </header>
             <section className="registration-answer-grid">
-              {Object.entries(selected.answers).map(([key, value]) => <p key={key}><b>{key}</b><span>{value || "未填写"}</span></p>)}
+              {Object.entries(selected.answers).map(([key, value]) => <p key={key}><b>{answerLabel(key, selected.formFields)}</b><span>{answerText(value, selected.formFields?.find(f => f.id === key)) || "未填写"}</span></p>)}
             </section>
             {["pending", "registered"].includes(selected.status) ? (
               <section className="registration-decision-panel">
@@ -1444,6 +1426,7 @@ function AdminPreview({
     bodyBlocks: RichBlock[];
     abilityTags?: string[];
     registrationFields?: Field[];
+    gallery?: string[];
   };
 }) {
   return (
@@ -1526,6 +1509,7 @@ function AdminPreview({
           ))}
         </section>
       ) : null}
+      {item.gallery?.length ? <div className="registration-activity-gallery">{item.gallery.map((url, i) => <img key={`${url}-${i}`} src={url} alt={`活动配图${i + 1}`} />)}</div> : null}
     </article>
   );
 }
@@ -1537,8 +1521,6 @@ function AdminPublisher({
 }) {
   const [kind, setKind] = useState<"activity" | "content">("activity"),
     [saving, setSaving] = useState(false),
-    [fields, setFields] = useState(["name", "phone", "school"]),
-    [custom, setCustom] = useState(""),
     [step, setStep] = useState("基础信息"),
     [abilities, setAbilities] = useState(["表达沟通", "行业认知"]),
     [blocks, setBlocks] = useState<RichBlock[]>(adminStarterBlocks.activity),
@@ -1558,6 +1540,9 @@ function AdminPublisher({
       agenda: "09:00-09:30 签到\n09:30-11:00 主题体验\n11:00-12:00 复盘输出",
     });
   const [challenge, setChallenge] = useState(() => normalizeChallenge(null));
+  const [registrationFields, setRegistrationFields] = useState<RegistrationField[]>(defaultRegistrationFields);
+  const [gallery, setGallery] = useState<string[]>([]);
+  const [imagesBusy, setImagesBusy] = useState(false);
   const [publishError, setPublishError] = useState("");
   const change = (key: string, value: string | boolean) =>
     setForm((v) => ({ ...v, [key]: value }));
@@ -1575,7 +1560,7 @@ function AdminPublisher({
     const data = new FormData();
     data.append("file", file);
     data.append("purpose", "media");
-    const response = await fetch("/api/files", { method: "POST", body: data });
+    const response = await fetch("/api/files", { method: "POST", headers: { "x-starlight-scope": "admin" }, body: data });
     const result = await response.json();
     if (response.ok && result.url)
       setForm((v) => ({
@@ -1588,25 +1573,17 @@ function AdminPublisher({
       }));
   };
   const publish = async () => {
-    if (!form.title.trim() || !form.summary.trim()) return;
+    if (!form.title.trim() || !form.summary.trim()) { setPublishError("请填写活动标题与简介"); setStep("基础信息"); return; }
     const issues = kind === "activity" ? validateChallenge(challenge) : [];
-    if (issues.length) { setPublishError(issues.join("；")); setStep("活动详情"); return; }
+    if (issues.length) { setPublishError(issues.join("；")); setStep("基础信息"); return; }
+    if (kind === "activity" && !form.cover) { setPublishError("请上传活动封面"); setStep("添加图片"); return; }
+    if (kind === "activity") {
+      const errors = validateRegistrationFields(registrationFields);
+      if (!registrationFields.length || errors.length) { setPublishError(errors.join("；") || "请至少设置一个报名问题"); setStep("报名设置"); return; }
+    }
     setPublishError("");
     setSaving(true);
     try {
-    const registrationFields = [
-      ...fieldOptions.filter((x) => fields.includes(x.id)),
-      ...custom
-        .split("\n")
-        .map((x) => x.trim())
-        .filter(Boolean)
-        .map((label, index) => ({
-          id: `custom_${index + 1}`,
-          label,
-          type: "textarea",
-          required: false,
-        })),
-    ];
     const base = {
       title: form.title,
       summary: form.summary,
@@ -1636,6 +1613,7 @@ function AdminPublisher({
             registered: 0,
             status: "已发布",
             registrationFields,
+            gallery,
             agenda: form.agenda
               .split("\n")
               .map((x) => x.trim())
@@ -1666,19 +1644,6 @@ function AdminPublisher({
     } catch { setPublishError("网络异常，未能确认发布结果。请先刷新发布记录，避免重复提交。"); }
     finally { setSaving(false); }
   };
-  const registrationFields = [
-    ...fieldOptions.filter((x) => fields.includes(x.id)),
-    ...custom
-      .split("\n")
-      .map((x) => x.trim())
-      .filter(Boolean)
-      .map((label, index) => ({
-        id: `custom_${index + 1}`,
-        label,
-        type: "textarea",
-        required: false,
-      })),
-  ];
   return (
     <section className="admin-publisher studio-admin-publisher">
       {publishError && <p role="alert" className="field-error">{publishError}</p>}
@@ -1706,7 +1671,7 @@ function AdminPublisher({
       </div>
       <nav className="studio-steps">
         {(kind === "activity"
-          ? ["基础信息", "活动详情", "报名设置", "成长设计", "预览"]
+          ? ["基础信息", "报名设置", "添加图片", "预览"]
           : ["基础信息", "正文排版", "预览"]
         ).map((name) => (
           <button
@@ -1714,7 +1679,7 @@ function AdminPublisher({
             className={step === name ? "active" : ""}
             onClick={() => setStep(name)}
           >
-            {name}
+            {kind === "activity" && name === "基础信息" ? "展示内容" : kind === "activity" && name === "报名设置" ? "设置问题" : name}
           </button>
         ))}
       </nav>
@@ -1820,7 +1785,7 @@ function AdminPublisher({
                   </label>
                 </>
               )}
-              <label className="media-upload full">
+              {kind === "content" && <label className="media-upload full">
                 封面图片或视频
                 <input
                   type="file"
@@ -1828,46 +1793,18 @@ function AdminPublisher({
                   onChange={(e) => media(e.target.files?.[0])}
                 />
                 <span>{form.cover ? "✓ 已设置封面" : "选择文件"}</span>
-              </label>
+              </label>}
             </>
           )}
           {step === "预览" && kind === "activity" && <div className="full"><ChallengeBrief value={challenge} /></div>}
-          {(step === "活动详情" || step === "正文排版") && (
+          {((kind === "activity" && step === "基础信息") || step === "正文排版") && (
             <>{kind === "activity" && <div className="full"><ChallengeEditor value={challenge} onChange={setChallenge} />{publishError && <p role="alert" className="field-error">{publishError}</p>}</div>}<AdminBlockEditor blocks={blocks} setBlocks={setBlocks} /></>
           )}{" "}
           {step === "报名设置" && (
-            <fieldset className="registration-config full">
-              <legend>报名表需要学生填写</legend>
-              <div>
-                {fieldOptions.map((field) => (
-                  <label key={field.id}>
-                    <input
-                      type="checkbox"
-                      checked={fields.includes(field.id)}
-                      onChange={() =>
-                        setFields((v) =>
-                          v.includes(field.id)
-                            ? v.filter((x) => x !== field.id)
-                            : [...v, field.id],
-                        )
-                      }
-                    />
-                    <span>{field.label}</span>
-                    <small>{field.required ? "必填" : "选填"}</small>
-                  </label>
-                ))}
-              </div>
-              <label>
-                自定义问题（每行一个）
-                <textarea
-                  rows={3}
-                  value={custom}
-                  onChange={(e) => setCustom(e.target.value)}
-                />
-              </label>
-            </fieldset>
+            <RegistrationFormEditor value={registrationFields} onChange={setRegistrationFields} />
           )}{" "}
-          {step === "成长设计" && (
+          {step === "添加图片" && <PublicationImages cover={form.cover} coverType={form.coverType} gallery={gallery} onCover={(cover, coverType) => setForm(v => ({ ...v, cover, coverType }))} onGallery={setGallery} onBusy={setImagesBusy} upload={async file => { const data = new FormData(); data.append("file", file); data.append("purpose", "media"); const response = await fetch("/api/files", { method: "POST", headers: { "x-starlight-scope": "admin" }, body: data }); const result = await response.json(); if (!response.ok) throw new Error(result.error || "上传失败"); return result; }} />}
+          {(step === "成长设计" || (kind === "activity" && step === "基础信息")) && (
             <>
               <label className="full">
                 活动议程（每行一个环节）
@@ -1905,6 +1842,7 @@ function AdminPublisher({
                 bodyBlocks: blocks,
                 abilityTags: abilities,
                 registrationFields,
+                gallery,
               }}
             />
           )}
@@ -1917,13 +1855,14 @@ function AdminPublisher({
               bodyBlocks: blocks,
               abilityTags: abilities,
               registrationFields,
+              gallery,
             }}
           />
         </aside>
       </div>
       <button
         className="admin-publish-button"
-        disabled={saving}
+        disabled={saving || imagesBusy}
         onClick={publish}
       >
         {saving

@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { validateRegistrationFields } from "../../../lib/services/registration-form";
 import { normalizeChallenge, validateChallenge } from "../../../lib/challenges/model";
 import { ensureCoreSchema, notify, requireAdmin } from "../../../db/runtime";
 import { compactPublicationOrderStatement, publicationOrderStatement, publicationRank } from "../../../lib/platform/publication-order";
@@ -259,6 +260,8 @@ export async function PUT(request: Request) {
   }
   const now = new Date().toISOString();
   if (body.kind === "activity") {
+    const formErrors = validateRegistrationFields(body.payload.registrationFields);
+    if (formErrors.length) return Response.json({ error: formErrors.join("；") }, { status: 400 });
     body.payload.challenge = normalizeChallenge(body.payload.challenge);
     const errors = validateChallenge(body.payload.challenge);
     if (errors.length) return Response.json({ error: errors.join("；") }, { status: 400 });

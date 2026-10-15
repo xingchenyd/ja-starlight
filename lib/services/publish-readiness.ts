@@ -13,7 +13,7 @@ export function buildPublishReadiness(kind: PublishKind, form: Record<string, un
     const min = Number(form.salaryMin), max = Number(form.salaryMax);
     details = lines(form.responsibilities).length >= 2 && lines(form.requirements).length >= 2 && min >= 0 && max <= 500 && min <= max;
   } else if (kind === "activity") {
-    details = Boolean(text(form.date)) && lines(form.agenda).length >= 2 && Number(form.registrationFieldCount || 0) >= 2 && blocks.length >= 2 && blocks.every(blockHasContent);
+    details = Boolean(text(form.date)) && lines(form.agenda).length >= 2 && Number(form.registrationFieldCount || 0) >= 1 && blocks.length >= 2 && blocks.every(blockHasContent);
   } else {
     details = blocks.length >= 2 && blocks.every(blockHasContent);
   }

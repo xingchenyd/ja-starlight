@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./design-system/questionnaire.css";
 @import "./design-system/tokens.css";
 @import "./design-system/motion.css";
 @import "./design-system/components.css";

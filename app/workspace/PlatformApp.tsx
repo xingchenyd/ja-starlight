@@ -10,6 +10,9 @@ import LearningCenterView from "./student/LearningCenter";
 import StudentProfileView from "./student/StudentProfile";
 import ChallengeEditor from "../components/ChallengeEditor";
 import ChallengeBrief from "../components/ChallengeBrief";
+import RegistrationFormEditor, { RegistrationAnswerInput } from "../components/RegistrationForm";
+import PublicationImages from "../components/PublicationImages";
+import { answerLabel, answerText, defaultRegistrationFields, validateRegistrationFields, validateRegistrationAnswers } from "../../lib/services/registration-form";
 import { ChallengeReviewDesk } from "../components/ChallengeWorkspace";
 import { activityCategories, normalizeChallenge, validateChallenge, type ChallengeSpec } from "../../lib/challenges/model";
 import { useStudentData, type StudentFavorite, type StudentPrivateData } from "./student/useStudentData";
@@ -1042,6 +1045,7 @@ type RegistrationItem = {
   activityId: string;
   activityTitle: string;
   answers: Record<string, string>;
+  formFields?: RegistrationField[];
   status: "pending" | "approved" | "rejected" | string;
   reviewNote?: string;
   reviewedAt?: string | null;
@@ -1301,11 +1305,9 @@ function ActivityRegistrationDialog({
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
   const submit = async () => {
-    const missing = fields.find(
-      (f) => f.required && !String(answers[f.id] || "").trim(),
-    );
-    if (missing) {
-      setError(`请填写：${missing.label}`);
+    const errors = validateRegistrationAnswers(fields, answers);
+    if (errors.length) {
+      setError(errors[0]);
       return;
     }
     setSaving(true);
@@ -1362,37 +1364,14 @@ function ActivityRegistrationDialog({
             )}
             <div className="registration-fields">
               {fields.map((field) => (
-                <label key={field.id}>
+                <div className="questionnaire-answer" key={field.id}>
                   <span>
                     {field.label}
                     {field.required && <b>必填</b>}
                   </span>
-                  {field.type === "textarea" ? (
-                    <textarea
-                      rows={4}
-                      value={answers[field.id] || ""}
-                      disabled={readOnly}
-                      onChange={(e) =>
-                        setAnswers((v) => ({
-                          ...v,
-                          [field.id]: e.target.value,
-                        }))
-                      }
-                    />
-                  ) : (
-                    <input
-                      type={field.type}
-                      value={answers[field.id] || ""}
-                      disabled={readOnly}
-                      onChange={(e) =>
-                        setAnswers((v) => ({
-                          ...v,
-                          [field.id]: e.target.value,
-                        }))
-                      }
-                    />
-                  )}
-                </label>
+                  {field.description && <p>{field.description}</p>}
+                  <RegistrationAnswerInput field={field} value={answers[field.id] || ""} disabled={readOnly} onChange={value => setAnswers(v => ({ ...v, [field.id]: value }))} />
+                </div>
               ))}
             </div>
             {error && <p className="form-error">{error}</p>}
@@ -2847,7 +2826,7 @@ function EnterpriseRegistrations() {
         item.reviewNote || "",
         new Date(item.createdAt).toLocaleString("zh-CN"),
         Object.entries(item.answers)
-          .map(([key, value]) => `${registrationLabel(key)}：${value}`)
+          .map(([key, value]) => `${answerLabel(key, item.formFields)}：${answerText(value, item.formFields?.find(f => f.id === key))}`)
           .join("；"),
       ]
         .map(csvEscape)
@@ -3212,8 +3191,8 @@ function RegistrationDetail({
         <div className="registration-answer-grid">
           {Object.entries(item.answers).map(([key, value]) => (
             <p key={key}>
-              <b>{registrationLabel(key)}</b>
-              <span>{value || "未填写"}</span>
+              <b>{answerLabel(key, item.formFields)}</b>
+              <span>{answerText(value, item.formFields?.find(f => f.id === key)) || "未填写"}</span>
             </p>
           ))}
         </div>
@@ -3282,21 +3261,6 @@ function RegistrationDetail({
     </SidePanel>
   );
 }
-function registrationLabel(key: string) {
-  return (
-    (
-      {
-        name: "姓名",
-        phone: "联系电话",
-        email: "常用邮箱",
-        school: "学校与专业",
-        expectation: "活动期待",
-        experience: "相关经历",
-      } as Record<string, string>
-    )[key] || key
-  );
-}
-
 function EnterprisePublisher({
   kind,
   tab,
@@ -3812,6 +3776,7 @@ function ContentRenderer({
     agenda?: string[];
     abilityTags?: string[];
     registrationFields?: RegistrationField[];
+    gallery?: string[];
     attachments?: string[];
   };
 }) {
@@ -3917,6 +3882,7 @@ function ContentRenderer({
           ))}
         </section>
       ) : null}
+      {item.gallery?.length ? <div className="registration-activity-gallery">{item.gallery.map((url, i) => <img key={`${url}-${i}`} src={url} alt={`活动配图${i + 1}`} />)}</div> : null}
       {item.attachments?.length ? (
         <section className="render-extra">
           <h2>附件</h2>
@@ -4041,19 +4007,9 @@ function PublishDialog({
   const old = record?.payload || {};
   const oldFields = (old.registrationFields as RegistrationField[]) || [];
   const [challenge, setChallenge] = useState(() => normalizeChallenge(old.challenge));
-  const [selectedFields, setSelectedFields] = useState<string[]>(
-      oldFields.length
-        ? oldFields
-            .filter((x) => registrationOptions.some((o) => o.id === x.id))
-            .map((x) => x.id)
-        : ["name", "phone", "school"],
-    ),
-    [customQuestions, setCustomQuestions] = useState(
-      oldFields
-        .filter((x) => !registrationOptions.some((o) => o.id === x.id))
-        .map((x) => x.label)
-        .join("\n"),
-    );
+  const [registrationFields, setRegistrationFields] = useState<RegistrationField[]>(oldFields.length ? oldFields : defaultRegistrationFields());
+  const [gallery, setGallery] = useState<string[]>((old.gallery as string[]) || []);
+  const [imagesBusy, setImagesBusy] = useState(false);
   const [form, setForm] = useState({
     title: String(old.title || ""),
     company: String(old.company || old.publisher || ""),
@@ -4113,14 +4069,19 @@ function PublishDialog({
             blocks?: RichBlock[];
             selectedFields?: string[];
             customQuestions?: string;
+            registrationFields?: RegistrationField[];
+            gallery?: string[];
             abilities?: string[];
             challenge?: ChallengeSpec;
           };
           if (draft.form) setForm((current) => ({ ...current, ...draft.form }));
           if (draft.blocks) setBlocks(draft.blocks);
-          if (draft.selectedFields) setSelectedFields(draft.selectedFields);
-          if (typeof draft.customQuestions === "string")
-            setCustomQuestions(draft.customQuestions);
+          if (draft.gallery) setGallery(draft.gallery);
+          if (draft.registrationFields) setRegistrationFields(draft.registrationFields);
+          else if (draft.selectedFields || draft.customQuestions) setRegistrationFields([
+            ...registrationOptions.filter(f => (draft.selectedFields || ["name", "phone", "school"]).includes(f.id)),
+            ...(draft.customQuestions || "").split("\n").map(s => s.trim()).filter(Boolean).map((label, i) => ({ id: `custom_${i + 1}`, label, type: "textarea" as const, required: false })),
+          ]);
           if (draft.abilities) setAbilities(draft.abilities);
           if (draft.challenge) setChallenge(normalizeChallenge(draft.challenge));
           setAutosave("✓ 已恢复上次未完成草稿");
@@ -4143,8 +4104,8 @@ function PublishDialog({
         JSON.stringify({
           form,
           blocks,
-          selectedFields,
-          customQuestions,
+          registrationFields,
+          gallery,
           abilities,
           challenge,
         }),
@@ -4157,11 +4118,11 @@ function PublishDialog({
   }, [
     abilities,
     blocks,
-    customQuestions,
+    registrationFields,
+    gallery,
     draftKey,
     draftReady,
     form,
-    selectedFields,
     challenge,
   ]);
   const change = (k: string, v: string | boolean) => {
@@ -4184,19 +4145,6 @@ function PublishDialog({
         mediaType: r.type.startsWith("video/") ? "video" : f.mediaType,
       }));
   };
-  const registrationFields = [
-    ...registrationOptions.filter((x) => selectedFields.includes(x.id)),
-    ...customQuestions
-      .split("\n")
-      .map((x) => x.trim())
-      .filter(Boolean)
-      .map((label, index) => ({
-        id: `custom_${index + 1}`,
-        label,
-        type: "textarea" as const,
-        required: false,
-      })),
-  ];
   const splitLines = (value: string) =>
     value
       .split("\n")
@@ -4283,6 +4231,7 @@ function PublishDialog({
         contactPhone: form.contactPhone.trim(),
         status: isDraft ? "草稿" : "审核中",
         registrationFields,
+        gallery,
         agenda: splitLines(form.agenda),
         abilityTags: abilities,
         publisher: form.company.trim() || "湖南企业",
@@ -4333,12 +4282,9 @@ function PublishDialog({
         new Date(form.deadline) > new Date(form.date)
       )
         next.deadline = "报名截止日期不能晚于活动日期";
-      if (!selectedFields.includes("name"))
-        next.registration = "报名表必须包含姓名";
-      if (
-        !selectedFields.some((field) => field === "phone" || field === "email")
-      )
-        next.registration = "报名表必须包含联系电话或常用邮箱";
+      const questionErrors = validateRegistrationFields(registrationFields);
+      if (questionErrors.length) next.registration = questionErrors.join("；");
+      if (!registrationFields.length) next.registration = "请至少设置一个报名问题";
       if (!challenge.enabled && splitLines(form.agenda).length < 2)
         next.agenda = "至少填写 2 个活动环节";
     }
@@ -4365,14 +4311,15 @@ function PublishDialog({
         "deadline",
       ];
       const first = Object.keys(next)[0];
-      if (basicKeys.includes(first)) setStep("基础信息");
+      if (first === "cover" && kind === "activity") setStep("添加图片");
+      else if (basicKeys.includes(first)) setStep("基础信息");
       else if (["responsibilities", "requirements", "salary"].includes(first))
         setStep("岗位详情");
       else if (first === "registration") setStep("报名设置");
-      else if (first === "challenge") setStep("活动详情");
-      else if (first === "agenda") setStep("成长设计");
+      else if (first === "challenge") setStep("基础信息");
+      else if (first === "agenda") setStep("基础信息");
       else if (first === "blocks")
-        setStep(kind === "content" ? "内容编辑" : "活动详情");
+        setStep(kind === "content" ? "内容编辑" : "基础信息");
       return false;
     }
     return true;
@@ -4406,13 +4353,14 @@ function PublishDialog({
       .map((x) => x.trim())
       .filter(Boolean),
     registrationFields,
+    gallery,
   };
   const readiness = buildPublishReadiness(kind, { ...form, registrationFieldCount: registrationFields.length }, blocks);
   const steps =
     kind === "job"
       ? ["基础信息", "岗位详情", "预览"]
       : kind === "activity"
-        ? ["基础信息", "活动详情", "报名设置", "成长设计", "预览"]
+        ? ["基础信息", "报名设置", "添加图片", "预览"]
         : ["基础信息", "内容编辑", "展示设置", "预览"];
   const currentStepIndex = steps.indexOf(step);
   const goNext = () =>
@@ -4456,7 +4404,7 @@ function PublishDialog({
               aria-current={step === name ? "step" : undefined}
             >
               <span>{index < currentStepIndex ? "✓" : index + 1}</span>
-              {name}
+              {kind === "activity" && name === "基础信息" ? "展示内容" : kind === "activity" && name === "报名设置" ? "设置问题" : name}
             </button>
           ))}
         </nav>
@@ -4550,7 +4498,7 @@ function PublishDialog({
                     </small>
                     {issue("summary")}
                   </label>
-                  {kind !== "job" && (
+                  {kind === "content" && (
                     <label
                       className={`media-upload full ${errors.cover ? "has-error" : ""}`}
                     >
@@ -4798,8 +4746,8 @@ function PublishDialog({
                   </label>
                 </>
               )}
-              {step === "活动详情" && kind === "activity" && <div className="full"><ChallengeEditor value={challenge} onChange={setChallenge} />{issue("challenge")}</div>}
-              {((step === "活动详情" && kind === "activity") ||
+              {step === "基础信息" && kind === "activity" && <div className="full"><ChallengeEditor value={challenge} onChange={setChallenge} />{issue("challenge")}</div>}
+              {((step === "基础信息" && kind === "activity") ||
                 (step === "内容编辑" && kind === "content")) && (
                 <ContentBlockEditor
                   blocks={blocks}
@@ -4808,48 +4756,13 @@ function PublishDialog({
                 />
               )}
               {step === "报名设置" && (
-                <fieldset className="registration-config full">
-                  <legend>学生报名需要填写什么信息？</legend>
-                  <p>
-                    姓名与至少一种联系方式必须保留；报名数据只向活动发布方开放。
-                  </p>
+                <div className="full">
                   {issue("registration")}
-                  <div>
-                    {registrationOptions.map((field) => (
-                      <label key={field.id}>
-                        <input
-                          type="checkbox"
-                          checked={selectedFields.includes(field.id)}
-                          onChange={() => {
-                            setSelectedFields((v) =>
-                              v.includes(field.id)
-                                ? v.filter((x) => x !== field.id)
-                                : [...v, field.id],
-                            );
-                            setErrors((current) => {
-                              const next = { ...current };
-                              delete next.registration;
-                              return next;
-                            });
-                          }}
-                        />
-                        <span>{field.label}</span>
-                        <small>{field.required ? "必填" : "选填"}</small>
-                      </label>
-                    ))}
-                  </div>
-                  <label>
-                    其他自定义问题（每行一个）
-                    <textarea
-                      rows={3}
-                      value={customQuestions}
-                      onChange={(e) => setCustomQuestions(e.target.value)}
-                      placeholder="例如：你为什么想参加本次活动？"
-                    />
-                  </label>
-                </fieldset>
+                  <RegistrationFormEditor value={registrationFields} onChange={setRegistrationFields} />
+                </div>
               )}
-              {step === "成长设计" && (
+              {step === "添加图片" && <PublicationImages cover={form.cover} coverType={form.coverType} gallery={gallery} onCover={(cover, coverType) => setForm(v => ({ ...v, cover, coverType }))} onGallery={setGallery} upload={upload} onBusy={setImagesBusy} />}
+              {(step === "成长设计" || (kind === "activity" && step === "基础信息")) && (
                 <>
                   <label className={`full ${errors.agenda ? "has-error" : ""}`}>
                     <span>活动议程（每行一个环节）*</span>
@@ -4993,7 +4906,7 @@ function PublishDialog({
             ) : (
               <button
                 className="primary-btn"
-                disabled={Boolean(saving)}
+                disabled={Boolean(saving) || imagesBusy}
                 onClick={submit}
               >
                 {saving === "submit"

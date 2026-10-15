@@ -6,12 +6,15 @@ import type { Activity, RegistrationField } from "../../data";
 import { SidePanel } from "../../components/ui";
 import ChallengeBrief from "../../components/ChallengeBrief";
 import { StudentChallenge } from "../../components/ChallengeWorkspace";
+import { RegistrationAnswerInput } from "../../components/RegistrationForm";
+import { defaultRegistrationFields, validateRegistrationAnswer } from "../../../lib/services/registration-form";
 
 export type RegistrationItem = {
   id: string;
   activityId: string;
   activityTitle: string;
   answers: Record<string, string>;
+  formFields?: RegistrationField[];
   status: "pending" | "approved" | "rejected" | "cancelled" | string;
   reviewNote?: string;
   reviewedAt?: string | null;
@@ -19,15 +22,6 @@ export type RegistrationItem = {
 };
 
 type Profile = Record<string, unknown>;
-
-function defaultFields(): RegistrationField[] {
-  return [
-    { id: "name", label: "姓名", type: "text", required: true },
-    { id: "phone", label: "联系电话", type: "tel", required: true },
-    { id: "email", label: "常用邮箱", type: "email", required: true },
-    { id: "school", label: "学校、专业与年级", type: "text", required: true },
-  ];
-}
 
 function prefill(field: RegistrationField, profile: Profile) {
   if (field.id === "school") {
@@ -37,13 +31,6 @@ function prefill(field: RegistrationField, profile: Profile) {
   if (direct) return String(direct);
   if (field.type === "email") return String(profile.email || "");
   if (field.type === "tel") return String(profile.phone || "");
-  return "";
-}
-
-function validate(field: RegistrationField, value: string) {
-  if (field.required && !value.trim()) return `请填写${field.label}`;
-  if (value && field.type === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "请填写有效邮箱";
-  if (value && field.type === "tel" && !/^[0-9+\-\s]{7,24}$/.test(value)) return "请填写有效联系电话";
   return "";
 }
 
@@ -64,7 +51,7 @@ export default function RegistrationPanel({
   onSubmit: (answers: Record<string, string>) => Promise<boolean>;
   onCancel: () => Promise<boolean>;
 }) {
-  const fields = useMemo(() => activity?.registrationFields?.length ? activity.registrationFields : defaultFields(), [activity]);
+  const fields = useMemo(() => registration?.status === "approved" && registration.formFields?.length ? registration.formFields : activity?.registrationFields?.length ? activity.registrationFields : defaultRegistrationFields(), [activity, registration]);
   const [answers, setAnswers] = useState<Record<string, string>>(() => Object.fromEntries(fields.map((field) => [
     field.id,
     registration?.answers?.[field.id] ?? prefill(field, profile),
@@ -74,7 +61,7 @@ export default function RegistrationPanel({
   const readOnly = registration?.status === "approved";
 
   const submit = async () => {
-    const nextErrors = Object.fromEntries(fields.map((field) => [field.id, validate(field, answers[field.id] || "")]).filter(([, error]) => error));
+    const nextErrors = Object.fromEntries(fields.map((field) => [field.id, validateRegistrationAnswer(field, answers[field.id] || "")]).filter(([, error]) => error));
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
     setSaving(true);
@@ -125,6 +112,7 @@ export default function RegistrationPanel({
           {activity.challenge?.enabled && readOnly && <StudentChallenge activityId={activity.id} />}
           {activity.challenge?.enabled && readOnly ? <details><summary>查看挑战任务书与比赛规则</summary><ChallengeBrief value={activity.challenge} /></details> : <ChallengeBrief value={activity.challenge} />}
           {activity.bodyBlocks?.length ? <div className="registration-activity-body">{activity.bodyBlocks.map((block) => block.type === "heading" ? <h3 key={block.id}>{block.title}</h3> : block.type === "image" && block.url ? <figure key={block.id}><img src={block.url} alt={block.caption || block.title || "活动图片"} /><figcaption>{block.caption}</figcaption></figure> : <p key={block.id}>{block.text || block.title}</p>)}</div> : null}
+          {activity.gallery?.length ? <div className="registration-activity-gallery">{activity.gallery.map((url, i) => <img key={`${url}-${i}`} src={url} alt={`活动配图${i + 1}`} />)}</div> : null}
           <section className={`registration-status-card status-${registration?.status || "new"}`}>
             <b>{statusLabel}</b>
             {registration?.reviewNote ? <p>{registration.reviewNote}</p> : null}
@@ -132,11 +120,12 @@ export default function RegistrationPanel({
           </section>
           <div className="registration-fields refined-registration-fields">
             {fields.map((field) => (
-              <label key={field.id}>
-                <span>{field.label}{field.required ? <b>必填</b> : <em>选填</em>}</span>
-                {field.type === "textarea" ? <textarea rows={4} value={answers[field.id] || ""} disabled={readOnly} aria-invalid={Boolean(errors[field.id])} onChange={(event) => setAnswers((current) => ({ ...current, [field.id]: event.target.value }))} /> : <input type={field.type} value={answers[field.id] || ""} disabled={readOnly} aria-invalid={Boolean(errors[field.id])} onChange={(event) => setAnswers((current) => ({ ...current, [field.id]: event.target.value }))} />}
+              <div className="questionnaire-answer" key={field.id}>
+                <h3>{field.label}{field.required ? <b>必填</b> : <em>选填</em>}</h3>
+                {field.description && <p>{field.description}</p>}
+                <RegistrationAnswerInput field={field} value={answers[field.id] || ""} disabled={readOnly} invalid={Boolean(errors[field.id])} onChange={value => setAnswers(current => ({ ...current, [field.id]: value }))} />
                 {errors[field.id] ? <small className="field-error">{errors[field.id]}</small> : null}
-              </label>
+              </div>
             ))}
           </div>
         </div>

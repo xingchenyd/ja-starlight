@@ -142,7 +142,7 @@ export default function ActivityExperience({
           <div className="activity-row-actions"><FavoriteButton active={isFavorite(activity)} onToggle={() => favorite(activity)} /><button className="outline-btn" onClick={() => open(activity)}>{stateText(activity)}</button></div>
         </article>)}
       </div>
-      <RegistrationPanel key={selected?.id || "closed"} activity={selected} open={Boolean(selected)} profile={profile} registration={selected ? registrationFor(selected) : undefined} onClose={close} onSubmit={(answers) => selected ? submit(selected, answers) : Promise.resolve(false)} onCancel={() => selected ? cancel(selected) : Promise.resolve(false)} />
+      {!loading && <RegistrationPanel key={`${selected?.id || "closed"}:${selected ? registrationFor(selected)?.id || "new" : "new"}:${selected ? registrationFor(selected)?.status || "new" : "new"}`} activity={selected} open={Boolean(selected)} profile={profile} registration={selected ? registrationFor(selected) : undefined} onClose={close} onSubmit={(answers) => selected ? submit(selected, answers) : Promise.resolve(false)} onCancel={() => selected ? cancel(selected) : Promise.resolve(false)} />}
     </>
   );
 }

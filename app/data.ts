@@ -29,8 +29,12 @@ export type Job = {
 export type RegistrationField = {
   id: string;
   label: string;
-  type: "text" | "tel" | "email" | "textarea";
+  type: "text" | "tel" | "email" | "textarea" | "radio" | "checkbox";
   required: boolean;
+  description?: string;
+  placeholder?: string;
+  maxLength?: number;
+  options?: string[];
 };
 export type RichBlock = {
   id: string;

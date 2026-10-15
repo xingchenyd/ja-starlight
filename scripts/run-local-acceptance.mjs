@@ -23,7 +23,7 @@ async function ready(){
 }
 try {
   await ready();
-  for(const script of ["launch-acceptance-http.mjs","full-acceptance-http.mjs","challenge-acceptance-http.mjs"]){
+  for(const script of ["launch-acceptance-http.mjs","full-acceptance-http.mjs","challenge-acceptance-http.mjs","questionnaire-acceptance-http.mjs"]){
     const code=await new Promise((resolve,reject)=>{const p=spawn(process.execPath,[`scripts/${script}`,base,"--disposable-database"],{stdio:"inherit"});p.on("error",reject);p.on("exit",resolve);});
     if(code!==0)throw new Error(`${script} failed`);
   }
@@ -35,12 +35,18 @@ try {
   const history=db.prepare("SELECT COUNT(*) AS n FROM challenge_history").get().n;
   const privateCertificates=db.prepare("SELECT COUNT(*) AS n FROM student_experiences WHERE source_id LIKE 'challenge:%' AND certified=1 AND is_public=0").get().n;
   if(teams!==2||history!==6||privateCertificates!==4)throw new Error(`Persistence mismatch: ${teams}/${history}/${privateCertificates}`);
+  const questionnaire=db.prepare("SELECT id,answers,form_snapshot FROM activity_registrations WHERE activity_id='questionnaire-enterprise-20261015'").get();
+  if(!questionnaire || JSON.parse(questionnaire.answers).q_opinion.length<=1200 || !JSON.parse(questionnaire.form_snapshot).some(f=>f.id==='q_opinion'&&f.label==='你对循环经济有什么看法？'))throw new Error('Questionnaire persistence mismatch');
   db.close();
   server=start();await ready();
   const login=await fetch(base+"/api/auth/login",{method:"POST",headers:{origin:base,"content-type":"application/json"},body:JSON.stringify({role:"student",email:"student@starlight-hunan.cn",password:"StudentAudit2026!"})});
   if(!login.ok)throw new Error("Restart authentication failed");
   const read=await fetch(base+"/api/challenges?activityId=challenge-acceptance-20260922",{headers:{cookie:login.headers.get("set-cookie").split(";")[0]}});
   const result=await read.json();if(result.team?.status!=="awarded"||result.team.members.length!==2)throw new Error("Restart readback mismatch");
+  const signupRead=await fetch(base+"/api/registrations",{headers:{cookie:login.headers.get("set-cookie").split(";")[0]}});
+  const retained=(await signupRead.json()).registrations.find(r=>r.id===questionnaire.id);
+  if(!retained || JSON.stringify(retained.answers)!==questionnaire.answers || JSON.stringify(retained.formFields)!==questionnaire.form_snapshot)throw new Error('Restart questionnaire readback mismatch');
+  console.log('Questionnaire answers and original-question snapshot persisted after restart');
   console.log(JSON.stringify({persisted:true,integrity:"ok",teams,history,privateCertificates,restartReadback:"awarded / 2 members"}));
   if(process.argv.includes("--keep-running")){console.log("READY_FOR_BROWSER",dir);await new Promise(()=>{});}
 }finally{server.kill();}

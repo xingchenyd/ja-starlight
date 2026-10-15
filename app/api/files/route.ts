@@ -1,12 +1,16 @@
 import { env } from "cloudflare:workers";
-import { ensureCoreSchema, getActor, writeAudit } from "../../../db/runtime";
+import { ensureCoreSchema, getActor, requireAdmin, writeAudit } from "../../../db/runtime";
 
 const documents = ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
 const media = ["image/jpeg", "image/png", "image/webp", "video/mp4", "video/webm"];
 function safeKey(value: string) { return value.length > 0 && value.length < 500 && !value.includes("..") ? value : ""; }
+async function fileActor(request: Request) {
+  if (request.headers.get("x-starlight-scope") === "admin") return requireAdmin(request);
+  return await getActor(request) || await requireAdmin(request);
+}
 
 export async function POST(request: Request) {
-  const actor = await getActor(request);
+  const actor = await fileActor(request);
   if (!actor) return Response.json({ error: "请先登录后上传文件" }, { status: 401 });
   const form = await request.formData(), file = form.get("file"), purpose = String(form.get("purpose") || "media");
   if (!(file instanceof File)) return Response.json({ error: "请选择文件" }, { status: 400 });
@@ -27,7 +31,7 @@ export async function GET(request: Request) {
   await ensureCoreSchema();
   const url = new URL(request.url), key = safeKey(String(url.searchParams.get("key") || ""));
   if (!key) {
-    const actor = await getActor(request);
+    const actor = await fileActor(request);
     if (!actor) return Response.json({ assets: [] }, { status: 401 });
     const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || 40) || 40));
     const rows = await env.DB.prepare("SELECT id,storage_key AS storageKey,original_name AS name,content_type AS type,size,purpose,visibility,status,created_at AS createdAt FROM media_assets WHERE owner_id=? AND archived_at IS NULL ORDER BY created_at DESC LIMIT ?").bind(actor.id, limit).all();
@@ -39,7 +43,7 @@ export async function GET(request: Request) {
   if (!object) return new Response("Not found", { status: 404 });
   const visibility = object.customMetadata?.visibility;
   if (visibility !== "public") {
-    const actor = await getActor(request);
+    const actor = await fileActor(request);
     if (!actor || actor.id !== object.customMetadata?.owner) return new Response("Forbidden", { status: 403 });
     await env.DB.prepare("INSERT INTO file_access_logs(actor_id,storage_key,action) VALUES(?,?,'view-private')").bind(actor.id, key).run();
   }
@@ -50,7 +54,7 @@ export async function GET(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const actor = await getActor(request);
+  const actor = await fileActor(request);
   if (!actor) return Response.json({ error: "请先登录" }, { status: 401 });
   const key = safeKey(String(new URL(request.url).searchParams.get("key") || ""));
   if (!key) return Response.json({ error: "缺少文件标识" }, { status: 400 });
