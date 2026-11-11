@@ -213,6 +213,7 @@ export async function POST(request: Request) {
     if (isPublicRecord) statements.push(payload.reviewStatus === "approved"
       ? publicationOrderStatement(env.DB, body.kind, id, Number(payload.sortOrder) > 0 ? Number(payload.sortOrder) : null)
       : compactPublicationOrderStatement(env.DB, body.kind));
+    if (body.kind === "student-profile" && String(payload.name || "").trim()) statements.push(env.DB.prepare("UPDATE users SET name=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND role='student'").bind(String(payload.name).trim(), owner));
     [write] = await env.DB.batch(statements);
   } catch (error) {
     if (String(error).includes("malformed JSON")) return Response.json({ error: "该内容刚刚被其他窗口更新，请刷新后再保存" }, { status: 409 });

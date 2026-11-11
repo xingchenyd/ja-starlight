@@ -1,10 +1,11 @@
 "use client";
+import { scopedFetch } from "../../lib/campus/client";
 import { useCallback, useEffect, useState } from "react";
 import { challengeStatus } from "../../lib/challenges/model";
 
 type Team = { id: string; activityId: string; activityTitle?: string; captainId: string; name: string; status: string; version: number; members: { id: string; name: string }[]; invites: { id: string; email: string; expiresAt: string; consumedAt: string | null; revokedAt: string | null }[]; submission: { title?: string; summary?: string; url?: string; submittedAt?: string }; review: { note?: string; score?: number | null; award?: string; referral?: string; fulfillment?: string } };
 async function api(body: Record<string, unknown>) {
-  const response = await fetch("/api/challenges", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const response = await scopedFetch("/api/challenges", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || "操作失败，请稍后重试");
   return result;
@@ -19,7 +20,7 @@ export function StudentChallenge({ activityId }: { activityId: string }) {
   const [name, setName] = useState(""), [code, setCode] = useState(""), [email, setEmail] = useState(""), [inviteCode, setInviteCode] = useState("");
   const [submission, setSubmission] = useState({ title: "", summary: "", url: "" });
   const reload = useCallback(async () => {
-    const response = await fetch(`/api/challenges?activityId=${encodeURIComponent(activityId)}`, { cache: "no-store" });
+    const response = await scopedFetch(`/api/challenges?activityId=${encodeURIComponent(activityId)}`, { cache: "no-store" });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "团队加载失败");
     setTeam(result.team); setActorId(result.actorId);
@@ -51,7 +52,7 @@ export function StudentChallenge({ activityId }: { activityId: string }) {
   </section>;
 }
 
-function ReviewCard({ team, scope, refresh }: { team: Team; scope: "enterprise" | "ja"; refresh: () => Promise<void> }) {
+function ReviewCard({ team, scope, refresh }: { team: Team; scope: "enterprise" | "ja" | "school"; refresh: () => Promise<void> }) {
   const [expanded, setExpanded] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [form, setForm] = useState({ decision: "completed", score: "", note: "", award: "", referral: "" });
   const submit = async () => {
@@ -63,10 +64,10 @@ function ReviewCard({ team, scope, refresh }: { team: Team; scope: "enterprise" 
   return <article className="challenge-review-card"><button type="button" className="challenge-review-toggle" onClick={() => setExpanded(v => !v)} aria-expanded={expanded}><span><b>{team.name}</b><span>{team.activityTitle} · {team.members.length} 人</span></span><span>{challengeStatus[team.status]} {expanded ? "−" : "+"}</span></button>{expanded && <div className="challenge-review-detail"><p>{team.members.map(m => `${m.name || "未填写姓名"}${m.id === team.captainId ? "（队长）" : ""}`).join("、")}</p><h4>{team.submission.title || "尚未提交成果"}</h4><p className="challenge-prose">{team.submission.summary}</p>{team.submission.url && <a href={team.submission.url} target="_blank" rel="noopener noreferrer">查看成果链接 ↗</a>}<Result team={team} />{team.status === "submitted" && <div className="challenge-review-form"><label><span>评审结果</span><select value={form.decision} onChange={e => setForm(v => ({ ...v, decision: e.target.value }))}><option value="completed">完成评审，生成认证经历</option><option value="awarded">获奖，生成认证经历</option><option value="revision_requested">退回补充（允许截止后补交）</option></select></label><label><span>评分（选填，0–100）</span><input type="number" min={0} max={100} value={form.score} onChange={e => setForm(v => ({ ...v, score: e.target.value }))} /></label><label><span>评审意见 *</span><textarea rows={4} maxLength={5000} value={form.note} onChange={e => setForm(v => ({ ...v, note: e.target.value }))} /></label><label><span>奖励与线下兑现说明</span><textarea maxLength={1000} value={form.award} onChange={e => setForm(v => ({ ...v, award: e.target.value }))} /></label><label><span>实习推荐与后续安排</span><textarea maxLength={1000} value={form.referral} onChange={e => setForm(v => ({ ...v, referral: e.target.value }))} /></label>{error && <p role="alert" className="field-error">{error}</p>}<button type="button" className="primary-btn" disabled={busy} onClick={() => { if (window.confirm("确认将评审结果发送给全体队员？")) void submit(); }}>{busy ? "正在保存…" : "确认评审结果"}</button></div>}</div>}</article>;
 }
 
-export function ChallengeReviewDesk({ scope }: { scope: "enterprise" | "ja" }) {
+export function ChallengeReviewDesk({ scope }: { scope: "enterprise" | "ja" | "school" }) {
   const [teams, setTeams] = useState<Team[]>([]), [loading, setLoading] = useState(true), [error, setError] = useState(""), [filter, setFilter] = useState("all");
   const reload = useCallback(async () => {
-    const response = await fetch(`/api/challenges?scope=${scope}`, { cache: "no-store" });
+    const response = await scopedFetch(`/api/challenges?scope=${scope}`, { cache: "no-store" });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "加载失败");
     setTeams(result.teams); setError("");

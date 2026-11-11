@@ -1,11 +1,13 @@
 import { env } from "cloudflare:workers";
+import { campusSchema } from "./campus-schema";
 import { ensureLaunchMigration } from "../lib/platform/launch-migration";
 import { getAccountActor, getAdminActor, type AuthConfig, type AuthDatabase } from "../lib/auth/accounts";
 
-export type PlatformRole = "student" | "enterprise" | "admin";
+export type PlatformRole = "student" | "enterprise" | "admin" | "operator";
 export type PlatformActor = { id: string; email: string; name: string; role: PlatformRole; testMode: boolean };
 
 const coreSchema = [
+  ...campusSchema,
   "CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'student', status TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS workspace_records (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, archived_at TEXT, published_at TEXT, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, actor_id TEXT NOT NULL, action TEXT NOT NULL, target_type TEXT NOT NULL, target_id TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",

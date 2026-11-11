@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { businessReviewer, businessContext, hasBusinessRole } from "../../../lib/campus/access";
 import { validateRegistrationFields } from "../../../lib/services/registration-form";
 import { normalizeChallenge, validateChallenge } from "../../../lib/challenges/model";
 import { ensureCoreSchema, notify, requireAdmin } from "../../../db/runtime";
@@ -73,7 +74,7 @@ export async function GET(request: Request) {
 }
 export async function POST(request: Request) {
   await setup();
-  const user = await requireAdmin(request);
+  const user = await businessReviewer(request);
   if (!user)
     return Response.json(
       { error: "需要后台登录或管理员权限" },
@@ -92,6 +93,8 @@ export async function POST(request: Request) {
     version?: number;
   };
   if (body.action === "verify-organization") {
+    const context = await businessContext(request);
+    if (!hasBusinessRole(context, "project_lead")) return Response.json({ error: "需要项目负责人业务权限" }, { status: 403 });
     if (!body.organizationId || !["approved", "rejected"].includes(String(body.decision)))
       return Response.json({ error: "缺少企业认证决定" }, { status: 400 });
     if (body.decision === "rejected" && !body.reason?.trim())
@@ -145,6 +148,8 @@ export async function POST(request: Request) {
         ? !["job", "activity", "content"].includes(row.kind)
         : !["activity", "content"].includes(row.kind) || row.ownerId.startsWith("ja:"),
   );
+  if (rows.some(row => row.current.creatorId === user.id || row.current.submittedBy === user.id || row.ownerId === user.id))
+    return Response.json({ error: "不能审核自己发布或最后编辑的内容，请交给其他审核员" }, { status: 403 });
   if (unsupported)
     return Response.json(
       { error: "仅企业活动和企业内容需要审核；星光计划自发内容直接发布" },
@@ -315,7 +320,7 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   await setup();
-  const user = await requireAdmin(request);
+  const user = await businessReviewer(request);
   if (!user) return Response.json({ error: "需要后台登录" }, { status: 401 });
   const body = await request.json() as { id?: string; reason?: string; version?: number };
   if (!body.id || !body.reason?.trim()) return Response.json({ error: "请填写删除原因" }, { status: 400 });

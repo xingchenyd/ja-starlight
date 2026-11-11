@@ -58,6 +58,8 @@ export async function DELETE(request: Request) {
   if (!actor) return Response.json({ error: "请先登录" }, { status: 401 });
   const key = safeKey(String(new URL(request.url).searchParams.get("key") || ""));
   if (!key) return Response.json({ error: "缺少文件标识" }, { status: 400 });
+  const linked = await env.DB.prepare("SELECT id FROM workspace_records WHERE archived_at IS NULL AND kind IN ('activity','content','job') AND instr(payload,?)>0 LIMIT 1").bind("/api/files?key=" + encodeURIComponent(key)).first();
+  if (linked) return Response.json({ error: "该文件仍被发布内容使用。请先从发布内容中移除，避免影响学生查看或校园交接。" }, { status: 409 });
   const result = await env.DB.prepare("UPDATE media_assets SET archived_at=CURRENT_TIMESTAMP,status='archived' WHERE storage_key=? AND owner_id=? AND archived_at IS NULL").bind(key, actor.id).run();
   if (!result.meta.changes) return Response.json({ error: "文件不存在或无权操作" }, { status: 404 });
   await writeAudit(actor.id, "archive-file", "media-asset", key);

@@ -1,4 +1,1 @@
-import { getAdminActor, updateAdminKey } from "../../../../../lib/auth/accounts";
-import { authEnvironment } from "../../../../../lib/auth/environment";
-import { authErrorResponse, jsonBody, validateMutationOrigin } from "../../../../../lib/auth/request";
-export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) { try { const { db, config } = await authEnvironment(); validateMutationOrigin(request, config); const actor = await getAdminActor(db, config, request); if (!actor) return Response.json({ error: "请先登录星光计划运营后台" }, { status: 401 }); const { id } = await context.params, body = await jsonBody(request); await updateAdminKey(db, id, body.action); return Response.json({ updated: true, action: body.action, supported: ["disable", "restore", "revoke"] }); } catch (error) { return authErrorResponse(error); } }
+export async function PATCH() { return Response.json({ error: "已关闭旧密钥恢复和多人管理。唯一密钥通过服务器安全轮换。" }, { status: 410 }); }

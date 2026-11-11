@@ -1,9 +1,10 @@
 import { env } from "cloudflare:workers";
+import { businessContext, businessHost, hasBusinessRole } from "../../../lib/campus/access";
 import { deadlineAt, normalizeChallenge } from "../../../lib/challenges/model";
 import { activities as seedActivities } from "../../data";
 import type { RegistrationField } from "../../data";
 import { defaultRegistrationFields, validateRegistrationAnswers, validateRegistrationFields } from "../../../lib/services/registration-form";
-import { getActor, notify, requireAdmin, writeAudit } from "../../../db/runtime";
+import { getActor, notify, writeAudit } from "../../../db/runtime";
 import { normalizeDateTime, reminderBefore } from "../../../lib/services/student";
 import {
   canReviewRegistration,
@@ -117,7 +118,8 @@ export async function GET(request: Request) {
   await setup();
   const scope = new URL(request.url).searchParams.get("scope");
   if (scope === "ja") {
-    const admin = await requireAdmin(request);
+    const context = await businessContext(request);
+    const admin = hasBusinessRole(context, "project_lead") ? context.actor : null;
     if (!admin)
       return Response.json({ error: "需要星光计划运营后台权限" }, { status: 401 });
     const rows = await env.DB.prepare(
@@ -145,6 +147,14 @@ export async function GET(request: Request) {
         parseRegistration,
       ),
     });
+  }
+  if (scope === "school") {
+    const context = await businessContext(request);
+    if (!context.actor) return Response.json({ error: "请先登录" }, { status: 401 });
+    const owners = context.grants.filter(g => g.role === "campus_partner").map(g => "school:" + g.schoolId);
+    if (!context.owner && !owners.length) return Response.json({ error: "没有校园报名管理权限" }, { status: 403 });
+    const rows = await env.DB.prepare(`SELECT id,activity_id AS activityId,activity_title AS activityTitle,student_owner_id AS studentOwnerId,publisher_owner_id AS publisherOwnerId,answers,form_snapshot AS formSnapshot,status,review_note AS reviewNote,reviewed_at AS reviewedAt,created_at AS createdAt FROM activity_registrations WHERE ${context.owner ? "publisher_owner_id LIKE 'school:%'" : "publisher_owner_id IN (" + owners.map(() => "?").join(",") + ")"} ORDER BY created_at DESC LIMIT 500`).bind(...(context.owner ? [] : owners)).all();
+    return Response.json({ registrations: (rows.results as unknown as RegistrationRow[]).map(parseRegistration) });
   }
   const identity = await getActor(request, "student");
   if (!identity) return Response.json({ registrations: [] }, { status: 401 });
@@ -340,6 +350,10 @@ export async function POST(request: Request) {
       ? "/ja-console/registrations"
       : "/workspace/enterprise/registrations",
   );
+  if (publisher.startsWith("school:")) {
+    const recipients = await env.DB.prepare("SELECT DISTINCT user_id FROM business_grants WHERE role='campus_partner' AND school_id=? AND status='active'").bind(publisher.slice(7)).all<{ user_id: string }>();
+    await Promise.all(recipients.results.map(recipient => notify(recipient.user_id, "new-registration", "收到新的校园活动报名", canonicalTitle + " 有新的学生报名待确认。", "/campus#registrations")));
+  }
   return Response.json({ ok: true, id, status: "pending" });
 }
 
@@ -353,11 +367,12 @@ export async function PATCH(request: Request) {
     note?: string;
   };
   const reviewScope: RegistrationReviewScope =
-    body.scope === "ja" ? "ja" : "enterprise";
+    body.scope === "ja" ? "ja" : body.scope === "school" ? "school" : "enterprise";
+  const reviewContext = reviewScope === "enterprise" ? null : await businessContext(request);
   const identity =
     reviewScope === "ja"
-      ? await requireAdmin(request)
-      : await getActor(request, "enterprise");
+      ? (reviewContext && hasBusinessRole(reviewContext, "project_lead") ? reviewContext.actor : null)
+      : reviewScope === "school" ? reviewContext?.actor : await getActor(request, "enterprise");
   if (!identity)
     return Response.json(
       { error: reviewScope === "ja" ? "需要星光计划运营后台权限" : "缺少企业身份" },
@@ -398,12 +413,16 @@ export async function PATCH(request: Request) {
     );
   const unauthorized = registrations.results.some(
     (registration) =>
-      !canReviewRegistration(
+      registration.studentOwnerId === publisher ||
+      (reviewScope !== "school" && !canReviewRegistration(
         reviewScope,
         publisher,
         registration.publisherOwnerId,
-      ),
+      )),
   );
+  if (reviewScope === "school") for (const registration of registrations.results) {
+    if (!registration.publisherOwnerId.startsWith("school:") || !await businessHost(request, registration.publisherOwnerId)) return Response.json({ error: "无权处理其他学校的报名" }, { status: 403 });
+  }
   if (unauthorized)
     return Response.json(
       {

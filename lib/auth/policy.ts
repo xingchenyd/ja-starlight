@@ -1,4 +1,4 @@
-export type AuthRole = "student" | "enterprise" | "admin";
+export type AuthRole = "student" | "enterprise" | "admin" | "operator";
 export type RateLimitState = { attempts: number; windowStartedAt: number; blockedUntil: number | null };
 
 export function sessionDurationSeconds(role: AuthRole) {

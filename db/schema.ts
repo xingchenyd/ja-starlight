@@ -1,12 +1,42 @@
 import { sql } from "drizzle-orm";
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(), email: text("email").notNull(), name: text("name").notNull(),
-  role: text("role", { enum: ["student", "enterprise", "admin"] }).notNull().default("student"),
+  role: text("role", { enum: ["student", "enterprise", "admin", "operator"] }).notNull().default("student"),
   status: text("status").notNull().default("active"), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [index("idx_users_role_status").on(table.role, table.status)]);
+
+export const platformOwner = sqliteTable("platform_owner", {
+  id: integer("id").primaryKey(), credentialId: text("credential_id").notNull().unique(),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, table => [check("single_platform_owner", sql`${table.id}=1`)]);
+export const schools = sqliteTable("schools", {
+  id: text("id").primaryKey(), name: text("name").notNull().unique(), status: text("status").notNull().default("active"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+export const schoolMemberships = sqliteTable("school_memberships", {
+  studentId: text("student_id").primaryKey().references(() => users.id), schoolId: text("school_id").notNull().references(() => schools.id),
+  status: text("status", { enum: ["pending","verified","rejected"] }).notNull(), note: text("note").notNull().default(""),
+  reviewedBy: text("reviewed_by"), reviewedAt: text("reviewed_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`), updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, table => [index("idx_school_memberships_scope").on(table.schoolId,table.status)]);
+export const businessGrants = sqliteTable("business_grants", {
+  id: text("id").primaryKey(), userId: text("user_id").notNull().references(() => users.id),
+  role: text("role", { enum: ["campus_partner","content_reviewer","project_lead"] }).notNull(),
+  schoolId: text("school_id").references(() => schools.id), status: text("status",{enum:["active","revoked"]}).notNull().default("active"),
+  grantedBy: text("granted_by").notNull(), revokedBy: text("revoked_by"), revokedReason: text("revoked_reason"), revokedAt: text("revoked_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, table => [
+  uniqueIndex("idx_business_grants_active").on(table.userId,table.role,sql`COALESCE(${table.schoolId},'')`).where(sql`${table.status}='active'`),
+  check("business_role_scope",sql`(${table.role}='campus_partner' AND ${table.schoolId} IS NOT NULL) OR (${table.role}<>'campus_partner' AND ${table.schoolId} IS NULL)`),
+]);
+export const businessInvitations = sqliteTable("business_invitations", {
+  id: text("id").primaryKey(), email: text("email").notNull(), name: text("name").notNull(), tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: text("expires_at").notNull(), consumedAt: text("consumed_at"), createdBy: text("created_by").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
 
 export const passwordCredentials = sqliteTable("password_credentials", {
   userId: text("user_id").primaryKey(), algorithm: text("algorithm").notNull(), version: integer("version").notNull(),

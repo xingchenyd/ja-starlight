@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element, @next/next/no-html-link-for-pages, jsx-a11y/media-has-caption */
 "use client";
+import { scopedFetch } from "../../lib/campus/client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RichBlock, RegistrationField } from "../data";
 import RegistrationFormEditor from "../components/RegistrationForm";
@@ -258,7 +259,7 @@ function JAConsoleWorkspace({
     setLoading(true);
     setLoadError("");
     try {
-      const response = await fetch("/api/admin");
+      const response = await scopedFetch("/api/admin");
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "后台数据读取失败");
       setRecords(data.records || []);
@@ -273,7 +274,7 @@ function JAConsoleWorkspace({
   };
   useEffect(() => {
     let active = true;
-    fetch("/api/admin")
+    scopedFetch("/api/admin")
       .then(async (response) => {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "后台数据读取失败");
@@ -363,7 +364,7 @@ function JAConsoleWorkspace({
       setNotice("退回时请填写具体修改意见");
       return;
     }
-    const response = await fetch("/api/admin", {
+    const response = await scopedFetch("/api/admin", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -396,7 +397,7 @@ function JAConsoleWorkspace({
     if (!ids.length) return { ok: false, message: "请先选择待审核内容" };
     if (decision === "rejected" && !batchReason.trim())
       return { ok: false, message: "批量退回时必须填写统一修改意见" };
-    const response = await fetch("/api/admin", {
+    const response = await scopedFetch("/api/admin", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -422,7 +423,7 @@ function JAConsoleWorkspace({
     featured: boolean;
   }) => {
     if (!selected) return;
-    const response = await fetch("/api/admin", {
+    const response = await scopedFetch("/api/admin", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ id: selected.id, version: selected.version, action: "configure", ...settings }),
@@ -438,7 +439,7 @@ function JAConsoleWorkspace({
   };
   const removePublication = async (removalReason: string) => {
     if (!selected) return;
-    const response = await fetch("/api/admin", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: selected.id, version: selected.version, reason: removalReason }) });
+    const response = await scopedFetch("/api/admin", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: selected.id, version: selected.version, reason: removalReason }) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "删除失败，请稍后重试");
     setSelectedId("");
@@ -537,8 +538,8 @@ function JAConsoleWorkspace({
             </button>
           ))}
         </nav>
-        <div className="side-help"><b>安全后台</b><p>企业认证、内容审核和操作日志均按管理员身份记录。</p></div>
-        <button className="back" onClick={async () => { await fetch("/api/admin-auth/logout", { method: "POST" }); location.assign("/"); }}>退出后台</button>
+        <div className="side-help"><a href="/operations?access=owner">学校与业务授权 →</a><p>业务审核独立授权，系统安全仅由你管理。</p></div>
+        <button className="back" onClick={async () => { await scopedFetch("/api/admin-auth/logout", { method: "POST" }); location.assign("/"); }}>退出后台</button>
       </aside>
       <div className="work">
         <header className="topbar">
@@ -642,22 +643,10 @@ function JAConsoleWorkspace({
   );
 }
 
-type AdminKeyItem = { id: string; label: string; key_prefix: string; status: string; last_used_at?: string | null; created_at: string };
 function SecurityKeys({ onNotice }: { onNotice: (message: string) => void }) {
-  const [items, setItems] = useState<AdminKeyItem[]>([]), [label, setLabel] = useState(""), [createdKey, setCreatedKey] = useState(""), [loading, setLoading] = useState(true);
-  const loadKeys = async () => { setLoading(true); const response = await fetch("/api/admin-auth/keys"); const data = await response.json(); setLoading(false); if (response.ok) setItems(data.keys || []); else onNotice(data.error || "密钥列表读取失败"); };
-  useEffect(() => {
-    let active = true;
-    fetch("/api/admin-auth/keys").then(async (response) => ({ response, data: await response.json() })).then(({ response, data }) => {
-      if (!active) return;
-      if (response.ok) setItems(data.keys || []);
-      setLoading(false);
-    });
-    return () => { active = false; };
-  }, []);
-  const create = async () => { const response = await fetch("/api/admin-auth/keys", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ label }) }); const data = await response.json(); if (!response.ok) return onNotice(data.error || "密钥创建失败"); setCreatedKey(data.rawKey); setLabel(""); onNotice("新密钥已创建，请立即安全保存"); await loadKeys(); };
-  const act = async (id: string, action: "disable" | "restore" | "revoke") => { const response = await fetch(`/api/admin-auth/keys/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action }) }); const data = await response.json(); if (!response.ok) return onNotice(data.error || "密钥状态更新失败"); onNotice(action === "revoke" ? "密钥已永久撤销" : action === "disable" ? "密钥已停用" : "密钥已恢复"); await loadKeys(); };
-  return <section className="admin-key-console"><div className="admin-key-create"><div><small>CREATE ADMIN CREDENTIAL</small><h2>创建管理密钥</h2><p>为每位管理员单独命名，便于追踪审核操作和停用权限。</p></div><label>密钥名称<input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="例如：长沙项目负责人" maxLength={60}/></label><button onClick={create} disabled={label.trim().length < 2}>生成新密钥</button></div>{createdKey && <div className="admin-key-once" role="alert"><b>仅展示一次，请立即复制并保存</b><code>{createdKey}</code><button onClick={() => navigator.clipboard.writeText(createdKey)}>复制密钥</button></div>}<div className="admin-key-list"><header><b>现有密钥</b><span>{items.filter((item) => item.status === "active").length} 个有效</span></header>{loading ? <p>正在读取…</p> : items.map((item) => <article key={item.id}><div><span className={`key-state ${item.status}`}>{item.status === "active" ? "有效" : item.status === "disabled" ? "已停用" : "已撤销"}</span><h3>{item.label}</h3><code>{item.key_prefix}••••••</code><small>创建：{new Date(item.created_at).toLocaleString("zh-CN")} · 最近使用：{item.last_used_at ? new Date(item.last_used_at).toLocaleString("zh-CN") : "从未"}</small></div><div>{item.status === "active" && <button onClick={() => act(item.id, "disable")}>停用</button>}{item.status === "disabled" && <button onClick={() => act(item.id, "restore")}>恢复</button>}{item.status !== "revoked" && <button className="danger" onClick={() => confirm("撤销后无法恢复，确认继续？") && act(item.id, "revoke")}>撤销</button>}</div></article>)}</div></section>;
+  const [items, setItems] = useState<{ id: string; label: string; status: string; last_used_at: string | null }[]>([]);
+  useEffect(() => { let active = true; scopedFetch("/api/admin-auth/keys").then(async r => { const data = await r.json(); if (active && r.ok) setItems(data.keys || []); }).catch(() => onNotice("密钥状态读取失败")); return () => { active = false; }; }, [onNotice]);
+  return <section className="admin-key-console"><div className="admin-key-create"><div><small>PLATFORM OWNER</small><h2>唯一技术管理员</h2><p>平台只保留你的管理密钥。项目负责人、内容审核员与星光伙伴使用独立账号和业务授权。</p><a className="primary-btn" href="/operations?access=owner">管理学校与业务授权 →</a></div></div><div className="admin-key-list">{items.map(item => <article key={item.id}><div><h3>{item.label}</h3><p>{item.status === "active" ? "当前唯一有效密钥" : "历史密钥 · 已失效"}</p><small>最近使用：{item.last_used_at ? new Date(item.last_used_at).toLocaleString("zh-CN") : "从未"}</small></div></article>)}</div></section>;
 }
 
 function OrganizationVerification({ items, onUpdated, onNotice }: { items: Organization[]; onUpdated: () => Promise<void>; onNotice: (message: string) => void }) {
@@ -667,7 +656,7 @@ function OrganizationVerification({ items, onUpdated, onNotice }: { items: Organ
     if (!selected || saving) return;
     if (decision === "rejected" && reason.trim().length < 4) return onNotice("退回企业认证时请填写具体原因");
     setSaving(true);
-    const response = await fetch("/api/admin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "verify-organization", organizationId: selected.id, decision, reason: reason.trim() }) });
+    const response = await scopedFetch("/api/admin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "verify-organization", organizationId: selected.id, decision, reason: reason.trim() }) });
     const data = await response.json(); setSaving(false);
     if (!response.ok) return onNotice(data.error || "企业认证处理失败");
     onNotice(decision === "approved" ? "企业主体认证已通过" : "企业认证已退回补充材料"); setSelected(null); setReason(""); await onUpdated();
@@ -931,7 +920,7 @@ function JARegistrationDesk({
     }
     setSaving(true);
     try {
-      const response = await fetch("/api/registrations", {
+      const response = await scopedFetch("/api/registrations", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -1560,7 +1549,7 @@ function AdminPublisher({
     const data = new FormData();
     data.append("file", file);
     data.append("purpose", "media");
-    const response = await fetch("/api/files", { method: "POST", headers: { "x-starlight-scope": "admin" }, body: data });
+    const response = await scopedFetch("/api/files", { method: "POST", headers: { "x-starlight-scope": "admin" }, body: data });
     const result = await response.json();
     if (response.ok && result.url)
       setForm((v) => ({
@@ -1628,7 +1617,7 @@ function AdminPublisher({
             tags: abilities,
             publisher: "星光计划",
           };
-    const response = await fetch("/api/admin", {
+    const response = await scopedFetch("/api/admin", {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ kind, payload }),
@@ -1803,7 +1792,7 @@ function AdminPublisher({
           {step === "报名设置" && (
             <RegistrationFormEditor value={registrationFields} onChange={setRegistrationFields} />
           )}{" "}
-          {step === "添加图片" && <PublicationImages cover={form.cover} coverType={form.coverType} gallery={gallery} onCover={(cover, coverType) => setForm(v => ({ ...v, cover, coverType }))} onGallery={setGallery} onBusy={setImagesBusy} upload={async file => { const data = new FormData(); data.append("file", file); data.append("purpose", "media"); const response = await fetch("/api/files", { method: "POST", headers: { "x-starlight-scope": "admin" }, body: data }); const result = await response.json(); if (!response.ok) throw new Error(result.error || "上传失败"); return result; }} />}
+          {step === "添加图片" && <PublicationImages cover={form.cover} coverType={form.coverType} gallery={gallery} onCover={(cover, coverType) => setForm(v => ({ ...v, cover, coverType }))} onGallery={setGallery} onBusy={setImagesBusy} upload={async file => { const data = new FormData(); data.append("file", file); data.append("purpose", "media"); const response = await scopedFetch("/api/files", { method: "POST", headers: { "x-starlight-scope": "admin" }, body: data }); const result = await response.json(); if (!response.ok) throw new Error(result.error || "上传失败"); return result; }} />}
           {(step === "成长设计" || (kind === "activity" && step === "基础信息")) && (
             <>
               <label className="full">
@@ -1896,7 +1885,7 @@ function JAFeedbackDesk({
     setLoading(true);
     setError("");
     try {
-      const response = await fetch("/api/social?scope=ja");
+      const response = await scopedFetch("/api/social?scope=ja");
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "互动数据读取失败");
       setComments(data.comments || []);
@@ -1908,7 +1897,7 @@ function JAFeedbackDesk({
   };
   useEffect(() => {
     let active = true;
-    fetch("/api/social?scope=ja")
+    scopedFetch("/api/social?scope=ja")
       .then(async (response) => {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "互动数据读取失败");
@@ -1938,7 +1927,7 @@ function JAFeedbackDesk({
     }
     if (action === "delete" && !window.confirm("确定删除该评论吗？此操作会留下审计记录。")) return;
     setSaving(true);
-    const response = await fetch("/api/social", {
+    const response = await scopedFetch("/api/social", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -2030,7 +2019,7 @@ function IntegrityDesk({
       return;
     }
     setSaving(true);
-    const response = await fetch("/api/admin", {
+    const response = await scopedFetch("/api/admin", {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -2069,7 +2058,7 @@ function IntegrityDesk({
   };
   const resolve = async (item: RecordItem) => {
     if (!window.confirm("确认将该诚信记录标记为已解除吗？记录仍会保留在审计中。")) return;
-    const response = await fetch("/api/admin", {
+    const response = await scopedFetch("/api/admin", {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({

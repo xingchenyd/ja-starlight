@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { getActor, requireAdmin } from "../../../db/runtime";
+import { businessContext, businessHost, hasBusinessRole } from "../../../lib/campus/access";
 import { ensureChallengeSchema } from "../../../db/challenges";
 import { deadlineAt, normalizeChallenge, safeEvidenceUrl, validateChallenge } from "../../../lib/challenges/model";
 
@@ -20,9 +20,16 @@ async function serialize(team: Team, captain = false) {
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const scope = url.searchParams.get("scope");
-  const actor = scope === "ja" ? await requireAdmin(request) : await getActor(request);
+  const context = await businessContext(request);
+  const actor = scope === "ja" ? (hasBusinessRole(context, "project_lead") ? context.actor : null) : context.actor;
   if (!actor) return fail("请先登录", 401);
   await ensureChallengeSchema();
+  if (scope === "school") {
+    const owners = context.grants.filter(g => g.role === "campus_partner").map(g => "school:" + g.schoolId);
+    if (!context.owner && !owners.length) return fail("无校园竞赛评审权限", 403);
+    const rows = await env.DB.prepare(`SELECT t.*,w.payload AS activityPayload FROM challenge_teams t JOIN workspace_records w ON w.id=t.activity_id WHERE ${context.owner ? "w.owner_id LIKE 'school:%'" : "w.owner_id IN (" + owners.map(() => "?").join(",") + ")"} ORDER BY t.updated_at DESC LIMIT 500`).bind(...(context.owner ? [] : owners)).all<Team & { activityPayload: string }>();
+    return Response.json({ teams: await Promise.all(rows.results.map(async row => ({ ...await serialize(row), activityTitle: json(row.activityPayload).title, challenge: normalizeChallenge(json(row.activityPayload).challenge) }))) });
+  }
   if (scope === "ja" || scope === "enterprise") {
     if (scope === "enterprise" && actor.role !== "enterprise") return fail("无权查看评审工作台", 403);
     const rows = await env.DB.prepare(`SELECT t.*,w.payload AS activityPayload FROM challenge_teams t JOIN workspace_records w ON w.id=t.activity_id WHERE ${scope === "ja" ? "w.owner_id LIKE 'ja:%'" : "w.owner_id=?"} ORDER BY t.updated_at DESC LIMIT 500`).bind(...(scope === "ja" ? [] : [actor.id])).all<Team & { activityPayload: string }>();
@@ -38,7 +45,8 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!body || typeof body !== "object") return fail("请求格式不正确");
   const action = String(body.action || "");
-  const actor = body.scope === "ja" ? await requireAdmin(request) : await getActor(request);
+  const context = await businessContext(request);
+  const actor = body.scope === "ja" ? (hasBusinessRole(context, "project_lead") ? context.actor : null) : context.actor;
   if (!actor) return fail("请先登录", 401);
   await ensureChallengeSchema();
   const teamId = String(body.teamId || "");
@@ -60,7 +68,8 @@ export async function POST(request: Request) {
   if (!spec.enabled || validateChallenge(spec).length) return fail("该活动尚未配置完整的竞赛规则", 409);
   const reviewing = action === "review";
   if (reviewing) {
-    if (!(actor.role === "enterprise" && activity.owner_id === actor.id || actor.role === "admin" && activity.owner_id.startsWith("ja:"))) return fail("只有本场竞赛主办方可评审", 403);
+    if (!await businessHost(request, activity.owner_id)) return fail("只有本场竞赛主办方可评审", 403);
+    if (team && await env.DB.prepare("SELECT student_id FROM challenge_members WHERE team_id=? AND student_id=?").bind(team.id, actor.id).first()) return fail("不能评审自己参与的团队", 403);
   } else {
     if (actor.role !== "student") return fail("仅学生可参赛", 403);
     if (activity.archived_at || payload.reviewStatus !== "approved" || ["已结束", "已下线", "已归档"].includes(payload.status)) return fail("当前活动不开放参赛操作", 409);

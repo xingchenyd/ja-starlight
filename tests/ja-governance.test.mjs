@@ -36,7 +36,9 @@ test("registration API routes JA and enterprise decisions through separate scope
   );
 
   assert.match(source, /scope === "ja"/);
-  assert.match(source, /requireAdmin/);
+  assert.match(source, /businessContext/);
+  assert.match(source, /hasBusinessRole/);
+  assert.match(source, /businessHost/);
   assert.match(source, /canReviewRegistration/);
   assert.match(source, /seedActivities\.find/);
   assert.match(source, /活动不存在或已下线/);

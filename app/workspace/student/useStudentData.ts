@@ -22,7 +22,7 @@ export type StudentCalendarEvent = {
 };
 export type StudentExperience = {
   id: string;
-  sourceType: "manual" | "platform";
+  sourceType: "manual" | "platform" | "campus-appointment";
   sourceId?: string | null;
   category: string;
   title: string;

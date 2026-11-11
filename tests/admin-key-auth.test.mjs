@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("JA key authentication and lifecycle routes are present", async () => {
+test("Single owner key authentication replaces multi-admin lifecycle", async () => {
   const [login, keys, keyed] = await Promise.all([
     readFile(new URL("../app/api/admin-auth/login/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/admin-auth/keys/route.ts", import.meta.url), "utf8"),
@@ -10,9 +10,9 @@ test("JA key authentication and lifecycle routes are present", async () => {
   ]);
   assert.match(login, /authenticateAdminKey/);
   assert.match(login, /ja_admin_session/);
-  assert.match(keys, /createAdminKey/);
-  assert.match(keyed, /disable|restore|revoke/);
-  assert.match(keys, /rawKey/);
+  assert.doesNotMatch(keys, /createAdminKey/);
+  assert.match(keyed, /status: 410/);
+  assert.match(keys, /status: 410/);
 });
 
 test("JA console exposes key management and native logout", async () => {

@@ -10,7 +10,7 @@ export type AuthConfig = {
   TENCENT_SES_REGION?: string; TENCENT_SES_SECRET_ID?: string; TENCENT_SES_SECRET_KEY?: string; TENCENT_SES_TEMPLATE_ID?: string;
   AUTH_SEED_STUDENT_PASSWORD?: string; AUTH_SEED_ENTERPRISE_PASSWORD?: string; AUTH_SEED_ADMIN_KEY?: string;
 };
-type User = { id: string; email: string; name: string; role: "student" | "enterprise"; status: string };
+type User = { id: string; email: string; name: string; role: "student" | "enterprise" | "operator"; status: string };
 const DUMMY_PASSWORD_SALT = "AAAAAAAAAAAAAAAAAAAAAA";
 
 export class AuthServiceError extends Error {
@@ -70,7 +70,7 @@ export async function createAccount(db: AuthDatabase, config: AuthConfig, reques
 }
 
 export async function authenticateAccount(db: AuthDatabase, config: AuthConfig, request: Request, body: Record<string, unknown>) {
-  const email = validateEmail(body.email), password = String(body.password || ""), role = roleOf(body.role);
+  const email = validateEmail(body.email), password = String(body.password || ""), role = body.role === "operator" ? "operator" : roleOf(body.role);
   await rateLimit(db, request, "login", email);
   const row = await db.prepare("SELECT u.id,u.email,u.name,u.role,u.status,p.algorithm,p.version,p.iterations,p.salt,p.password_hash FROM users u JOIN password_credentials p ON p.user_id=u.id WHERE lower(u.email)=?").bind(email).first<User & { algorithm: string; version: number; iterations: number; salt: string; password_hash: string }>();
   let passwordValid = false;
@@ -99,6 +99,8 @@ export async function getAdminActor(db: AuthDatabase, config: AuthConfig, reques
   const tokenHash = await hashOpaqueToken(token, pepper(config));
   const actor = await db.prepare("SELECT c.id,c.label,s.id session_id,s.expires_at FROM auth_sessions s JOIN admin_credentials c ON c.id=s.subject_id WHERE s.token_hash=? AND s.subject_type='admin' AND s.revoked_at IS NULL AND c.status='active'").bind(tokenHash).first<{ id: string; label: string; session_id: string; expires_at: string }>();
   if (!actor || Date.parse(actor.expires_at) <= Date.now()) return null;
+  const owner = await db.prepare("SELECT credential_id FROM platform_owner WHERE id=1").first<{ credential_id: string }>();
+  if (!owner || owner.credential_id !== actor.id) return null;
   await db.prepare("UPDATE auth_sessions SET last_seen_at=CURRENT_TIMESTAMP WHERE id=?").bind(actor.session_id).run();
   return { id: `admin:${actor.id}`, email: "", name: actor.label, role: "admin", testMode: false } as const;
 }
@@ -160,6 +162,8 @@ export async function authenticateAdminKey(db: AuthDatabase, config: AuthConfig,
   await rateLimit(db, request, "admin-login", key.slice(0, 24));
   const secretHash = await hashOpaqueToken(key, pepper(config));
   const credential = await db.prepare("SELECT id,label,status FROM admin_credentials WHERE secret_hash=?").bind(secretHash).first<{ id: string; label: string; status: string }>();
+  const owner = await db.prepare("SELECT credential_id FROM platform_owner WHERE id=1").first<{ credential_id: string }>();
+  if (!owner || credential?.id !== owner.credential_id) throw new AuthServiceError("INVALID_CREDENTIALS", "管理密钥无效", 401);
   if (!credential || credential.status !== "active") throw new AuthServiceError("INVALID_ADMIN_KEY", "管理密钥无效或已停用", 401);
   await db.prepare("UPDATE admin_credentials SET last_used_at=CURRENT_TIMESTAMP WHERE id=?").bind(credential.id).run();
   await rateLimit(db, request, "admin-login", key.slice(0, 24), true);
@@ -169,17 +173,4 @@ export async function authenticateAdminKey(db: AuthDatabase, config: AuthConfig,
 
 export async function listAdminKeys(db: AuthDatabase) {
   return (await db.prepare("SELECT id,label,key_prefix,status,last_used_at,created_at,revoked_at FROM admin_credentials ORDER BY created_at DESC").all<Record<string, unknown>>()).results;
-}
-export async function createAdminKey(db: AuthDatabase, config: AuthConfig, label: unknown, actorId: string) {
-  const safeLabel = String(label || "").trim().slice(0, 60);
-  if (safeLabel.length < 2) throw new AuthServiceError("INVALID_KEY_LABEL", "请输入密钥名称");
-  const rawKey = `STARLIGHT-${randomToken(24)}`, id = crypto.randomUUID();
-  await db.prepare("INSERT INTO admin_credentials(id,label,key_prefix,secret_hash,status,created_by) VALUES(?,?,?,?, 'active',?)").bind(id, safeLabel, rawKey.slice(0, 28), await hashOpaqueToken(rawKey, pepper(config)), actorId).run();
-  return { id, label: safeLabel, prefix: rawKey.slice(0, 28), rawKey };
-}
-export async function updateAdminKey(db: AuthDatabase, id: string, action: unknown) {
-  if (action === "disable") await db.prepare("UPDATE admin_credentials SET status='disabled' WHERE id=? AND status!='revoked'").bind(id).run();
-  else if (action === "restore") await db.prepare("UPDATE admin_credentials SET status='active',revoked_at=NULL WHERE id=? AND status='disabled'").bind(id).run();
-  else if (action === "revoke") { await db.prepare("UPDATE admin_credentials SET status='revoked',revoked_at=CURRENT_TIMESTAMP WHERE id=?").bind(id).run(); await db.prepare("UPDATE auth_sessions SET revoked_at=CURRENT_TIMESTAMP WHERE subject_type='admin' AND subject_id=?").bind(id).run(); }
-  else throw new AuthServiceError("INVALID_KEY_ACTION", "不支持的密钥操作");
 }
