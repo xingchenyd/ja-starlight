@@ -24,9 +24,15 @@ const secureEqual = (left: string, right: string) => {
   return difference === 0;
 };
 
+export class InvalidEmailError extends Error {
+  readonly status = 400;
+  readonly code = "INVALID_EMAIL";
+  constructor() { super("邮箱格式不正确"); }
+}
+
 export function validateEmail(value: unknown) {
-  const email = String(value || "").trim().toLowerCase();
-  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("邮箱格式不正确");
+  const email = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new InvalidEmailError();
   return email;
 }
 

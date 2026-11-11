@@ -2,10 +2,11 @@ import { env } from "cloudflare:workers";
 import { ensureCoreSchema } from "../../../../db/runtime";
 import { assertMutationOrigin, CampusError, campusError, campusPepper } from "../../../../lib/campus/access";
 import { hashOpaqueToken, hashPassword, validatePassword } from "../../../../lib/auth/crypto";
+import { jsonBody } from "../../../../lib/auth/request";
 export async function POST(request: Request) {
   try {
     assertMutationOrigin(request); await ensureCoreSchema();
-    const body = await request.json() as { token?: string; password?: string }, password = String(body.password || "");
+    const body = await jsonBody(request), password = typeof body.password === "string" ? body.password : "";
     if (!validatePassword(password).valid) throw new CampusError("密码须为 8-20 位英文字母、数字或符号，不含中文和空格");
     const invitation = await env.DB.prepare("SELECT id,email,name FROM business_invitations WHERE token_hash=? AND consumed_at IS NULL AND expires_at>?").bind(await hashOpaqueToken(String(body.token || ""), campusPepper()), new Date().toISOString()).first<{ id: string; email: string; name: string }>();
     if (!invitation) throw new CampusError("邀请已使用或已过期，请联系技术负责人重新邀请", 410);

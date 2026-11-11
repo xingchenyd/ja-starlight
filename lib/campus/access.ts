@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { ensureCoreSchema, getActor, requireAdmin, type PlatformActor } from "../../db/runtime";
+import { InvalidEmailError } from "../auth/crypto";
 export type BusinessRole = "campus_partner" | "content_reviewer" | "project_lead";
 export type Grant = { id: string; userId: string; role: BusinessRole; schoolId: string | null; schoolName: string | null; status: string; createdAt: string };
 export async function businessContext(request: Request) {
@@ -31,6 +32,12 @@ export function assertMutationOrigin(request: Request) {
   if (origin && origin !== new URL(request.url).origin) throw new CampusError("请求来源不受信任", 403);
 }
 export class CampusError extends Error { constructor(message: string, public status = 400) { super(message); } }
-export const campusError = (error: unknown) => Response.json({ error: error instanceof CampusError ? error.message : error instanceof SyntaxError ? "请求数据格式不正确" : "操作未能完成，请刷新后重试" }, { status: error instanceof CampusError ? error.status : error instanceof SyntaxError ? 400 : 500 });
+export function campusError(error: unknown) {
+  if (error instanceof Response) return error;
+  if (error instanceof CampusError || error instanceof InvalidEmailError) {
+    return Response.json({ error: error.message }, { status: error.status });
+  }
+  return Response.json({ error: "操作未能完成，请刷新后重试" }, { status: 500 });
+}
 export function campusPepper() { const value = String((env as unknown as { AUTH_PEPPER?: string }).AUTH_PEPPER || ""); if (value.length < 24) throw new CampusError("认证服务配置不完整", 503); return value; }
 export const requiredText = (value: unknown, label: string, max = 120) => { const text = String(value || "").trim(); if (!text || text.length > max) throw new CampusError(`${label}须填写且不超过 ${max} 字`); return text; };

@@ -146,6 +146,33 @@ const enterpriseProfile=await json('/api/platform?kind=enterprise-profile','ente
 for(const path of ['/campus','/operations','/operations/login','/operations/activate']) assert.equal((await fetch(base+path)).status,200,path);
 await call('/api/campus','owner','POST',{action:'create-school',name:'恶意来源'},403,{origin:'https://untrusted.example'});
 passed.push('新增页面可达、原企业入口兼容、跨站写入拒绝');
+assert.equal((await json('/api/campus?schoolId='+schoolA+'&page=1.01','owner')).page,1);
+assert.ok(Array.isArray((await json('/api/files?limit=1.5','student')).assets));
+assert.ok(Array.isArray((await json('/api/notifications?limit=1.5','student')).notifications));
+await call('/api/campus','owner','POST',null,400);
+await call('/api/campus/activate',null,'POST',[],400);
+await call('/api/auth/login',null,'POST',null,400);
+await call('/api/auth/login',null,'POST',{email:'invalid',role:'student',password},400);
+await call('/api/campus','owner','POST',{action:'invite-operator',name:'格式验证',email:'invalid'},400);
+await call('/api/campus',null,'GET',undefined,401,{cookie:'ja_account_session=%ZZ'});
+passed.push('异常会话、表单及分页参数不会产生 500');
+
+const legacy = await json('/api/admin','owner','PUT',{
+  kind:'content',payload:{title:'旧内容 '+stamp,summary:'此前发布的官方内容',cover:'/media/ja-career-fair.jpg',featured:true,sortOrder:1,bodyBlocks:[]},
+});
+const legacyRecord = (await json('/api/campus/publications','lead')).records.find(r=>r.id===legacy.id);
+assert.ok(legacyRecord);
+const edited = {id:legacy.id,version:legacyRecord.version,kind:'content',payload:{...legacyRecord.payload,summary:'保留封面后保存'}};
+await call('/api/campus/publications','lead','POST',{...edited,payload:{...edited.payload,cover:'https://example.com/new.jpg'}},400);
+await json('/api/campus/publications','lead','POST',edited);
+const savedLegacy = (await json('/api/campus/publications','lead')).records.find(r=>r.id===legacy.id);
+assert.equal(savedLegacy.payload.cover,legacyRecord.payload.cover);
+assert.equal(savedLegacy.payload.sortOrder,legacyRecord.payload.sortOrder);
+assert.equal(savedLegacy.payload.featured,true);
+assert.equal(savedLegacy.payload.summary,'保留封面后保存');
+assert.equal((await fetch(base+'/media/ja-career-fair.jpg')).status,200);
+passed.push('旧官方内容可沿用封面和推荐排序编辑，新附件仍须走上传通道');
 const result={base,passed,schoolA,schoolB,publicationId:publication.id,registrationId:registration.id,studentId:users.student.id,partnerId:users.partner.id,accounts:Object.entries(users).map(([role,u])=>({role,email:u.email,password})),createdAt:new Date().toISOString()};
-await writeFile('work/campus-preview/acceptance.json',JSON.stringify(result,null,2));
-console.log(JSON.stringify({passed,receipt:'work/campus-preview/acceptance.json'},null,2));
+const receipt = process.env.STARPLAN_ACCEPTANCE_RECEIPT || 'work/campus-preview/acceptance.json';
+await writeFile(receipt,JSON.stringify(result,null,2));
+console.log(JSON.stringify({passed,receipt},null,2));

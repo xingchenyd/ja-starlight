@@ -33,7 +33,7 @@ export async function GET(request: Request) {
   if (!key) {
     const actor = await fileActor(request);
     if (!actor) return Response.json({ assets: [] }, { status: 401 });
-    const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || 40) || 40));
+    const limit = Math.min(100, Math.max(1, Math.trunc(Number(url.searchParams.get("limit"))) || 40));
     const rows = await env.DB.prepare("SELECT id,storage_key AS storageKey,original_name AS name,content_type AS type,size,purpose,visibility,status,created_at AS createdAt FROM media_assets WHERE owner_id=? AND archived_at IS NULL ORDER BY created_at DESC LIMIT ?").bind(actor.id, limit).all();
     return Response.json({ assets: rows.results.map((row) => ({ ...row, url: row.visibility === "public" ? `/api/files?key=${encodeURIComponent(String(row.storageKey))}` : null })) });
   }

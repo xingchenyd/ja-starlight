@@ -2,7 +2,10 @@ export function getCookie(request: Request, name: string) {
   const raw = request.headers.get("cookie") || "";
   for (const item of raw.split(";")) {
     const [key, ...parts] = item.trim().split("=");
-    if (key === name) return decodeURIComponent(parts.join("="));
+    if (key === name) {
+      try { return decodeURIComponent(parts.join("=")); }
+      catch { return ""; }
+    }
   }
   return "";
 }
@@ -22,8 +25,13 @@ export function clientAddress(request: Request) {
 export async function jsonBody(request: Request) {
   const type = request.headers.get("content-type") || "";
   if (!type.includes("application/json")) throw new Response(JSON.stringify({ error: "请提交 JSON 数据", code: "INVALID_CONTENT_TYPE" }), { status: 415, headers: { "content-type": "application/json" } });
-  try { return await request.json() as Record<string, unknown>; }
-  catch { throw new Response(JSON.stringify({ error: "请求数据无法解析", code: "INVALID_JSON" }), { status: 400, headers: { "content-type": "application/json" } }); }
+  try {
+    const body: unknown = await request.json();
+    if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("Expected JSON object");
+    return body as Record<string, unknown>;
+  } catch {
+    throw Response.json({ error: "请提交有效的 JSON 对象", code: "INVALID_JSON" }, { status: 400 });
+  }
 }
 
 export function authErrorResponse(error: unknown) {

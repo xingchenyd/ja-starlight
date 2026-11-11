@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { writeAudit } from "../../../db/runtime";
 import { businessContext, campusError, CampusError, managesSchool, hasBusinessRole, requiredText, assertMutationOrigin, campusPepper } from "../../../lib/campus/access";
 import { hashOpaqueToken, randomToken, validateEmail } from "../../../lib/auth/crypto";
+import { jsonBody } from "../../../lib/auth/request";
 
 export async function GET(request: Request) {
   try {
@@ -13,7 +14,7 @@ export async function GET(request: Request) {
     const leadership = hasBusinessRole(context, "project_lead");
     // A project leader sees counts, not private signup answers, contact details or CVs.
     const summary = context.owner || leadership ? (await env.DB.prepare("SELECT s.id,s.name,(SELECT COUNT(*) FROM school_memberships m WHERE m.school_id=s.id AND m.status='verified') AS students,(SELECT COUNT(*) FROM business_grants g WHERE g.school_id=s.id AND g.status='active' AND g.role='campus_partner') AS partners FROM schools s WHERE s.status='active' ORDER BY s.name").all()).results : [];
-    const page = Math.max(1, Math.min(10000, Number(new URL(request.url).searchParams.get("page")) || 1));
+    const page = Math.max(1, Math.min(10000, Math.trunc(Number(new URL(request.url).searchParams.get("page"))) || 1));
     let members: Record<string, unknown>[] = [], total = 0;
     if (schoolId && managesSchool(context, schoolId)) {
       total = Number((await env.DB.prepare("SELECT COUNT(*) AS n FROM school_memberships WHERE school_id=?").bind(schoolId).first<{ n: number }>())?.n || 0);
@@ -29,14 +30,13 @@ export async function POST(request: Request) {
     assertMutationOrigin(request);
     const context = await businessContext(request), { actor } = context;
     if (!actor) throw new CampusError("请先登录", 401);
-    const body = await request.json() as Record<string, unknown>, action = String(body.action || "");
+    const body = await jsonBody(request), action = String(body.action || "");
     if (action === "join") {
       if (actor.role !== "student") throw new CampusError("仅学生可申请加入学校", 403);
       const schoolId = requiredText(body.schoolId, "学校");
       if (!await env.DB.prepare("SELECT id FROM schools WHERE id=? AND status='active'").bind(schoolId).first()) throw new CampusError("学校不存在", 404);
-      const current = await env.DB.prepare("SELECT school_id,status FROM school_memberships WHERE student_id=?").bind(actor.id).first<{ school_id: string; status: string }>();
-      if (current?.status === "verified") throw new CampusError("已核验的学籍请联系技术负责人变更，不能自行覆盖", 409);
-      await env.DB.prepare("INSERT INTO school_memberships(student_id,school_id,status) VALUES(?,?,'pending') ON CONFLICT(student_id) DO UPDATE SET school_id=excluded.school_id,status='pending',note='',reviewed_by=NULL,reviewed_at=NULL,updated_at=CURRENT_TIMESTAMP").bind(actor.id, schoolId).run();
+      const result = await env.DB.prepare("INSERT INTO school_memberships(student_id,school_id,status) VALUES(?,?,'pending') ON CONFLICT(student_id) DO UPDATE SET school_id=excluded.school_id,status='pending',note='',reviewed_by=NULL,reviewed_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE school_memberships.status<>'verified'").bind(actor.id, schoolId).run();
+      if (!result.meta.changes) throw new CampusError("已核验的学籍请联系技术负责人变更，不能自行覆盖", 409);
     } else if (action === "review-membership") {
       const studentId = requiredText(body.studentId, "学生"), schoolId = requiredText(body.schoolId, "学校");
       if (!managesSchool(context, schoolId)) throw new CampusError("没有该校学籍核验权限", 403);

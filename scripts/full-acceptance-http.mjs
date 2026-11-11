@@ -172,15 +172,13 @@ assert.equal((await call("/api/files?key=" + encodeURIComponent(uploadedCover.ke
 await json("/api/files?key=" + encodeURIComponent(uploadedCover.key), "enterprise", "DELETE");
 passed.push("private resume isolation plus public media upload and recoverable archive");
 
-const createdKey = await json("/api/admin-auth/keys", "admin", "POST", { label: "全功能验收临时密钥" }, 201);
-let keys = await json("/api/admin-auth/keys", "admin");
-assert.ok(keys.keys.some((item) => item.id === createdKey.id && item.status === "active"));
-await json(`/api/admin-auth/keys/${createdKey.id}`, "admin", "PATCH", { action: "disable" });
-await json(`/api/admin-auth/keys/${createdKey.id}`, "admin", "PATCH", { action: "restore" });
-await json(`/api/admin-auth/keys/${createdKey.id}`, "admin", "PATCH", { action: "revoke" });
-keys = await json("/api/admin-auth/keys", "admin");
-assert.equal(keys.keys.find((item) => item.id === createdKey.id).status, "revoked");
-passed.push("operations key create, disable, restore and revoke");
+const keys = await json("/api/admin-auth/keys", "admin");
+const activeKeys = keys.keys.filter((item) => item.status === "active");
+assert.equal(activeKeys.length, 1);
+await json("/api/admin-auth/keys", "admin", "POST", { label: "全功能验收临时密钥" }, 410);
+await json(`/api/admin-auth/keys/${activeKeys[0].id}`, "admin", "PATCH", { action: "restore" }, 410);
+await call("/api/admin-auth/keys", "student", "GET", undefined, 401);
+passed.push("single technical administrator and independent student permissions");
 
 await json("/api/platform?id=" + contentId, "enterprise", "DELETE");
 await call("/api/catalog?id=" + contentId, null, "GET", undefined, 404);
