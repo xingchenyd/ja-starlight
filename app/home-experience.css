@@ -22,7 +22,7 @@
 
 .public-home .home-nav .button {
   border-radius: 999px;
-  background: var(--home-teal);
+  background: #006d79;
   box-shadow: 0 8px 24px rgba(0, 139, 156, 0.18);
 }
 
@@ -96,8 +96,10 @@
 .cinema-copy {
   width: min(640px, 62%);
   color: white;
-  pointer-events: auto;
+  pointer-events: none;
 }
+
+.cinema-copy .search { pointer-events: auto; }
 
 .cinema-copy .eyebrow {
   color: var(--home-yellow);
@@ -142,7 +144,7 @@
 
 .cinema-copy .search button {
   border-radius: 3px;
-  background: var(--home-teal);
+  background: #006d79;
   cursor: pointer;
 }
 
@@ -283,6 +285,9 @@
   align-items: end;
   margin-bottom: 30px;
 }
+
+.home-live-intro .eyebrow,
+.home-voices-head .eyebrow { color: #006d79; }
 
 .home-live-intro h2 {
   max-width: 760px;
@@ -708,7 +713,8 @@
 }
 
 .site-footer .footer-compliance small {
-  color: rgba(255, 255, 255, 0.64);
+  color: #c5d8de;
+  opacity: 1;
 }
 
 .site-footer .footer-compliance a {
@@ -929,7 +935,7 @@
 
   .cinema-hero,
   .cinema-message {
-    min-height: 760px;
+    min-height: 800px;
   }
 
   .cinema-message {
@@ -973,9 +979,15 @@
     font-size: 25px;
   }
 
-  .cinema-caption p,
-  .cinema-caption b {
+  .cinema-caption p {
     display: none;
+  }
+
+  .cinema-caption b {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    margin-top: 0;
   }
 
   .cinema-controls {

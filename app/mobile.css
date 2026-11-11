@@ -1,0 +1,339 @@
+/* Keep the full sidebar on desktop. Narrow workspaces use a disclosure menu. */
+.workspace-menu-toggle {
+  display: none;
+}
+
+.workspace-menu-items {
+  display: contents;
+}
+
+.auth-visual {
+  grid-area: 1 / 1;
+}
+
+.auth-stage {
+  grid-area: 1 / 2;
+}
+
+.contact-only a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+}
+
+@media (max-width: 880px) {
+  .auth-page {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .auth-stage {
+    min-height: 0;
+    padding: 66px 16px 24px;
+  }
+
+  .auth-stage .auth-back {
+    top: 8px;
+    right: 16px;
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  .auth-stage .auth-card {
+    min-width: 0;
+  }
+
+  .auth-stage input {
+    font-size: 16px;
+  }
+
+  .auth-stage .auth-forgot,
+  .auth-stage .auth-password button {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  .auth-stage .auth-legal {
+    color: #49636b;
+    font-size: 12px;
+    line-height: 1.8;
+    text-align: center;
+  }
+
+  .auth-visual,
+  .auth-story-track {
+    min-height: 290px;
+  }
+}
+
+@media (max-width: 1050px) {
+  .enterprise-profile-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .enterprise-profile-editor > :is(section, form),
+  .enterprise-profile-editor form :is(label, input, textarea, select),
+  .enterprise-private-fields,
+  .feedback-toolbar,
+  .feedback-toolbar > * {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .platform.v2 > .side,
+  .campus-app > .campus-side {
+    position: sticky;
+    inset: 0 0 auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 4px 12px;
+    width: 100%;
+    height: auto;
+    padding: 8px 14px;
+  }
+
+  .platform.v2 > .side .official-side-brand {
+    min-height: 44px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .campus-app > .campus-side .campus-brand {
+    line-height: 1.25;
+    font-size: 20px;
+  }
+
+  .platform.v2 .workspace-menu-toggle,
+  .campus-app .workspace-menu-toggle {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1px solid #9eb8c1;
+    border-radius: 12px;
+    background: #fff;
+    color: #223f4d;
+    font-size: 14px;
+    font-weight: 650;
+    line-height: 1.25;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .workspace-menu-items {
+    display: none;
+  }
+
+  .workspace-menu-items[data-open="true"] {
+    display: grid;
+    grid-column: 1 / -1;
+    gap: 8px;
+    max-height: calc(100dvh - 76px);
+    padding-block: 8px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .platform.v2 > .side nav,
+  .campus-app > .campus-side nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
+  }
+
+  .platform.v2 > .side nav button,
+  .campus-app > .campus-side nav button {
+    min-height: 44px;
+    min-width: 0;
+    padding: 8px 10px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .platform.v2 > .side .side-help,
+  .platform.v2 > .side .back,
+  .campus-app > .campus-side .campus-side-bottom {
+    margin: 0;
+  }
+
+  .platform.v2 > .side .side-help a,
+  .platform.v2 > .side .back,
+  .campus-side-bottom a,
+  .campus-side-bottom button {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  .platform.v2 .topbar,
+  .ja-platform .topbar {
+    position: relative;
+    height: auto;
+    min-height: 56px;
+    gap: 10px;
+    padding-block: 8px;
+  }
+
+  .platform.v2 .topbar .workspace-context {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .platform.v2 .fixed-workspace-title .workspace-context b {
+    font-size: clamp(16px, 5vw, 22px) !important;
+  }
+
+  .platform.v2 .workspace :is(input:not([type="range"]), select, textarea) {
+    font-size: 16px;
+  }
+
+  .platform.v2 .notification-center {
+    position: static;
+  }
+
+  .platform.v2 .notification-trigger {
+    width: 44px;
+    height: 44px;
+  }
+
+  .platform.v2 .notification-panel {
+    top: calc(100% + 4px);
+    right: 14px;
+    width: min(380px, calc(100% - 28px));
+    max-height: min(520px, 65dvh);
+  }
+
+  .platform.v2 .notification-panel p,
+  .platform.v2 .notification-panel small {
+    font-size: 13px;
+    overflow-wrap: anywhere;
+  }
+
+  .enterprise-profile-editor > :is(section, form) {
+    padding: 16px;
+    overflow-wrap: anywhere;
+  }
+
+  .enterprise-private-fields,
+  .enterprise-profile-editor form label {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .enterprise-profile-editor form input[type="file"] {
+    width: 100%;
+  }
+
+  .activity-stage-controls button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .ui-overlay-header > div {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .ui-overlay-close {
+    width: 44px;
+    height: 44px;
+  }
+
+  .campus-heading,
+  .campus-actions,
+  .campus-pagination,
+  .campus-tabs,
+  .campus-editor > footer {
+    flex-wrap: wrap;
+  }
+
+  .campus-heading select {
+    max-width: 100%;
+  }
+
+  .campus-app .campus-panel {
+    padding: 16px;
+    overflow-wrap: anywhere;
+  }
+
+  .campus-app .campus-member h3 {
+    flex-wrap: wrap;
+  }
+
+  .campus-app .campus-avatar {
+    flex: none;
+  }
+
+  .campus-editor > header,
+  .campus-editor > footer {
+    padding: 12px 16px;
+  }
+
+  .campus-editor > header button {
+    flex: none;
+    min-height: 44px;
+  }
+
+  .campus-editor-body {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 700px) {
+  .public-home .home-nav {
+    width: calc(100% - 24px);
+    min-height: 62px;
+    height: auto;
+    gap: 8px;
+  }
+
+  .public-home .home-nav .brand {
+    gap: 6px;
+    min-width: 0;
+    min-height: 44px;
+  }
+
+  .public-home .home-nav .brand img {
+    flex: none;
+    width: 32px;
+    height: 32px;
+  }
+
+  .public-home .home-nav .brand b {
+    font-size: clamp(11px, 3.3vw, 14px);
+    line-height: 1.25;
+  }
+
+  .public-home .home-nav .actions {
+    flex: none;
+    gap: 3px;
+  }
+
+  .public-home .home-nav .text-link,
+  .public-home .home-nav .button {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 5px 9px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .campus-app .campus-grant-form {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .campus-app .campus-stats article {
+    padding: 9px;
+    overflow-wrap: anywhere;
+  }
+}

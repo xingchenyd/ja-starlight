@@ -117,7 +117,7 @@ export default function ActivityExperience({
         <section className="refined-activity-showcase" onMouseEnter={() => setInteracting(true)} onMouseLeave={() => setInteracting(false)} onFocusCapture={() => setInteracting(true)} onBlurCapture={() => setInteracting(false)}>
           <div className="activity-stage">
             <div className="activity-stage-track" style={{ transform: `translateX(-${activeIndex * 100}%)` }}>
-              {list.map((activity) => <button key={activity.id} onClick={() => open(activity)}><img src={activity.cover} alt={activity.title} /><span><em>{activity.category}</em><b>{activity.title}</b><small>{activity.publisher || "星光计划"} · {activity.date}</small></span></button>)}
+              {list.map((activity, index) => <button key={activity.id} inert={index !== activeIndex} onClick={() => open(activity)}><img src={activity.cover} alt={activity.title} /><span><em>{activity.category}</em><b>{activity.title}</b><small>{activity.publisher || "星光计划"} · {activity.date}</small></span></button>)}
             </div>
             <div className="activity-stage-controls">
               <button aria-label="上一项活动" onClick={() => setActiveIndex((activeIndex - 1 + list.length) % list.length)}>←</button>

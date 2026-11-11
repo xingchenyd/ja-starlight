@@ -20,3 +20,13 @@ test("legacy workspace query values map to the same canonical destination", asyn
   assert.equal(routes.legacyWorkspacePath({ role: "enterprise", tab: "content", item: "con-7" }), "/workspace/enterprise/content?item=con-7");
   assert.equal(routes.legacyWorkspacePath({ role: "unknown", tab: "keys" }), "/workspace/student/overview");
 });
+
+test("sign-in preserves activity links and rejects redirects outside the signed-in role", async () => {
+  const { workspaceLoginReturnPath } = await import("../lib/ui/workspace-routes.ts");
+  assert.equal(workspaceLoginReturnPath("student", "/workspace/student/activities?item=activity-1"), "/workspace/student/activities?item=activity-1");
+  assert.equal(workspaceLoginReturnPath("student", "/campus"), "/campus");
+  assert.equal(workspaceLoginReturnPath("enterprise", "/workspace/enterprise/registrations?item=reg-1"), "/workspace/enterprise/registrations?item=reg-1");
+  for (const path of ["//example.com", "/\\example.com", "https://example.com", "/workspace/enterprise/profile", "/workspace/student/keys", "/workspace/student/activities/extra"]) {
+    assert.equal(workspaceLoginReturnPath("student", path), "/workspace/student/overview");
+  }
+});

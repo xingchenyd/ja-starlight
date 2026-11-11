@@ -23,6 +23,21 @@ export function legacyWorkspacePath(input: { role?: unknown; tab?: unknown; item
   return workspacePath(input.role, input.tab, input.item);
 }
 
+export function workspaceLoginReturnPath(role: WorkspaceRole, value: string | null) {
+  const fallback = workspacePath(role);
+  if (!value?.startsWith("/") || value.startsWith("//")) return fallback;
+  try {
+    const url = new URL(value, "https://workspace.invalid");
+    if (url.origin !== "https://workspace.invalid") return fallback;
+    if (role === "student" && url.pathname === "/campus") return "/campus";
+    const route = workspaceLocation(url.pathname, url.search);
+    if (route.role !== role || workspacePath(role, route.tab) !== url.pathname) return fallback;
+    return workspacePath(role, route.tab, route.item);
+  } catch {
+    return fallback;
+  }
+}
+
 export function workspaceLocation(pathname: string, search = "") {
   const match = pathname.match(/^\/workspace\/(student|enterprise)\/([^/?#]+)/);
   const route = normalizeWorkspaceRoute(match?.[1], match?.[2]);

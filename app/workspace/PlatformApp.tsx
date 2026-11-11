@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element, @next/next/no-html-link-for-pages, jsx-a11y/media-has-caption, @typescript-eslint/no-unused-vars */
 "use client";
+import WorkspaceMenu from "../components/ui/WorkspaceMenu";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { PageTransition, runViewTransition, type TransitionDirection } from "../components/motion";
 import { SidePanel, ToastProvider, useToast } from "../components/ui";
@@ -377,24 +378,26 @@ function PlatformWorkspace({
           <img src="/media/ja-china-logo.jpg" alt="星光计划" />
           <b>Star Plan</b>
         </a>
-        <nav>
-          {nav[role].map(([id, label, glyph]) => (
-            <button
-              key={id}
-              className={tab === id ? "active" : ""}
-              aria-current={tab === id ? "page" : undefined}
-              onClick={() => navigate(id)}
-            >
-              <span>{glyph}</span>
-              {label}
-            </button>
-          ))}
-        </nav>
-        <div className="side-help contact-only">
-          {role === "student" && <a href="/campus">我的校园 · 星光伙伴 →</a>}
-          <a href="mailto:ruthyanghao@hotmail.com">联系项目团队 →</a>
-        </div>
-        <button className="back" onClick={async () => { await fetch("/api/auth/logout", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ role }) }); location.assign("/"); }}>退出登录</button>
+        <WorkspaceMenu>
+          <nav>
+            {nav[role].map(([id, label, glyph]) => (
+              <button
+                key={id}
+                className={tab === id ? "active" : ""}
+                aria-current={tab === id ? "page" : undefined}
+                onClick={() => navigate(id)}
+              >
+                <span>{glyph}</span>
+                {label}
+              </button>
+            ))}
+          </nav>
+          <div className="side-help contact-only">
+            {role === "student" && <a href="/campus">我的校园 · 星光伙伴 →</a>}
+            <a href="mailto:ruthyanghao@hotmail.com">联系项目团队 →</a>
+          </div>
+          <button className="back" onClick={async () => { await fetch("/api/auth/logout", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ role }) }); location.assign("/"); }}>退出登录</button>
+        </WorkspaceMenu>
       </aside>
       <div className="work">
         <header className="topbar fixed-workspace-title">
@@ -408,6 +411,7 @@ function PlatformWorkspace({
           <NotificationCenter />
           <div
             className="sync-dot"
+            role="img"
             aria-label={ready ? "已同步" : "正在载入"}
           />
         </header>
@@ -462,11 +466,29 @@ function NotificationCenter() {
     const data = await response.json(); setItems(data.notifications || []); setUnread(Number(data.unread || 0));
   }).catch(() => {}), []);
   useEffect(() => { load(); const timer = window.setInterval(load, 60000); return () => window.clearInterval(timer); }, [load]);
-  const readAll = async () => { await api("/api/notifications", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ all: true }) }); setItems((value) => value.map((item) => ({ ...item, readAt: item.readAt || new Date().toISOString() }))); setUnread(0); };
+  const [marking, setMarking] = useState(false);
+  const [markError, setMarkError] = useState("");
+  const readAll = async () => {
+    if (marking) return;
+    setMarking(true);
+    setMarkError("");
+    try {
+      const response = await api("/api/notifications", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ all: true }) });
+      if (!response.ok) throw new Error("未能标记为已读，请重试");
+      const readAt = new Date().toISOString();
+      setItems(value => value.map(item => ({ ...item, readAt: item.readAt || readAt })));
+      setUnread(0);
+    } catch {
+      setMarkError("未能标记为已读，请重试");
+    } finally {
+      setMarking(false);
+    }
+  };
   return <div className="notification-center">
-    <button className="notification-trigger" aria-label={`通知${unread ? `，${unread} 条未读` : ""}`} onClick={() => setOpen((value) => !value)}>♢{unread > 0 && <b>{unread > 9 ? "9+" : unread}</b>}</button>
+    <button className="notification-trigger" aria-expanded={open} aria-label={`通知${unread ? `，${unread} 条未读` : ""}`} onClick={() => setOpen((value) => !value)}>♢{unread > 0 && <b>{unread > 9 ? "9+" : unread}</b>}</button>
     {open && <section className="notification-panel" aria-label="通知中心">
-      <header><div><small>NOTIFICATIONS</small><h2>通知中心</h2></div><button disabled={!unread} onClick={readAll}>全部已读</button></header>
+      <header><div><small>NOTIFICATIONS</small><h2>通知中心</h2></div><button disabled={!unread || marking} onClick={readAll}>{marking ? "正在标记…" : "全部已读"}</button></header>
+      {markError && <p className="notification-empty" role="alert">{markError}</p>}
       {items.length ? items.map((item) => <a className={item.readAt ? "" : "unread"} key={item.id} href={item.targetUrl || "/workspace"}><b>{item.title}</b><p>{item.body}</p><small>{new Date(item.createdAt).toLocaleString("zh-CN")}</small></a>) : <p className="notification-empty">暂无通知</p>}
     </section>}
   </div>;
@@ -698,6 +720,7 @@ function OpportunityBrowser({
     <section className={`filter-dropdown ${open === name ? "open" : ""}`}>
       <button
         className="filter-trigger"
+        aria-expanded={open === name}
         onClick={() => setOpen(open === name ? "" : name)}
       >
         <span>
@@ -706,7 +729,7 @@ function OpportunityBrowser({
         </span>
         <i>{open === name ? "−" : "+"}</i>
       </button>
-      <div className="filter-panel">{children}</div>
+      <div className="filter-panel" inert={open !== name}>{children}</div>
     </section>
   );
   const companyJobs = company

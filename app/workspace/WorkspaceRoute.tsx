@@ -37,7 +37,7 @@ export default async function WorkspaceRoute({ role, tab, item }: { role: string
       <main className="workspace-gate">
         <h1>账号身份不匹配</h1>
         <p>一个邮箱只对应一个平台身份，请进入已注册的工作台。</p>
-        <a href={workspacePath(targetRole, "overview")}>进入正确工作台</a>
+        <a href={actor.role === "operator" ? "/operations" : workspacePath(targetRole, "overview")}>进入正确工作台</a>
       </main>
     );
   }

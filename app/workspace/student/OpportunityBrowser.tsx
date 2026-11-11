@@ -97,7 +97,7 @@ export default function OpportunityBrowser({
       <button className="filter-trigger" onClick={() => toggleGroup(name)} aria-expanded={openGroups.has(name)}>
         <span><b>{name}</b><em>{summary}</em></span><i>{openGroups.has(name) ? "−" : "+"}</i>
       </button>
-      <div className="filter-panel">{children}</div>
+      <div className="filter-panel" inert={!openGroups.has(name)}>{children}</div>
     </section>
   );
   const reset = () => {

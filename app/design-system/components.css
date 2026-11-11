@@ -139,7 +139,17 @@
   display: grid;
   place-items: center;
   padding: 24px;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  overflow: hidden;
+  background: transparent;
 }
+.ui-overlay-root:not([open]) { display: none; }
+.ui-overlay-root::backdrop { background: transparent; }
 
 .ui-overlay-backdrop {
   position: absolute;
@@ -157,6 +167,7 @@
 
 .ui-overlay-frame {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   max-height: min(820px, calc(100vh - 48px));
   max-height: min(820px, calc(100dvh - 48px));
   max-width: calc(100vw - 48px);
@@ -176,7 +187,7 @@
 .ui-overlay-header p { margin: 6px 0 0; color: var(--text-secondary); line-height: 1.6; }
 .ui-overlay-close { display: grid; flex: 0 0 auto; width: 40px; height: 40px; place-items: center; border: 0; border-radius: 50%; color: var(--text-secondary); background: var(--surface-muted); font-size: 23px; cursor: pointer; }
 .ui-overlay-body { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 24px 26px; }
-.ui-overlay-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 26px 22px; border-top: 1px solid var(--border-subtle); }
+.ui-overlay-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; padding: 16px 26px 22px; border-top: 1px solid var(--border-subtle); background: var(--surface-raised); color: var(--text-primary); }
 
 @media (max-width: 640px) {
   .ui-overlay-root { place-items: stretch; padding: 8px; }

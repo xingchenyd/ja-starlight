@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element, @next/next/no-html-link-for-pages, jsx-a11y/media-has-caption */
 "use client";
+import WorkspaceMenu from "../components/ui/WorkspaceMenu";
 import { scopedFetch } from "../../lib/campus/client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RichBlock, RegistrationField } from "../data";
@@ -522,24 +523,26 @@ function JAConsoleWorkspace({
         <a href="/" className="side-brand official-side-brand">
           <b>星光计划</b>
         </a>
-        <nav>
-          {navigationItems.map((item) => (
-            <button
-              key={item.id}
-              className={tab === item.id ? "active" : ""}
-              aria-current={tab === item.id ? "page" : undefined}
-              onClick={() => navigate(item.id)}
-            >
-              <span>{item.glyph}</span>
-              {item.label}
-              {typeof item.count === "number" && item.count > 0 ? (
-                <i>{item.count}</i>
-              ) : null}
-            </button>
-          ))}
-        </nav>
-        <div className="side-help"><a href="/operations?access=owner">学校与业务授权 →</a><p>业务审核独立授权，系统安全仅由你管理。</p></div>
-        <button className="back" onClick={async () => { await scopedFetch("/api/admin-auth/logout", { method: "POST" }); location.assign("/"); }}>退出后台</button>
+        <WorkspaceMenu>
+          <nav>
+            {navigationItems.map((item) => (
+              <button
+                key={item.id}
+                className={tab === item.id ? "active" : ""}
+                aria-current={tab === item.id ? "page" : undefined}
+                onClick={() => navigate(item.id)}
+              >
+                <span>{item.glyph}</span>
+                {item.label}
+                {typeof item.count === "number" && item.count > 0 ? (
+                  <i>{item.count}</i>
+                ) : null}
+              </button>
+            ))}
+          </nav>
+          <div className="side-help"><a href="/operations?access=owner">学校与业务授权 →</a><p>业务审核独立授权，系统安全仅由你管理。</p></div>
+          <button className="back" onClick={async () => { await scopedFetch("/api/admin-auth/logout", { method: "POST" }); location.assign("/"); }}>退出后台</button>
+        </WorkspaceMenu>
       </aside>
       <div className="work">
         <header className="topbar">
@@ -1359,12 +1362,14 @@ function AdminBlockEditor({
             </div>
             {block.type === "text" || block.type === "quote" ? (
               <textarea
+                aria-label={block.type === "text" ? `正文段落 ${index + 1}` : `引用段落 ${index + 1}`}
                 rows={block.type === "text" ? 4 : 2}
                 value={block.text || ""}
                 onChange={(e) => update(block.id, { text: e.target.value })}
               />
             ) : (
               <input
+                aria-label={`区块 ${index + 1} 的标题`}
                 value={block.title || ""}
                 onChange={(e) => update(block.id, { title: e.target.value })}
                 placeholder="标题、议程或附件名称"
@@ -1373,6 +1378,7 @@ function AdminBlockEditor({
             {block.type === "gallery" && (
               <textarea
                 rows={3}
+                aria-label={`区块 ${index + 1} 的图片链接`}
                 value={(block.items || []).join("\n")}
                 onChange={(e) =>
                   update(block.id, {

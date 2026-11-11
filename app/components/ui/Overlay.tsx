@@ -39,6 +39,7 @@ function OverlayFrame({
 }: OverlayProps & { variant: "dialog" | "panel" }) {
   const titleId = useId();
   const descriptionId = useId();
+  const dialog = useRef<HTMLDialogElement>(null);
   const frame = useRef<HTMLElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
 
@@ -51,7 +52,11 @@ function OverlayFrame({
 
   useEffect(() => {
     if (!open) return;
+    const element = dialog.current;
+    if (!element) return;
     previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // The browser's top layer keeps the panel above sticky navigation and transformed pages.
+    element.showModal();
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const focusTimer = window.setTimeout(() => {
@@ -84,6 +89,7 @@ function OverlayFrame({
     return () => {
       window.clearTimeout(focusTimer);
       document.removeEventListener("keydown", onKeyDown);
+      element.close();
       document.body.style.overflow = previousOverflow;
       previousFocus.current?.focus();
     };
@@ -91,15 +97,18 @@ function OverlayFrame({
 
   if (!open) return null;
   return (
-    <div className="ui-overlay-root">
-      <button type="button" className="ui-overlay-backdrop" aria-label={`关闭${title}`} onClick={requestClose} />
+    <dialog
+      ref={dialog}
+      className="ui-overlay-root"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      aria-describedby={description ? descriptionId : undefined}
+      onCancel={(event) => { event.preventDefault(); requestClose(); }}
+    >
+      <button type="button" className="ui-overlay-backdrop" aria-hidden="true" tabIndex={-1} onClick={requestClose} />
       <section
         ref={frame}
         tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={description ? descriptionId : undefined}
         className={`ui-overlay-frame ui-${variant} motion-panel-enter`}
       >
         <header className="ui-overlay-header">
@@ -109,10 +118,11 @@ function OverlayFrame({
           </div>
           <button type="button" className="ui-overlay-close motion-pressable" aria-label={`关闭${title}`} onClick={requestClose}>×</button>
         </header>
-        <div className="ui-overlay-body">{children}</div>
+        {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- A scrollable dialog body must be reachable by keyboard even without controls. */}
+        <div className="ui-overlay-body" tabIndex={0} role="region" aria-label="弹窗内容">{children}</div>
         {footer ? <footer className="ui-overlay-footer">{footer}</footer> : null}
       </section>
-    </div>
+    </dialog>
   );
 }
 

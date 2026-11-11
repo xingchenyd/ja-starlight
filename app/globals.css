@@ -1737,7 +1737,7 @@ footer small {
 .auth-card form { display: grid; gap: 18px; }
 .auth-card form > label { display: grid; gap: 8px; color: #244b55; font-size: 13px; font-weight: 900; }
 .auth-card input { width: 100%; height: 52px; padding: 0 15px; color: #173f49; border: 1.5px solid #cbdcda; border-radius: 13px; outline: none; background: #fbfdfc; font-size: 15px; transition: .2s ease; }
-.auth-card input::placeholder { color: #9bacae; }
+.auth-card input::placeholder { color: #526b72; opacity: 1; }
 .auth-card input:focus { border-color: #00a7b5; background: white; box-shadow: 0 0 0 4px rgba(0,167,181,.11); }
 .auth-password { position: relative; }
 .auth-password input { padding-right: 62px; }
@@ -3157,7 +3157,7 @@ footer small {
 }
 .enterprise-profile-editor > section small {
   display: block;
-  color: var(--transforming-teal);
+  color: #006d79;
   letter-spacing: 0.13em;
 }
 .enterprise-profile-editor h1 {
@@ -6357,7 +6357,7 @@ footer .brand-official b {
   margin-top: 42px;
 }
 .home-section-head small {
-  color: #008b9c;
+  color: #006d79;
   font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.18em;
@@ -7626,7 +7626,7 @@ footer .brand-official b {
 .studio-top small,
 .studio-preview > b,
 .admin-publisher-intro small {
-  color: #008b9c;
+  color: #006d79;
   font-size: 11px;
   font-weight: 950;
   letter-spacing: 0.16em;
@@ -7842,7 +7842,7 @@ footer .brand-official b {
 .content-renderer > small {
   display: inline-block;
   margin-top: 14px;
-  color: #008b9c;
+  color: #006d79;
   font-weight: 950;
   letter-spacing: 0.08em;
 }
@@ -9464,7 +9464,7 @@ main:has(.story-stage):before {
 .profile-completeness-card > i em { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#008b9c,#e8e24f); transition: width .3s ease; }
 .enterprise-profile-editor form select { width: 100%; min-height: 46px; border: 1px solid #cfe0e1; border-radius: 12px; background: white; padding: 0 11px; color: #24404d; font: inherit; }
 .enterprise-private-fields { grid-column: 1/-1; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; border: 1px solid #d6e5e5; border-radius: 18px; background: #f8fcfc; padding: 16px; }
-.enterprise-private-fields legend { padding: 0 7px; color: #008b9c; font-weight: 900; }
+.enterprise-private-fields legend { padding: 0 7px; color: #006d79; font-weight: 900; }
 .profile-facts span { background: #eef8f7; color: #365157; }
 button:focus-visible,
 a:focus-visible,
@@ -10416,7 +10416,7 @@ button.recent-publishing-row:hover {
   border-right: 1px solid #d6e5e6;
   border-radius: 0;
   background: transparent;
-  color: #61777d;
+  color: #445e66;
   font-size: 13px;
   font-weight: 850;
   box-shadow: none;
@@ -10441,8 +10441,8 @@ button.recent-publishing-row:hover {
 }
 .studio-steps button.complete span {
   color: white;
-  border-color: #2fa774;
-  background: #2fa774;
+  border-color: #146b55;
+  background: #146b55;
 }
 .studio-steps button.active {
   color: white;

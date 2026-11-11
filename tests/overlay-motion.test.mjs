@@ -4,7 +4,8 @@ import { readFile } from "node:fs/promises";
 
 test("shared overlays expose modal semantics, escape handling and focus restoration", async () => {
   const source = await readFile("app/components/ui/Overlay.tsx", "utf8");
-  assert.match(source, /role="dialog"/);
+  assert.match(source, /<dialog\b/);
+  assert.match(source, /element\.showModal\(\)/);
   assert.match(source, /aria-modal="true"/);
   assert.match(source, /event\.key === "Escape"/);
   assert.match(source, /previousFocus\.current\?\.focus/);

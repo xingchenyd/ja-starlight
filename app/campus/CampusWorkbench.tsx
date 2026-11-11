@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-html-link-for-pages -- Vinext routes use native navigation throughout this application. */
 "use client";
+import WorkspaceMenu from "../components/ui/WorkspaceMenu";
 import { useCallback, useEffect, useState } from "react";
 import type { RegistrationField, RichBlock } from "../data";
 import RegistrationFormEditor from "../components/RegistrationForm";
@@ -17,16 +18,16 @@ import { scopedFetch } from "../../lib/campus/client";
 type Grant = { id: string; userId: string; role: string; schoolId: string | null; schoolName: string; status: string; name?: string; email?: string };
 type School = { id: string; name: string; students?: number; partners?: number };
 type Member = { id: string; name: string; status: string; major: string; grade: string; activities: number; publicExperiences: number };
-type CampusState = { actor: { id: string; name: string; role: string }; owner: boolean; roles: Grant[]; schools: School[]; membership: { schoolId: string; schoolName: string; status: string; note: string } | null; members: Member[]; total: number; summary: School[]; grants: Grant[] };
+type CampusState = { actor: { id: string; name: string; role: string }; owner: boolean; roles: Grant[]; schools: School[]; membership: { schoolId: string; schoolName: string; status: string; note: string } | null; selectedSchool: string; page: number; members: Member[]; total: number; summary: School[]; grants: Grant[] };
 type Publication = { id: string; ownerId: string; kind: "activity" | "content"; version: number; payload: Record<string, unknown> };
 type Registration = { id: string; activityId: string; activityTitle: string; studentOwnerId: string; status: string; createdAt: string; answers: Record<string, string>; formFields: RegistrationField[]; reviewNote?: string };
 const roles: Record<string, string> = { campus_partner: "星光伙伴", content_reviewer: "内容审核员", project_lead: "项目负责人" };
 const statuses: Record<string, string> = { pending: "待核验", verified: "已核验", rejected: "已退回", approved: "已通过", draft: "草稿", active: "有效", revoked: "已撤销", cancelled: "已取消" };
 const t = (value: unknown) => String(value || "");
-async function api(path: string, body?: unknown, method = "POST") {
-  const response = await scopedFetch(path, body === undefined ? { cache: "no-store" } : { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "操作失败，请重试");
+async function api(path: string, body?: unknown, method = "POST", signal?: AbortSignal) {
+  const response = await scopedFetch(path, body === undefined ? { cache: "no-store", signal } : { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data) throw Object.assign(new Error(data?.error || "操作失败，请重试"), { status: response.status });
   return data;
 }
 function exportRegistrations(rows: Registration[]) {
@@ -35,14 +36,53 @@ function exportRegistrations(rows: Registration[]) {
 }
 
 export default function CampusWorkbench({ operations = false }: { operations?: boolean }) {
-  const [data, setData] = useState<CampusState | null>(null), [error, setError] = useState(""), [notice, setNotice] = useState(""), [busy, setBusy] = useState(false), [tab, setTab] = useState(operations ? "summary" : "home"), [schoolId, setSchoolId] = useState(""), [page, setPage] = useState(1), [editor, setEditor] = useState<Publication | "new" | null>(null), [revision, setRevision] = useState(0);
-  const load = useCallback(async () => { const result = await api("/api/campus?schoolId=" + encodeURIComponent(schoolId) + "&page=" + page); setData(result); setError(""); }, [schoolId, page]);
-  useEffect(() => { let active = true; api("/api/campus?schoolId=" + encodeURIComponent(schoolId) + "&page=" + page).then(result => { if (active) { setData(result); setError(""); } }).catch(err => { if (active) setError(err.message); }); return () => { active = false; }; }, [schoolId, page]);
-  const run = async (body: Record<string, unknown>) => { if (busy) return; setBusy(true); setNotice(""); try { const result = await api("/api/campus", body); setNotice(result.activationUrl || "已保存"); await load(); setRevision(v => v + 1); } catch (err) { setNotice(err instanceof Error ? err.message : "操作失败"); } finally { setBusy(false); } };
-  if (!data) return <main className="campus-auth"><section className="campus-panel"><h1>{error ? "请先登录" : "正在打开校园空间…"}</h1>{error && <><p role="alert">{error}</p><div className="campus-links"><a href="/auth/student">学生 / 星光伙伴登录</a><a href="/operations/login">业务运营登录</a><a href="/ja-login">技术负责人登录</a></div></>}</section></main>;
+  const [data, setData] = useState<CampusState | null>(null), [notice, setNotice] = useState(""), [busy, setBusy] = useState(false), [tab, setTab] = useState(operations ? "summary" : "home"), [schoolId, setSchoolId] = useState(""), [page, setPage] = useState(1), [editor, setEditor] = useState<Publication | "new" | null>(null), [revision, setRevision] = useState(0);
+  const [refresh, setRefresh] = useState(0);
+  const [loadState, setLoadState] = useState<{ key: string; error?: string; unauthorized?: boolean }>();
+  const requestKey = JSON.stringify([schoolId, page, refresh]);
+  const currentLoad = loadState?.key === requestKey ? loadState : undefined;
+  const reload = () => setRefresh(value => value + 1);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api("/api/campus?" + new URLSearchParams({ schoolId, page: String(page) }), undefined, "GET", controller.signal)
+      .then(result => {
+        if (controller.signal.aborted) return;
+        setData(result);
+        setLoadState({ key: requestKey });
+      })
+      .catch(err => {
+        if (!controller.signal.aborted) setLoadState({ key: requestKey, error: err.message, unauthorized: err.status === 401 });
+      });
+    return () => controller.abort();
+  }, [schoolId, page, requestKey]);
+
+  const run = async (body: Record<string, unknown>) => {
+    if (busy) return;
+    setBusy(true);
+    setNotice("");
+    try {
+      const result = await api("/api/campus", body);
+      setNotice(result.activationUrl || "已保存");
+      reload();
+      setRevision(value => value + 1);
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "操作失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (currentLoad?.unauthorized || !data) return <main className="campus-auth"><section className="campus-panel">
+    <h1>{currentLoad?.unauthorized ? "请先登录" : currentLoad?.error ? "校园空间暂不可用" : "正在打开校园空间…"}</h1>
+    {currentLoad?.error && <p role="alert">{currentLoad.error}</p>}
+    {currentLoad?.unauthorized ? <div className="campus-links"><a href="/auth/student?returnTo=%2Fcampus">学生 / 星光伙伴登录</a><a href="/operations/login">业务运营登录</a><a href="/ja-login">技术负责人登录</a></div>
+      : currentLoad?.error && <button onClick={reload}>重试</button>}
+  </section></main>;
   const partner = data.owner || data.roles.some(g => g.role === "campus_partner"), lead = data.owner || data.roles.some(g => g.role === "project_lead"), reviewer = lead || data.roles.some(g => g.role === "content_reviewer");
   const managedSchools = data.owner ? data.schools : data.schools.filter(s => data.roles.some(g => g.role === "campus_partner" && g.schoolId === s.id));
-  const activeSchool = schoolId || managedSchools[0]?.id || "";
+  const activeSchool = schoolId || data.selectedSchool || managedSchools[0]?.id || "";
+  const rosterReady = !!currentLoad && !currentLoad.error && data.selectedSchool === activeSchool && data.page === page;
   const tabs = [
     { id: "home", name: "我的校园", show: data.actor.role === "student" },
     { id: "summary", name: "运营总览", show: lead },
@@ -53,14 +93,14 @@ export default function CampusWorkbench({ operations = false }: { operations?: b
     { id: "access", name: "学校与任命", show: data.owner },
   ].filter(v => v.show);
   const shownTab = tabs.some(v => v.id === tab) ? tab : tabs[0]?.id || "none";
-  return <div className="campus-app"><aside className="campus-side"><a className="campus-brand" href="/">星光计划<span>STAR PLAN</span></a><div className="campus-identity"><strong>{data.actor.name}</strong><span>{data.owner ? "唯一技术负责人" : data.roles.length ? data.roles.map(g => roles[g.role]).join(" / ") : data.actor.role === "student" ? "学生" : "待授权运营账号"}</span></div><nav>{tabs.map(v => <button key={v.id} className={shownTab === v.id ? "active" : ""} onClick={() => setTab(v.id)}>{v.name}<span>↗</span></button>)}</nav><div className="campus-side-bottom">{data.actor.role === "student" && <a href="/workspace/student/overview">返回学生空间</a>}{data.owner && <a href="/ja-console">技术管理后台</a>}<a href="mailto:ruthyanghao@hotmail.com">联系项目团队</a><button onClick={async () => { await scopedFetch(data.owner ? "/api/admin-auth/logout" : "/api/auth/logout", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ role: data.actor.role }) }); location.assign("/"); }}>退出登录</button></div></aside>
+  return <div className="campus-app"><aside className="campus-side"><a className="campus-brand" href="/">星光计划<span>STAR PLAN</span></a><WorkspaceMenu><div className="campus-identity"><strong>{data.actor.name}</strong><span>{data.owner ? "唯一技术负责人" : data.roles.length ? data.roles.map(g => roles[g.role]).join(" / ") : data.actor.role === "student" ? "学生" : "待授权运营账号"}</span></div><nav>{tabs.map(v => <button key={v.id} className={shownTab === v.id ? "active" : ""} aria-current={shownTab === v.id ? "page" : undefined} onClick={() => setTab(v.id)}>{v.name}<span aria-hidden="true">↗</span></button>)}</nav><div className="campus-side-bottom">{data.actor.role === "student" && <a href="/workspace/student/overview">返回学生空间</a>}{data.owner && <a href="/ja-console">技术管理后台</a>}<a href="mailto:ruthyanghao@hotmail.com">联系项目团队</a><button onClick={async () => { await scopedFetch(data.owner ? "/api/admin-auth/logout" : "/api/auth/logout", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ role: data.actor.role }) }); location.assign("/"); }}>退出登录</button></div></WorkspaceMenu></aside>
     <main className="campus-main"><header className="campus-top"><div><span className="campus-eyebrow">{operations ? "OPERATIONS" : "CAMPUS COMMUNITY"}</span><h1>{tabs.find(v => v.id === shownTab)?.name || "等待业务授权"}</h1></div><a href="/">返回首页 ↗</a></header>
     {notice && <div className="campus-notice" role="status"><span>{notice}</span><button aria-label="关闭提示" onClick={() => setNotice("")}>×</button></div>}
     {["members", "registrations"].includes(shownTab) && partner && <label className="campus-school-selector">管理学校<select value={activeSchool} onChange={e => { setSchoolId(e.target.value); setPage(1); }}>{managedSchools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>}
     <div className="campus-enter" key={shownTab}>
     {shownTab === "home" && <><section className="campus-hero"><span className="campus-eyebrow">BELONG · COLLABORATE · GROW</span><h2>让每一次参与<br/>连接更大的成长。</h2><p>加入自己的学校，与本校同学和星光伙伴一起参与活动、完成挑战。</p>{data.roles.filter(g => g.role === "campus_partner").map(g => <div className="campus-badge" key={g.id}>✦ 平台认证星光伙伴 · {g.schoolName}</div>)}</section><section className="campus-panel"><h2>学校归属</h2>{data.membership ? <><div className="campus-heading"><h3>{data.membership.schoolName}</h3><span className="campus-pill">{statuses[data.membership.status]}</span></div>{data.membership.note && <p>{data.membership.note}</p>}</> : <p>学校信息经核验后生效，不会使用简历中的学校名称直接开放权限。</p>}{data.membership?.status !== "verified" && <form onSubmit={e => { e.preventDefault(); void run({ action: "join", schoolId: new FormData(e.currentTarget).get("schoolId") }); }}><label>选择学校<select name="schoolId" defaultValue={data.membership?.schoolId || ""} required><option value="" disabled>请选择自己的学校</option>{data.schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><button className="campus-primary" disabled={busy || !data.schools.length}>申请加入学校</button></form>}<a href="/workspace/student/profile">查看自己的成长时间轴 →</a></section></>}
     {shownTab === "summary" && <><section className="campus-hero compact"><span className="campus-eyebrow">CONNECTED CAMPUSES</span><h2>校园网络 · 运营全景</h2><p>项目负责人统一协同校园与内容运营；系统密钥与权限任命由技术负责人管理。</p></section><div className="campus-stats"><article><b>{data.summary.length}</b><span>合作学校</span></article><article><b>{data.summary.reduce((n,s) => n + (s.students || 0),0)}</b><span>已核验学生</span></article><article><b>{data.summary.reduce((n,s) => n + (s.partners || 0),0)}</b><span>在任星光伙伴</span></article></div><section className="campus-panel"><h2>各校运营概况</h2>{data.summary.map(s => <article className="campus-line" key={s.id}><strong>{s.name}</strong><span>{s.students} 位学生 · {s.partners} 位伙伴</span></article>)}{!data.summary.length && <p>创建合作学校并核验学生后，这里会显示真实运营数据。</p>}</section><OrganizationDesk refreshKey={revision} onNotice={setNotice} /></>}
-    {shownTab === "members" && <section className="campus-panel"><div className="campus-heading"><h2>本校学生 · {data.total} 人</h2><button onClick={() => void load().catch(e => setNotice(e.message))}>刷新</button></div><p>仅显示姓名、专业年级、学籍状态及参与数量。个人简历与联系方式保持私密。</p>{data.members.map(m => <article className="campus-member" key={m.id}><div className="campus-avatar">{m.name.slice(0,1)}</div><div><h3>{m.name}<span className="campus-pill">{statuses[m.status]}</span></h3><p>{[m.major,m.grade].filter(Boolean).join(" · ") || "尚未填写专业年级"}</p><span>{m.activities} 次报名通过 · {m.publicExperiences} 条公开经历</span></div>{m.status === "pending" && <div className="campus-actions"><button disabled={busy} onClick={() => { const note = prompt("请填写学籍退回原因"); if (note) void run({ action: "review-membership", studentId: m.id, schoolId: activeSchool, decision: "rejected", note }); }}>退回</button><button className="campus-primary" disabled={busy} onClick={() => void run({ action: "review-membership", studentId: m.id, schoolId: activeSchool, decision: "approved" })}>核验通过</button></div>}</article>)}{!data.members.length && <p>本校尚无学生申请。学生在“我的校园”选择学校后即可提交。</p>}<div className="campus-pagination"><button disabled={page <= 1} onClick={() => setPage(v => v-1)}>上一页</button><span>第 {page} 页 · 每页 50 人</span><button disabled={page*50 >= data.total} onClick={() => setPage(v => v+1)}>下一页</button></div></section>}
+    {shownTab === "members" && <section className="campus-panel"><div className="campus-heading"><h2>本校学生{rosterReady ? ` · ${data.total} 人` : ""}</h2><button disabled={!currentLoad || busy} onClick={reload}>{currentLoad?.error ? "重试" : "刷新"}</button></div><p>仅显示姓名、专业年级、学籍状态及参与数量。个人简历与联系方式保持私密。</p>{currentLoad?.error ? <p role="alert">{currentLoad.error}</p> : !rosterReady ? <p role="status">正在加载本校名单…</p> : <>{data.members.map(m => <article className="campus-member" key={m.id}><div className="campus-avatar">{m.name.slice(0,1)}</div><div><h3>{m.name}<span className="campus-pill">{statuses[m.status]}</span></h3><p>{[m.major,m.grade].filter(Boolean).join(" · ") || "尚未填写专业年级"}</p><span>{m.activities} 次报名通过 · {m.publicExperiences} 条公开经历</span></div>{m.status === "pending" && <div className="campus-actions"><button disabled={busy} onClick={() => { const note = prompt("请填写学籍退回原因"); if (note) void run({ action: "review-membership", studentId: m.id, schoolId: activeSchool, decision: "rejected", note }); }}>退回</button><button className="campus-primary" disabled={busy} onClick={() => void run({ action: "review-membership", studentId: m.id, schoolId: activeSchool, decision: "approved" })}>核验通过</button></div>}</article>)}{!data.members.length && <p>本校尚无学生申请。学生在“我的校园”选择学校后即可提交。</p>}<div className="campus-pagination"><button disabled={page <= 1} onClick={() => setPage(v => v-1)}>上一页</button><span>第 {page} 页 · 每页 50 人</span><button disabled={page*50 >= data.total} onClick={() => setPage(v => v+1)}>下一页</button></div></>}</section>}
     {shownTab === "publications" && <PublicationDesk key={revision} onEdit={setEditor} onNotice={setNotice} />}
     {shownTab === "registrations" && <RegistrationDesk key={activeSchool + revision} lead={lead} partner={partner} schoolId={activeSchool} onNotice={setNotice} />}
     {shownTab === "moderation" && <ModerationDesk key={revision} actorId={data.actor.id} onNotice={setNotice} />}
