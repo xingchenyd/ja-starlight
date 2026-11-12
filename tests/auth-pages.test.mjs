@@ -43,7 +43,7 @@ test("auth shell removes the left logo and uses a plain home link", async () => 
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
   assert.doesNotMatch(shell, /className="auth-logo"/);
-  assert.doesNotMatch(shell, /ja-china-logo\.jpg/);
+  assert.doesNotMatch(shell, /ja-china-logo\.jpg|star-plan-logo\.webp|<BrandLogo/);
   assert.doesNotMatch(styles, /\.auth-logo/);
   assert.match(shell, /<a className="auth-back" href="\/">← 返回首页<\/a>/);
   assert.doesNotMatch(shell, /<Link className="auth-back"/);

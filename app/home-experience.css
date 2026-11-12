@@ -26,6 +26,8 @@
   box-shadow: 0 8px 24px rgba(0, 139, 156, 0.18);
 }
 
+.public-home .home-nav .text-link { display: inline-flex; align-items: center; }
+
 .public-home .home-nav .text-link,
 .public-home .home-nav .navlinks a {
   color: var(--home-ink);
@@ -921,16 +923,8 @@
     height: 72px;
   }
 
-  .public-home .home-nav .brand b {
-    font-size: 14px;
-  }
-
   .public-home .home-nav .actions {
     gap: 10px;
-  }
-
-  .public-home .home-nav .text-link {
-    display: none;
   }
 
   .cinema-hero,

@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element, @next/next/no-html-link-for-pages, jsx-a11y/media-has-caption */
 "use client";
+import BrandLogo from "../components/BrandLogo";
 import WorkspaceMenu from "../components/ui/WorkspaceMenu";
 import { scopedFetch } from "../../lib/campus/client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -521,7 +522,7 @@ function JAConsoleWorkspace({
     <main className="ja-console platform v2 ja-platform">
       <aside className="side">
         <a href="/" className="side-brand official-side-brand">
-          <b>星光计划</b>
+          <BrandLogo />
         </a>
         <WorkspaceMenu>
           <nav>

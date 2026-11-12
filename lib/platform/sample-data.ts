@@ -940,7 +940,7 @@ export const contents: ContentItem[] = [
     duration: "18 分钟",
     level: "入门",
     summary: "通过三个问题认识自己的兴趣、能力与价值取向，建立探索地图。",
-    cover: "/og-ja-starlight.png",
+    cover: "/star-plan-share.jpg",
     mediaType: "article",
     sortOrder: 25,
     tags: ["职业探索", "方法"],

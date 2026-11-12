@@ -1,5 +1,5 @@
 /* eslint-disable @next/next/no-html-link-for-pages */
-import Image from "next/image";
+import BrandLogo from "../components/BrandLogo";
 import { headers } from "next/headers";
 import PlatformApp from "./PlatformApp";
 import { normalizeWorkspaceRoute, workspacePath } from "../../lib/ui/workspace-routes";
@@ -21,8 +21,7 @@ export default async function WorkspaceRoute({ role, tab, item }: { role: string
     const returnTo = workspacePath(route.role, route.tab, item);
     return (
       <main className="workspace-gate">
-        <Image src="/media/ja-china-logo.jpg" alt="星光计划" width={104} height={104}/>
-        <small>星光计划</small>
+        <BrandLogo />
         <h1>登录后进入{route.role === "enterprise" ? "企业工作台" : "学生空间"}</h1>
         <p>公开机会、活动和成长内容无需登录；保存资料、报名和发布内容需要账号确认。</p>
         <a href={`/auth/${route.role}?returnTo=${encodeURIComponent(returnTo)}`}>邮箱登录 / 注册</a>

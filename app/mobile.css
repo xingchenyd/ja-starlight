@@ -103,9 +103,9 @@
     border: 0;
   }
 
-  .campus-app > .campus-side .campus-brand {
-    line-height: 1.25;
-    font-size: 20px;
+  .official-side-brand .star-plan-logo,
+  .campus-brand .star-plan-logo {
+    width: 115px;
   }
 
   .platform.v2 .workspace-menu-toggle,
@@ -299,15 +299,9 @@
     min-height: 44px;
   }
 
-  .public-home .home-nav .brand img {
-    flex: none;
-    width: 32px;
-    height: 32px;
-  }
-
-  .public-home .home-nav .brand b {
-    font-size: clamp(11px, 3.3vw, 14px);
-    line-height: 1.25;
+  .public-home .home-nav .star-plan-logo {
+    width: clamp(128px, 39vw, 160px);
+    max-width: 100%;
   }
 
   .public-home .home-nav .actions {

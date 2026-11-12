@@ -3,7 +3,7 @@
 .campus-body-block{padding:18px;background:#f4f9f9;border:1px solid #e0ecec;border-radius:12px;margin:14px 0}.campus-body-block>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px}.campus-body-block>header>div{display:flex;gap:7px}.campus-body-editor{margin:24px 0}
 .campus-app button,.campus-auth button,.campus-app input,.campus-app select,.campus-app textarea,.campus-auth input{font:inherit}
 .campus-side{width:244px;flex:none;background:#fff;border-right:1px solid #dbe8e9;padding:32px 22px;position:fixed;inset:0 auto 0 0;display:flex;flex-direction:column;z-index:20}
-.campus-brand{font-size:26px;font-weight:800;letter-spacing:.06em;color:#223f4d;text-decoration:none}.campus-brand span{display:block;font-size:12px;letter-spacing:.2em;color:#006d79}
+.campus-brand{display:block;width:fit-content;max-width:100%}
 .campus-identity{display:grid;padding:26px 0;border-bottom:1px solid #e4eeee;margin-bottom:20px;gap:8px}.campus-identity span{font-size:13px;color:#52717b}
 .campus-side nav{display:grid;gap:8px}.campus-side nav button{padding:13px 16px;display:flex;justify-content:space-between;background:transparent;border:0;border-radius:12px;text-align:left;color:#44616b;transition:background .2s,transform .2s}.campus-side nav button:hover{background:#edf7f7;transform:translateX(3px)}.campus-side nav button.active{background:#006d79;color:white;box-shadow:0 7px 18px #006d7922}
 .campus-side-bottom{margin-top:auto;padding-top:32px;display:grid;gap:12px}.campus-side-bottom a,.campus-side-bottom button{font-size:14px;text-decoration:none;color:#406471;text-align:left;border:0;background:none}

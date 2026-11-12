@@ -1724,7 +1724,7 @@ footer small {
 .auth-story i.active { width: 32px; background: #e8e24f; }
 .auth-swipe-hint { position: absolute; z-index: 3; right: 6%; bottom: 4%; border: 1px solid rgba(255,255,255,.28); border-radius: 999px; padding: 8px 12px; color: #fff; background: rgba(8,48,59,.34); backdrop-filter: blur(8px); font-size: 11px; font-weight: 850; letter-spacing: .06em; pointer-events: none; }
 .auth-stage { position: relative; display: grid; place-items: center; align-content: center; min-height: 100vh; padding: 72px 8%; background: radial-gradient(circle at 88% 8%, rgba(185,233,232,.54), transparent 30%), linear-gradient(145deg,#f8fbfa,#eaf3f0); }
-.auth-stage::before { content: ""; position: absolute; right: 5%; bottom: 7%; width: 240px; height: 240px; opacity: .045; background: url('/media/ja-china-logo.jpg') center/contain no-repeat; mix-blend-mode: multiply; pointer-events: none; }
+.auth-stage::before { content: ""; position: absolute; right: 5%; bottom: 7%; width: 240px; height: 240px; opacity: .045; background: url('/media/star-plan-logo.webp') center/contain no-repeat; mix-blend-mode: multiply; pointer-events: none; }
 .auth-back { position: absolute; top: 32px; right: 7%; color: #527078; font-size: 13px; font-weight: 800; text-decoration: none; }
 .auth-back:hover { color: #008b9c; transform: translateX(-3px); }
 .auth-card { position: relative; z-index: 1; width: min(480px, 100%); padding: 38px 42px 28px; border: 1px solid rgba(171,207,205,.68); border-radius: 28px; background: rgba(255,255,255,.92); box-shadow: 0 30px 80px rgba(19,63,73,.14), 0 2px 8px rgba(19,63,73,.06); backdrop-filter: blur(18px); animation: auth-slide-in .6s cubic-bezier(.2,.8,.2,1) both; }
@@ -4050,8 +4050,7 @@ footer small {
 .notification-empty { padding: 26px; text-align: center; color: #7d8a90; font-size: 11px; }
 @keyframes panel-drop { from { opacity: 0; transform: translateY(-8px); } }
 .workspace-gate { min-height: 100vh; display: grid; place-content: center; justify-items: center; text-align: center; padding: 32px; background: radial-gradient(circle at 20% 10%, rgba(194,237,240,.85), transparent 35%), var(--possibility-pearl); color: var(--immersive-blue-black); }
-.workspace-gate img { width: 104px; height: 104px; object-fit: contain; margin-bottom: 16px; mix-blend-mode: multiply; }
-.workspace-gate small { color: var(--transforming-teal); font-weight: 850; letter-spacing: .16em; }
+.workspace-gate .star-plan-logo { width: min(218px, 100%); margin-bottom: 16px; }
 .workspace-gate h1 { max-width: 620px; margin: 10px 0; font-size: clamp(32px, 5vw, 56px); letter-spacing: -.04em; }
 .workspace-gate p { max-width: 560px; color: #607178; line-height: 1.75; }
 .workspace-gate > a:not(.gate-back) { margin-top: 18px; padding: 13px 22px; background: var(--resilient-turquoise); color: white; font-weight: 850; box-shadow: 0 12px 28px rgba(0,160,175,.22); }
@@ -4360,22 +4359,19 @@ button:not(:disabled):hover,
   transform: translateY(-2px);
   box-shadow: 0 10px 24px rgba(0, 139, 156, 0.18);
 }
-.brand-official {
-  gap: 11px;
+.star-plan-logo {
+  display: block;
+  width: 176px;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
 }
-.brand-official img {
-  width: 58px;
-  height: 54px;
-  object-fit: cover;
-  object-position: center;
+.home-nav .star-plan-logo,
+.workspace-gate .star-plan-logo,
+.campus-brand .star-plan-logo {
+  padding: 4px 6px;
   border-radius: 12px;
-  box-shadow: 0 7px 20px rgba(36, 64, 77, 0.12);
-}
-.brand-official b {
-  color: var(--immersive-blue-black, #24404d);
-}
-footer .brand-official b {
-  color: white;
+  background: #172e3b;
 }
 .nav {
   height: 92px;
@@ -4635,15 +4631,8 @@ footer .brand-official b {
 .official-side-brand {
   padding: 0 7px 22px;
 }
-.official-side-brand img {
-  width: 54px;
-  height: 50px;
-  border-radius: 12px;
-  object-fit: cover;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
-}
-.official-side-brand b {
-  font-size: 16px;
+.official-side-brand .star-plan-logo {
+  width: 154px;
 }
 .side nav button {
   font-size: 14px;
@@ -5155,10 +5144,6 @@ footer .brand-official b {
   }
 }
 @media (max-width: 650px) {
-  .brand-official img {
-    width: 48px;
-    height: 45px;
-  }
   .story-stage {
     padding: 20px 0 70px;
   }
@@ -5581,12 +5566,6 @@ footer .brand-official b {
   padding: 0 8px 25px;
   margin-bottom: 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-.platform.v2 .official-side-brand b,
-.ja-platform .official-side-brand b {
-  color: white;
-  font-size: 17px;
-  letter-spacing: 0.02em;
 }
 .platform.v2 .side nav,
 .ja-platform .side nav {
@@ -8657,7 +8636,7 @@ footer .brand-official b {
       transparent 30%
     ),
     linear-gradient(135deg, rgba(36, 64, 77, 0.05), rgba(0, 160, 175, 0.035)),
-    url("/media/ja-china-logo.jpg") right 7vw top 10vh/330px auto no-repeat,
+    url("/media/star-plan-logo.webp") right 7vw top 10vh/330px auto no-repeat,
     url("/media/ja-official-career-market.jpg") left 5vw bottom 4vh/390px auto
       no-repeat,
     url("/media/ja-official-forum.jpg") right 3vw bottom 7vh/320px auto

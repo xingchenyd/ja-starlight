@@ -21,14 +21,17 @@ async function page(path) {
   );
 }
 
-test("public home renders JA Star Plan proposition and media carousel", async () => {
+test("public home renders the Star Plan logo, share metadata and media carousel", async () => {
   const response = await page("/");
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /Star Plan 星光计划/);
   assert.match(html, /让每一次探索/);
   assert.match(html, /正在发生的成长故事/);
-  assert.match(html, /ja-china-logo\.jpg/);
+  assert.match(html, /star-plan-logo\.webp/);
+  assert.match(html, /star-plan-icon\.png/);
+  assert.match(html, /star-plan-share\.jpg/);
+  assert.doesNotMatch(html, /ja-china-logo\.jpg/);
   assert.match(html, /实习 \/ 项目机会/);
   assert.match(html, /\/auth\/student/);
   assert.match(html, /\/auth\/enterprise/);

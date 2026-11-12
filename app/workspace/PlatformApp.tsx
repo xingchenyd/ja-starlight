@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element, @next/next/no-html-link-for-pages, jsx-a11y/media-has-caption, @typescript-eslint/no-unused-vars */
 "use client";
+import BrandLogo from "../components/BrandLogo";
 import WorkspaceMenu from "../components/ui/WorkspaceMenu";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { PageTransition, runViewTransition, type TransitionDirection } from "../components/motion";
@@ -375,8 +376,7 @@ function PlatformWorkspace({
     <div className="platform v2">
       <aside className="side">
         <a href="/" className="side-brand official-side-brand">
-          <img src="/media/ja-china-logo.jpg" alt="星光计划" />
-          <b>Star Plan</b>
+          <BrandLogo />
         </a>
         <WorkspaceMenu>
           <nav>
