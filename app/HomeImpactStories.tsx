@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { HomeImpactMetrics } from "./HomeLiveMetrics";
 import { useReducedMotion } from "./components/motion";
 
@@ -30,8 +30,18 @@ export default function HomeImpactStories() {
   const [active, setActive] = useState(0);
   const [userPaused, setUserPaused] = useState(false);
   const [hovered, setHovered] = useState(false);
+  const [onScreen, setOnScreen] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const sectionRef = useRef<HTMLElement>(null);
   const reducedMotion = useReducedMotion();
-  const paused = userPaused || hovered;
+  const paused = userPaused || hovered || focused || !onScreen;
+
+  useEffect(() => {
+    if (!sectionRef.current || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => setOnScreen(entry.isIntersecting));
+    observer.observe(sectionRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (paused || reducedMotion) return;
@@ -45,8 +55,18 @@ export default function HomeImpactStories() {
   return (
     <>
       <HomeImpactMetrics />
-      <section className="home-voices shell" aria-labelledby="home-voices-title">
-        <div className="home-voices-head">
+      <section
+        ref={sectionRef}
+        className="home-voices shell"
+        aria-labelledby="home-voices-title"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onFocusCapture={() => setFocused(true)}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
+        }}
+      >
+        <div className="home-voices-head home-reveal">
           <div>
             <p className="eyebrow">GROWTH IN ACTION</p>
             <h2 id="home-voices-title">成长的更多可能</h2>
@@ -59,22 +79,18 @@ export default function HomeImpactStories() {
                 onClick={() => setActive(index)}
                 aria-label={`查看第 ${index + 1} 个成长故事`}
                 aria-current={index === active ? "true" : undefined}
-              />
+              >{String(index + 1).padStart(2, "0")}</button>
             ))}
-            <button
+            {!reducedMotion && <button
               className="voice-pause"
               onClick={() => setUserPaused((value) => !value)}
               aria-label={userPaused ? "继续播放成长故事" : "暂停成长故事"}
             >
               {userPaused ? "▶" : "Ⅱ"}
-            </button>
+            </button>}
           </div>
         </div>
-        <div
-          className="home-voice-stage"
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
-        >
+        <div className="home-voice-stage">
           {stories.map((story, index) => (
             <article
               className={index === active ? "active" : ""}
@@ -86,7 +102,7 @@ export default function HomeImpactStories() {
                 <small>{story.role}</small>
                 <h3>{story.title}</h3>
                 <p>{story.copy}</p>
-                <a href="/auth/student">开始记录我的成长 →</a>
+                <a href="/auth/student" tabIndex={index === active ? 0 : -1}>开始记录我的成长 ↗</a>
               </div>
             </article>
           ))}

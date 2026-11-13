@@ -54,19 +54,9 @@ export function HomeTrustMetrics() {
   const counts = usePublicCounts();
   return (
     <div className="trust" aria-label="平台当前公开内容数量">
-      <b>{counts.jobs}</b> 个公开机会 <i />
-      <b>{counts.activities}</b> 场成长活动 <i />
-      <b>{counts.contents}</b> 条成长内容
-    </div>
-  );
-}
-
-export function HomeOpportunityCount() {
-  const counts = usePublicCounts();
-  return (
-    <div className="float-note">
-      <span>当前公开</span>
-      <b>{counts.jobs} 个机会</b>
+      <span><b>{counts.jobs}</b> 个公开机会</span>
+      <span><b>{counts.activities}</b> 场成长活动</span>
+      <span><b>{counts.contents}</b> 条成长内容</span>
     </div>
   );
 }
@@ -76,7 +66,7 @@ export function HomeImpactMetrics() {
   return (
     <section className="home-impact" aria-label="星光计划实时公开数据与合作伙伴">
       <div className="shell home-impact-grid">
-        <div className="home-impact-copy">
+        <div className="home-impact-copy home-reveal">
           <small>LIVE IMPACT · HUNAN</small>
           <h2>真实机会，持续发生。</h2>
           <p>平台数据随企业与星光计划审核发布实时更新。</p>

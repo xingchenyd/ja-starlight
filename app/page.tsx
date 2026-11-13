@@ -3,9 +3,10 @@ import BrandLogo from "./components/BrandLogo";
 import type { Metadata } from "next";
 import HomeSections from "./HomeSections";
 import HomeCarousel from "./HomeCarousel";
-import { HomeOpportunityCount, HomeTrustMetrics } from "./HomeLiveMetrics";
+import { HomeTrustMetrics } from "./HomeLiveMetrics";
 import HomeGrowthJourney from "./HomeGrowthJourney";
 import HomeImpactStories from "./HomeImpactStories";
+import HomeHeader from "./HomeHeader";
 
 export const metadata: Metadata = {
   title: "星光计划｜连接青年与未来",
@@ -15,24 +16,19 @@ export const metadata: Metadata = {
 export default function Home() {
   return (
     <main className="public-home">
-      <nav className="nav shell home-nav">
-        <a className="brand brand-official" href="#top" aria-label="Star Plan 星光计划首页"><BrandLogo decorative /></a>
-        <div className="navlinks"><a href="#jobs">实习 / 项目机会</a><a href="#events">成长活动</a><a href="#content">成长内容</a></div>
-        <div className="actions"><a className="text-link" href="/auth/enterprise">企业登录</a><a className="button small" href="/auth/student">学生登录</a></div>
-      </nav>
+      <HomeHeader />
 
       <section className="cinema-hero" id="top">
-        <HomeCarousel/>
         <div className="cinema-message shell">
           <div className="cinema-copy">
-          <p className="eyebrow">星光计划 · HUNAN</p>
-          <h1>让每一次探索，<br/><em>都成为未来的光。</em></h1>
-          <p className="lead">连接青年、企业与真实世界的成长机会。</p>
-          <form className="search" action="/opportunities" method="get"><label><span>寻找机会</span><input name="q" placeholder="机会类别、企业或技能" /></label><button type="submit">开始探索 →</button></form>
-          <HomeTrustMetrics />
+            <p className="eyebrow">星光计划 · HUNAN</p>
+            <h1><span>让每一次探索，</span><em>都成为未来的光。</em></h1>
+            <p className="lead">连接青年、企业与真实世界的成长机会。</p>
+            <form className="search" action="/opportunities" method="get" role="search"><label><span>寻找机会</span><input name="q" aria-label="寻找机会" placeholder="机会类别、企业或技能" /></label><button type="submit">开始探索 <span aria-hidden="true">→</span></button></form>
+            <HomeTrustMetrics />
           </div>
         </div>
-        <HomeOpportunityCount />
+        <HomeCarousel/>
       </section>
 
       <HomeSections/>

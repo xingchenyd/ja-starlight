@@ -55,9 +55,13 @@ export default function HomeCarousel() {
   const [userPaused, setUserPaused] = useState(false);
   const [focusPaused, setFocusPaused] = useState(false);
   const [hovered, setHovered] = useState(false);
+  const [onScreen, setOnScreen] = useState(true);
   const reducedMotion = useReducedMotion();
-  const paused = reducedMotion || userPaused || focusPaused || hovered;
+  const paused = reducedMotion || userPaused || focusPaused || hovered || !onScreen;
+  const stageRef = useRef<HTMLDivElement>(null);
   const pointerActivation = useRef(false);
+  const touch = useRef<{ id: number; x: number; y: number } | null>(null);
+  const lastSwipe = useRef(0);
 
   useEffect(() => {
     let live = true;
@@ -89,13 +93,21 @@ export default function HomeCarousel() {
   }, []);
 
   useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => setOnScreen(entry.isIntersecting));
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
     if (paused || slides.length < 2) return;
-    const timer = window.setInterval(
+    const timer = window.setTimeout(
       () => setActive((value) => (value + 1) % slides.length),
       6500,
     );
-    return () => window.clearInterval(timer);
-  }, [paused, slides.length]);
+    return () => window.clearTimeout(timer);
+  }, [active, paused, slides.length]);
 
   const move = (delta: number) =>
     setActive((value) => (value + delta + slides.length) % slides.length);
@@ -103,17 +115,37 @@ export default function HomeCarousel() {
   return (
     <div
       className="cinema-stage"
+      ref={stageRef}
+      role="region"
       aria-label="正在发生的成长故事"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      onPointerDownCapture={() => {
+      onPointerDownCapture={(event) => {
         pointerActivation.current = true;
+        if (event.pointerType === "touch" && event.isPrimary && !(event.target as HTMLElement).closest("button")) {
+          touch.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
+        }
       }}
-      onPointerUpCapture={() => {
+      onPointerUpCapture={(event) => {
         pointerActivation.current = false;
+        const start = touch.current;
+        touch.current = null;
+        if (!start || start.id !== event.pointerId || slides.length < 2) return;
+        const dx = event.clientX - start.x;
+        const dy = event.clientY - start.y;
+        if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.45) return;
+        lastSwipe.current = Date.now();
+        move(dx > 0 ? -1 : 1);
       }}
       onPointerCancelCapture={() => {
         pointerActivation.current = false;
+        touch.current = null;
+      }}
+      onClickCapture={(event) => {
+        if (event.detail && Date.now() - lastSwipe.current < 400) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
       }}
       onFocusCapture={() => {
         if (!pointerActivation.current) setFocusPaused(true);
@@ -124,10 +156,7 @@ export default function HomeCarousel() {
         }
       }}
     >
-      <div
-        className="cinema-track"
-        style={{ transform: `translateX(-${active * 100}%)` }}
-      >
+      <div className="cinema-track">
         {slides.map((slide, index) => (
           <a
             className="cinema-slide"
@@ -136,10 +165,12 @@ export default function HomeCarousel() {
             aria-hidden={active !== index}
             tabIndex={active === index ? 0 : -1}
           >
-            <img
+            {((index - active + slides.length) % slides.length <= 1 ||
+                (active - index + slides.length) % slides.length <= 1) && <img
               src={slide.image}
-              alt={slide.title}
+              alt=""
               loading={index === 0 ? "eager" : "lazy"}
+              fetchPriority={index === 0 ? "high" : "auto"}
               decoding="async"
               onError={(event) => {
                 if (
@@ -151,25 +182,26 @@ export default function HomeCarousel() {
                     "/media/ja-official-career-market.jpg";
                 }
               }}
-            />
+            />}
             <span className="cinema-shade" />
             <div className="cinema-caption">
               <small>{slide.eyebrow}</small>
               <h2>{slide.title}</h2>
               <p>{slide.meta}</p>
-              <b>打开内容 ↗</b>
+              <b>打开内容 <span aria-hidden="true">↗</span></b>
             </div>
           </a>
         ))}
       </div>
 
       <div className="cinema-controls">
-        <button onClick={() => move(-1)} aria-label="上一张">←</button>
         <span aria-live="polite">
           {String(active + 1).padStart(2, "0")} / {String(slides.length).padStart(2, "0")}
         </span>
-        <button onClick={() => move(1)} aria-label="下一张">→</button>
-        <button
+        {slides.length > 1 && <><button type="button" onClick={() => move(-1)} aria-label="上一张">←</button>
+        <button type="button" onClick={() => move(1)} aria-label="下一张">→</button>
+        {!reducedMotion && <button
+          type="button"
           className="cinema-pause"
           onClick={() => {
             const shouldResume = userPaused || focusPaused;
@@ -179,13 +211,9 @@ export default function HomeCarousel() {
           aria-label={userPaused || focusPaused ? "继续轮播" : "暂停轮播"}
         >
           {userPaused || focusPaused ? "▶" : "Ⅱ"}
-        </button>
+        </button>}</>}
       </div>
-      <div className="cinema-progress" aria-hidden="true">
-        {slides.map((slide, index) => (
-          <i className={index === active ? "active" : ""} key={slide.href} />
-        ))}
-      </div>
+      <div className="cinema-progress" aria-hidden="true"><i style={{ transform: `scaleX(${(active + 1) / slides.length})` }} /></div>
     </div>
   );
 }
