@@ -1,0 +1,25 @@
+/* Shared Star Plan visual language: warm white, gold accents, restrained green. */
+:root { --ja-yellow:#f5bf45; --ja-cream:#fff4d6; --surface-page:#f8f8f4; --surface-muted:#f5f5ed; --radius-control:8px; --radius-card:14px; --radius-panel:18px; --focus-ring:0 0 0 3px #f5bf4544; }
+:is(.platform.v2,.campus-app,.auth-page) { --empowered-yellow:#f5bf45; --confident-cream:#fff4d6; --optimistic-ice:#f7f4e9; --possibility-pearl:#f7f8f4; background:radial-gradient(ellipse at 85% 0,#fff4d688,transparent 45%),#f8f9f6; }
+.platform.v2 .side { background:linear-gradient(155deg,#173944,#0b1c22); border-right:1px solid #d9ded9; }
+.platform.v2 .side nav button { border-radius:8px; transition:background .22s ease,color .22s ease; }
+.platform.v2 .side nav button.active { background:linear-gradient(110deg,#ffd978,#f5bf45); color:#173944; box-shadow:0 5px 18px #0002; }
+.platform.v2 .side nav button.active span { color:#173944; }
+.platform.v2 .topbar { background:#fffffff2; border-bottom:1px solid #e4e5dc; backdrop-filter:blur(14px); }
+:is(.platform.v2,.campus-app) :is(.panel,.card,.admin-review-lane,.enterprise-module-card) { border-radius:14px; border-color:#dfe4dd; background-color:#fff; box-shadow:0 8px 26px #17394408; }
+:is(.platform.v2,.campus-app,.auth-page) :is(.primary-btn,.auth-submit) { background:linear-gradient(180deg,#ffdb80,#f5bf45); border-color:#edbd53; color:#173944; border-radius:8px; box-shadow:0 6px 18px #c69d2520; }
+:is(.platform.v2,.campus-app,.auth-page) :is(.primary-btn,.auth-submit):hover { background:linear-gradient(180deg,#ffe8ad,#f5c75c); box-shadow:0 8px 22px #c69d2530; }
+:is(.platform.v2,.campus-app,.auth-page) :is(input,textarea,select) { border-radius:8px; accent-color:#637e42; }
+:is(.platform.v2,.campus-app,.auth-page) :is(input,textarea,select):focus-visible { outline-color:#a8740c; box-shadow:0 0 0 3px #f5bf4533; }
+.auth-page .auth-card { border:1px solid #e6e5dc; border-radius:18px; box-shadow:0 22px 65px #17394413; }
+.auth-page .auth-tabs button.active { background:#fff4d6; color:#173944; border-color:#f5bf45; }
+.auth-page .auth-card footer { background:#faf7ed; }
+.campus-app .campus-sidebar { background:linear-gradient(155deg,#173944,#0b1c22); }
+.campus-app .campus-sidebar a[aria-current=page] { background:#fff4d6;color:#173944; }
+.studio-home .studio-catalog { --home-yellow:#f5bf45; --home-ice:#fff4d6; --home-teal:#526f3b; background:#fff; }
+.studio-home .studio-catalog .home-opportunities { background:radial-gradient(ellipse at 85% 0,#fff4d6,transparent 60%); }
+.studio-home .studio-catalog .home-library { background:linear-gradient(150deg,#fff,#faf7ed); }
+.studio-home .studio-catalog .home-activities { background:radial-gradient(ellipse at 0 0,#24404d,transparent 70%),#0b1c22; }
+.studio-home .studio-catalog .home-section-head { margin-bottom:24px; }
+.studio-home .studio-catalog .home-library-cover { height:auto; }
+@media(prefers-reduced-motion:reduce){:is(.platform.v2,.campus-app,.auth-page) button{transition:none;}}

@@ -25,9 +25,9 @@ test("public home renders the Star Plan logo, share metadata and media carousel"
   const response = await page("/");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /Star Plan 星光计划/);
+  assert.match(html, /星光计划 Star Plan/);
   assert.match(html, /让每一次探索/);
-  assert.match(html, /正在发生的成长故事/);
+  assert.match(html, /成长故事/);
   assert.match(html, /star-plan-logo\.webp/);
   assert.match(html, /star-plan-icon\.png/);
   assert.match(html, /star-plan-share\.jpg/);
@@ -276,7 +276,7 @@ test("commercial profile and private resume flows are explicit", async () => {
 });
 test("public discovery uses live catalog data and deep-links to exact items", async () => {
   const [homeSource, sectionsSource, carouselSource, contentSource, workspaceSource, detailSource] = await Promise.all([
-    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/home-design/StudioHome.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/HomeSections.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/HomeCarousel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/content/ContentCatalog.tsx", import.meta.url), "utf8"),

@@ -25,7 +25,7 @@ test("public activity directory exists as a first-class route", async () => {
 
 test("homepage exposes both filing records through official query links", async () => {
   const page = await readFile(
-    new URL("../app/page.tsx", import.meta.url),
+    new URL("../app/home-design/markup.ts", import.meta.url),
     "utf8",
   );
 

@@ -11,9 +11,9 @@ test("homepage uses content-led cinematic storytelling", async () => {
     readFile(new URL("../app/home-experience.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(page, /cinema-hero/);
-  assert.match(page, /HomeGrowthJourney/);
-  assert.match(page, /HomeImpactStories/);
+  assert.match(page, /StudioHome/);
+
+
   assert.match(carousel, /getPublicCatalog/);
   assert.match(carousel, /6500/);
   assert.match(carousel, /暂停轮播/);
