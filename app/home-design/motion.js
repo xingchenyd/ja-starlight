@@ -204,7 +204,13 @@ try {
 
   /* ---------- reveals ---------- */
   const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.14,rootMargin:'0px 0px -6% 0px'});
-  root.querySelectorAll('.reveal,.mask,.offer div').forEach(el=>io.observe(el));
+  root.querySelectorAll('.reveal,.offer div').forEach(el=>io.observe(el));
+  // A fully clipped tile has no intersection area, so observe its visible grid
+  // instead of waiting for the hidden tile to become visible by itself.
+  const tileObserver=new IntersectionObserver(entries=>entries.forEach(entry=>{
+    if(entry.isIntersecting){entry.target.querySelectorAll('.mask').forEach(tile=>tile.classList.add('in'));tileObserver.unobserve(entry.target);}
+  }),{threshold:0,rootMargin:'0px 0px -6% 0px'});
+  root.querySelectorAll('.grid-asym').forEach(grid=>tileObserver.observe(grid));
 
   /* ---------- 3D tilt cards ---------- */
   if(matchMedia('(hover:hover)').matches && !reduced) root.querySelectorAll('.role').forEach(card=>{
