@@ -1,6 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import { normalizePublicJob as normalize } from "../../lib/catalog/public-catalog";
 import { jobs, type Job } from "../data";
 import { getPublicCatalog } from "../../lib/catalog/client-catalog";
 import { catalogFilterUrl, parseCatalogFilters } from "../../lib/catalog/catalog-url";
@@ -18,30 +19,6 @@ const categories = [
   "公益实践",
 ];
 
-function normalize(record: RecordItem): Job {
-  const payload = record.payload;
-  return {
-    ...(payload as unknown as Job),
-    id: record.id,
-    company: String(payload.company || "未命名企业"),
-    title: String(payload.title || "未命名机会"),
-    summary: String(payload.summary || "暂未填写机会简介"),
-    jobCategory: String(payload.jobCategory || "项目实践"),
-    tags: Array.isArray(payload.tags) ? payload.tags.map(String) : [],
-    city: String(payload.city || "长沙"),
-    mode: String(payload.mode || "线下"),
-    duration: String(payload.duration || "周期面议"),
-    contactEmail: String(payload.contactEmail || ""),
-    status: String(payload.status || "招募中"),
-    logo: String(payload.logo || String(payload.company || "企").slice(0, 1)),
-    color: String(payload.color || "#008b9c"),
-    logoUrl: String(payload.logoUrl || ""),
-    publishedAt: String(payload.publishedAt || ""),
-    responsibilities: Array.isArray(payload.responsibilities) ? payload.responsibilities.map(String) : [],
-    requirements: Array.isArray(payload.requirements) ? payload.requirements.map(String) : [],
-    benefits: Array.isArray(payload.benefits) ? payload.benefits.map(String) : [],
-  };
-}
 
 export default function OpportunityCatalog({ initialQuery, initialCategory }: { initialQuery: string; initialCategory: string }) {
   const [catalog, setCatalog] = useState<Job[]>([]),

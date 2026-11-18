@@ -3,6 +3,19 @@ import test from "node:test";
 
 const catalog = await import("../lib/catalog/public-catalog.ts");
 
+test("student jobs tolerate omitted optional arrays and legacy list data", () => {
+  const payload = { title: "产品调研", company: "虚构企业", responsibilities: "需求调研\n整理报告", requirements: null, benefits: ["实践", null, {}, ""] };
+  const [job] = catalog.mergeCatalogRecords([{ id: "job-without-tags", kind: "job", payload }], [], "job");
+  assert.equal(job.tags.join(""), "");
+  assert.deepEqual(job.responsibilities, ["需求调研", "整理报告"]);
+  assert.deepEqual(job.requirements, []);
+  assert.deepEqual(job.benefits, ["实践"]);
+  assert.equal(job.company, "虚构企业");
+  assert.equal(job.status, "招募中");
+  assert.equal(payload.tags, undefined, "normalization must not rewrite stored records");
+  assert.deepEqual(catalog.normalizePublicJob({ id: "bad-tags", kind: "job", payload: { tags: {} } }).tags, []);
+});
+
 test("public catalog excludes records before publication and after offline time", () => {
   const now = new Date("2026-08-30T10:00:00.000Z");
   assert.equal(catalog.isPublicNow({ reviewStatus: "approved" }, now), true);

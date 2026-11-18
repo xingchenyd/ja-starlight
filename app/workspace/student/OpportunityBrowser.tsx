@@ -42,29 +42,35 @@ export default function OpportunityBrowser({
   onToggleFavorite: (targetType: "job", targetId: string, snapshot: Record<string, unknown>) => Promise<boolean>;
   flash: (message: string) => void;
 }) {
-  const initial = typeof window === "undefined" ? defaultStudentOpportunityFilters : parseStudentOpportunityFilters(window.location.search);
-  const [filters, setFilters] = useState<StudentOpportunityFilters>(initial);
-  const [queryDraft, setQueryDraft] = useState(initial.query);
+  const [filters, setFilters] = useState<StudentOpportunityFilters>(defaultStudentOpportunityFilters);
+  const [queryDraft, setQueryDraft] = useState("");
+  const [locationReady, setLocationReady] = useState(false);
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set(["岗位类别"]));
   const selected = initialItem ? allJobs.find((job) => job.id === initialItem) || null : null;
 
   useEffect(() => {
+    if (!locationReady) return;
     const timer = window.setTimeout(() => {
       setFilters((current) => current.query === queryDraft.trim() ? current : { ...current, query: queryDraft.trim() });
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [queryDraft]);
+  }, [queryDraft, locationReady]);
 
   useEffect(() => {
+    if (!locationReady || window.location.pathname !== "/workspace/student/opportunities") return;
     window.history.replaceState(window.history.state, "", studentOpportunityUrl(filters, initialItem));
-  }, [filters, initialItem]);
+  }, [filters, initialItem, locationReady]);
 
   useEffect(() => {
     const restore = () => {
+      if (window.location.pathname !== "/workspace/student/opportunities") return;
       const restored = parseStudentOpportunityFilters(window.location.search);
       setFilters(restored);
       setQueryDraft(restored.query);
+      setLocationReady(true);
     };
+    // Match the server's initial render, then restore URL filters on the client.
+    restore();
     window.addEventListener("popstate", restore);
     return () => window.removeEventListener("popstate", restore);
   }, []);
