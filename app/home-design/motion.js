@@ -147,12 +147,21 @@ try {
 
   /* ---------- journey ---------- */
   const jSteps=[...root.querySelectorAll('.j-step')], jImgs=[...root.querySelectorAll('#jVisual img')];
-  const jNum=root.querySelector("#" + 'jNum'), jLabel=root.querySelector("#" + 'jLabel'), jBar=root.querySelector("#" + 'jBar');
-  let jActive=0, z=1;
+  const jVisual=root.querySelector('#jVisual');
+  const jNum=root.querySelector('#jNum'), jLabel=root.querySelector('#jLabel');
+  let jActive=0;
   function setJourney(i){
-    if(i===jActive) return; jActive=i;
+    if(i===jActive) return;
+    jVisual.dataset.direction = i < jActive ? 'back' : 'forward';
+    jImgs.forEach((image, index) => {
+      image.classList.remove('on');
+      image.classList.toggle('base', index === jActive);
+    });
+    jActive=i;
     jSteps.forEach((s,k)=>s.classList.toggle('on',k===i));
-    const im=jImgs[i]; im.classList.remove('on','base'); void im.offsetWidth; im.style.zIndex=++z; im.classList.add('on');
+    const image = jImgs[i];
+    void image.offsetWidth;
+    image.classList.add('on');
     jNum.textContent=String(i+1).padStart(2,'0'); jLabel.textContent=jSteps[i].dataset.label;
   }
   function journeyUpdate(){
@@ -161,7 +170,7 @@ try {
     jSteps.forEach((s,k)=>{const r=s.getBoundingClientRect(); const d=Math.abs(r.top+r.height/2-c); if(d<bd){bd=d;best=k;}});
     setJourney(best);
     const a=jSteps[0].getBoundingClientRect(), b=jSteps[jSteps.length-1].getBoundingClientRect();
-    root.querySelector("#" + 'jVisual').style.setProperty('--jp',clamp((c-a.top)/(b.bottom-a.top)).toFixed(3));
+    jVisual.style.setProperty('--jp',clamp((c-a.top)/(b.bottom-a.top)).toFixed(3));
   }
 
   /* ---------- main loop ---------- */
@@ -221,17 +230,55 @@ try {
   });
 
   /* ---------- stories ---------- */
-  const sImgs=[...root.querySelectorAll('#stMedia img')], sTxt=[...root.querySelectorAll('#stText article')], sBtn=[...root.querySelectorAll('#stCtrl button')], ctrl=root.querySelector("#" + 'stCtrl'), stage=root.querySelector("#" + 'stStage');
-  let si=0, sz=1, timer; let userPaused=false; const pause=root.querySelector('#storyPause'); listen(pause,'click',()=>{userPaused=!userPaused;pause.textContent=userPaused?'继续播放':'暂停播放';pause.setAttribute('aria-pressed',String(userPaused));schedule();}); listen(stage,'focusin',()=>ctrl.classList.add('paused')); listen(stage,'focusout',e=>{if(!stage.contains(e.relatedTarget))ctrl.classList.remove('paused')});
-  function showStory(i){ if(i===si) return; si=i;
-    const im=sImgs[i]; im.classList.remove('on','base'); void im.offsetWidth; im.style.zIndex=++sz; im.classList.add('on');
-    sTxt.forEach((a,k)=>a.classList.toggle('on',k===i));
-    sBtn.forEach((b,k)=>{b.classList.remove('on'); if(k===i){void b.offsetWidth;b.classList.add('on');}});
-    schedule(); }
-  function schedule(){ clearTimeout(timer); if(!reduced) timer=setTimeout(()=>{ if(!userPaused && !document.hidden && !ctrl.classList.contains('paused')) showStory((si+1)%sImgs.length); else schedule(); },7000); }
-  sBtn.forEach((b,i)=>listen(b,'click',()=>showStory(i)));
-  listen(stage,'mouseenter',()=>ctrl.classList.add('paused')); listen(stage,'mouseleave',()=>ctrl.classList.remove('paused'));
-  schedule();
+  const storyStage = root.querySelector('#stStage');
+  const storyControls = root.querySelector('#stCtrl');
+  const storyImages = [...root.querySelectorAll('#stMedia img')];
+  const storyArticles = [...root.querySelectorAll('#stText article')];
+  const storyButtons = [...storyControls.querySelectorAll('button')];
+  const storyInterval = 5000;
+  let activeStory = 0;
+  let storyVisible = false;
+  let storyTimer;
+  storyControls.style.setProperty('--story-interval', storyInterval + 'ms');
+
+  function scheduleStory() {
+    window.clearTimeout(storyTimer);
+    timers.delete(storyTimer);
+    storyControls.classList.remove('playing');
+    if (!storyVisible || document.hidden) return;
+    void storyControls.offsetWidth;
+    storyControls.classList.add('playing');
+    storyTimer = setTimeout(() => showStory((activeStory + 1) % storyImages.length), storyInterval);
+  }
+
+  function showStory(index) {
+    if (index !== activeStory) {
+      storyImages.forEach((image, i) => {
+        image.classList.remove('on');
+        image.classList.toggle('base', i === activeStory);
+      });
+      activeStory = index;
+      const image = storyImages[index];
+      void image.offsetWidth;
+      image.classList.add('on');
+      storyArticles.forEach((article, i) => {
+        article.classList.toggle('on', i === index);
+        article.inert = i !== index;
+      });
+      storyButtons.forEach((button, i) => {
+        button.classList.toggle('on', i === index);
+        button.setAttribute('aria-pressed', String(i === index));
+      });
+    }
+    scheduleStory();
+  }
+  storyButtons.forEach((button, index) => listen(button, 'click', () => showStory(index)));
+  const storyObserver = new IntersectionObserver(([entry]) => {
+    storyVisible = entry.isIntersecting && entry.intersectionRatio >= .2;
+    scheduleStory();
+  }, { threshold: .2 });
+  storyObserver.observe(storyStage);
+  listen(document, 'visibilitychange', scheduleStory);
 
   /* ---------- form (front-end only) ---------- */
   const form=root.querySelector("#" + 'form'), msg=root.querySelector("#" + 'formMsg');
